@@ -1,0 +1,30 @@
+############################################################################
+# PROJ-2375 Global Meta
+############################################################################
+
+include stdFunc_cluster.i;
+
+# cluster.conf에 있는 서버를 cluster로 묶어서 등록. Test Case 내에서는 DB1, DB2로 사용.
+REGISTER CLUSTER CL1 ( DDLServer as DB1, NonDDLServer as DB2 );
+
+DEF MAIN()
+{
+    THREAD T1 DB1
+    {
+        $ALTIBASE_CLUSTER_PORT_NO;
+        $ALTIBASE_CLUSTER_DDL_PORT_NO = $ALTIBASE_CLUSTER_PORT_NO;
+    }
+    THREAD T2 DB2
+    {
+        $ALTIBASE_CLUSTER_PORT_NO;
+        $ALTIBASE_CLUSTER_DML_PORT_NO = $ALTIBASE_CLUSTER_PORT_NO;
+    }
+
+    JOIN;
+
+    # stdFunc_cluster.i에 있는 함수는 cluster에 있는 모든 서버에 대해서 실행됩니다.
+    # 따라서 아래 처럼 한번만 호출하면 DB1, DB2 모두 서버가 시작됩니다.
+    NODISPLAY ON;
+    CALL stdServerStart();
+    NODISPLAY OFF;
+}

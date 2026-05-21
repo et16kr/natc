@@ -1,0 +1,22 @@
+###########################################################################
+# Like Test
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+# SECTOR; INITIALIZE
+##################################
+
+NODISPLAY ON;
+
+CALL stdServerKill();
+ 
+CALL stdServerCreate( "US7ASCII", "UTF16" );
+ 
+CALL stdServerStart();
+
+NODISPLAY OFF;
+}

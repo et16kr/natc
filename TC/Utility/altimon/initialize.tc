@@ -1,0 +1,22 @@
+############################################################################
+# AltiMon automation Test 
+############################################################################
+
+include stdFunc.i;
+
+
+DEF MAIN()
+{
+
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    SHELL "altimon.sh stop";
+    NODISPLAY OFF;
+
+    	SHELL -o $sResult "chmod +x mon.sh";
+	PRINT $sResult;
+    	SHELL -o $sResult "sh init.sh";
+	PRINT $sResult;
+}

@@ -1,0 +1,88 @@
+############################################################################
+#Replication Environment Setting
+############################################################################
+
+############################################################################
+# SET UP three DB System
+############################################################################
+
+include stdFunc.i;
+
+$ALTIBASE_HOME;
+$ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+DECLARE SERVER BOUNDARY_REPL_SERVER1 DB1;
+DECLARE SERVER BOUNDARY_REPL_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+SET_ENV ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+DEF MAIN()
+{
+
+    THREAD T11 C11
+    {
+        ########################################
+        #Set Up DB 1
+        #######################################
+
+        SET_ENV @DB1 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+        RM -rf "db1";
+
+        MKDIR "db1";
+        MKDIR "db1/conf";
+        MKDIR "db1/dbs";
+        MKDIR "db1/logs";
+        MKDIR "db1/trc";
+        MKDIR "db1/arch_logs";
+		
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+        # CP -r "${ALTIBASE_HOME_C0}/dlib" "db1/dlib";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    THREAD T21 C21
+    {
+        ########################################
+        #Set Up DB 2
+        ########################################
+
+        SET_ENV @DB2 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+        RM -rf "db2";
+
+        MKDIR "db2";
+        MKDIR "db2/conf";
+        MKDIR "db2/dbs";
+        MKDIR "db2/logs";
+        MKDIR "db2/trc";
+        MKDIR "db2/arch_logs";
+		
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+        CP "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+        CP "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+        # CP -r "${ALTIBASE_HOME_C0}/dlib" "db2/dlib";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    JOIN;
+}

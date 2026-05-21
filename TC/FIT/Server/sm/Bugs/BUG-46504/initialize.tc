@@ -1,0 +1,16 @@
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+    fitclient reset;
+    fitclient enable off;
+
+    NODISPLAY ON;
+
+    CALL stdServerKill();
+    SET_ENV ALTIBASE___ERROR_VALIDATION_LEVEL=0;
+    SET_ENV FIT_ENABLE=1;
+    CALL stdServerStart();
+
+    NODISPLAY OFF;
+}

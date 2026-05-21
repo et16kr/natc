@@ -1,0 +1,3 @@
+--+SYSTEM server kill;
+--+SYSTEM clean;
+--+SYSTEM server start;

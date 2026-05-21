@@ -1,0 +1,6 @@
+if [ "$FIT_ENABLE"none != "1none" ]; then
+    ipcrm.sh
+fi
+
+${ATC_HOME}/bin/destroydb -n mydb
+echo 'y' | ${ATC_HOME}/bin/createdb -M 4 $1 $2

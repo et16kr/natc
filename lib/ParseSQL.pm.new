@@ -1,0 +1,588 @@
+## -*- perl -*- #
+# That Execute Sql Test Script 
+# 
+package ParseSQL;
+
+$^W=1;
+
+use vars qw ($VERSION @ISA @EXPORT @EXPORT_OK $AUTOLOAD);
+require Exporter;
+
+$VERSION   = '0.02';
+@ISA       = qw ( Exporter);
+@EXPORT    = qw ($VERSION &parse_script_sql);
+@EXPORT_OK = qw ( );
+
+use strict;
+use integer;
+use IO::File;
+
+use Data::Dumper;
+
+# -*- Get data from file and parse it -*- #
+my ($_bc,$_prc,$_nstr) = (0,0);
+my $_stmt_start = 'Y';
+my $_g_file;
+my $_g_stmt;
+my $_g_curr_scope;
+sub parse_script_sql ($)
+{
+    my $file    =  shift ;
+
+    my $fd = new IO::File $file,'r';
+    my @queue;
+    my @line;
+    # print $main::LOG "\r Parse script file :$file\r"
+    #        if $main::cfg->{Verbose};	
+    # my $to = [gettimeofday()];
+
+	### Initialize $main::ex->{is_parallel} variable by 'N"
+	$_g_file = $file;
+    ($_bc,$_prc,$_nstr) = (0,0,0);
+    unless ($fd) 
+    {
+        print $main::ERR "Can't read Test Script File $file \n";
+		&main::_exit(255);
+		#return undef;
+    };
+	   
+    ### -*- parse Data from file -*- #
+    my ($buff_stmt,$q_len); 
+ 
+	$q_len = $#queue + 1;
+    #	$main::cfg->{DB_DRIVER} = "isql";
+
+    undef $main::server_list;
+    undef $main::client_list;
+
+    # -*- Parse input data -*- #
+    while (<$fd>)
+    {
+	    ++$_nstr; 
+	    $buff_stmt = &_parse_str(\@queue,$buff_stmt,$_)
+    };
+    $fd->close;
+  
+    #print $main::LOG "\r                                \r" 
+    #        if $main::cfg->{Verbose};
+    # print "Time parse:",tv_interval($to),"\n";
+    push @queue,[$_nstr, "--+WAIT (\'ALL\',\'wait for Test Case\');"];
+
+    return  \@queue;
+};
+
+sub _parse_str ($$$) 
+{ 
+    my $queue = shift || ''; 
+    my $_stmt = shift || '';
+                shift; 
+    my $comment = '';
+				 
+    s/^\s+//;  
+	s/[\t\s]+/ /g;
+=for delaying
+	if ( !/\'(\s*(\S)*\s*)*\'/)
+	{
+	    s/[\t\s]+/ /g;
+	}
+=cut
+	return '' if /^\s+$/;
+ 
+	$_g_stmt = $_stmt;
+    # 1st Level Parsing
+    if ($_ =~ /^\-\-\+(\w+)\s*/)
+    {
+		if ($_stmt_start eq 'N')
+		{
+			$_stmt =~ s/^[\s\t]*[\n]+//;
+			print $main::ERR "Parsing Error :: A statement does not end with ';'\n";
+			print $main::ERR "> $_g_file($_nstr): $_stmt\n";
+			&main::_exit(255);
+		}
+        my $cmd = process_command ( $1, $' );
+		#return '' if $cmd;
+    };
+
+	# -*- Test for the comman -*- #
+    if(/^\-\-\+\w+/)
+	{
+		if ($_stmt_start eq 'N')
+		{
+			$_stmt =~ s/^[\s\t]*[\n]+//;
+			print $main::ERR "Parsing Error :: A statement does not end with ';'\n";
+			print $main::ERR "> $_g_file($_nstr): $_stmt\n";
+			&main::_exit(255);
+		}
+		## Replace ' in a command into +" because it has a special meaning.
+		#print "bef   >>> $_###\n";
+		my $t_arg1 = $';
+		my $t_cmd  = $&;
+		$t_arg1=~ s/\'/+"/g;
+		$_=uc($t_cmd)." (\'".$t_arg1;
+        /\s*\;/;
+		$_=$`."\',\'$'\');\n";
+		#print "after >>> $_###\n";
+	}
+	else 
+	{  
+	    # -*- remove all comment after string -*- #
+		#### here
+		if (/;[\t\s]*\-\-/)
+		{
+            my @par = split /;/, $_;
+			$comment = $par[1];
+			#print ">>> comment ::: $comment\n";
+		}
+		$_=$` if /--/; 
+    };
+
+
+	# count the number of process in the script
+	# and determine whether it is parallel or not.
+    if ( $_ =~ /^\-\-\+PROCESS\s/i)
+	{
+		$main::ex->{is_parallel}  = 'Y';
+	}
+	
+	### here
+    $_prc++ if ($_ =~ /^[\s]*(create|replace)\s+.*(procedure|function)\s+/i);
+    #####(/^[\s]*(create|replace).*(procedure|function)\s+/i);
+	  
+	#	 print "$_nstr:$_, $_prc , $_beg,$_end <\n"; 
+	  
+	### here
+	if( $_prc  and (/^\s*\/\s*$/))   # -* Check back slash structure *- #
+	{
+	    $_stmt =~  s/^[\s\n]+//;	  
+		push @{$queue},[$_nstr, $_stmt . "/" . "\n"]; #modify to join / to original line
+		#push @{$queue},'/' . "\n";
+	    $_prc = 0; 
+		$_stmt_start = 'Y';
+	    return '';
+    };
+
+    # Odd "\'" symbol detector  
+    $_bc = ( s/\'/\'/g);
+	
+    if ( $_bc  & 1)
+    {
+	    return $_stmt.=$_;
+	}
+    elsif($_bc ) 
+    {
+        $_stmt.=$`.$&;
+	    $_=$';
+	};
+	 
+  
+
+	
+	### here
+	if ( ($_prc == 0) and (s/\;//) )
+    {	
+        $_=$_stmt.$`."; $comment \n";
+	    $_stmt=$';  
+		
+        s/^\s+//;
+        push @{$queue},[$_nstr, $_];
+		$_stmt_start = 'Y';
+		#print ">>> ok... ends with ;\n";
+    } 
+    else 
+    { 
+	    $_stmt.=$_." ";
+		if ($_stmt =~/^[\s\t]*$/)
+		{
+		    $_stmt_start = 'Y';
+		}
+		else
+		{
+		    $_stmt_start = 'N';
+			#print ">>> ok... continue to next;\n";
+		}
+    };
+
+    return $_stmt;
+}
+
+
+sub parse_USE
+{
+    my $arg = shift;
+
+    $arg =~ /^\s*DRIVER\s+(\w+)/ ;
+    $main::cfg->{DB_DRIVER} = $1;
+    return '';
+}
+
+sub process_command
+{
+    my $cmd     = shift;
+    my $arg     = shift;
+
+    $arg =~ s/;\s*$//g;
+
+    no strict 'refs';
+    if ( defined(*{'ParseSQL::parse_'.$cmd}{CODE}) )
+    {
+        eval 'parse_'.$cmd.'( $arg );';
+        warn $@ if $@;
+
+        use strict 'refs';
+        return $cmd;
+    };
+
+    use strict 'refs';
+    return '';
+}
+
+
+
+sub parse_argument($)
+{
+    my $arg     = shift;
+
+	#print ">>> arg = $arg\n";
+    $arg =~ s/^\s*\(//g;
+    $arg =~ s/\)\s*$//g;
+
+    my @vlist = split ( /,/, $arg );
+    my $value;
+
+    foreach my $item ( @vlist ) {
+		#$str =~ /(\w+)[\t\s]*=[\t\s]*(\w*)/;
+        my @str = split /[\t\s]*=[\t\s]*/, $item;
+		## exclude scope from argument list and set it to the global variable.
+		$str[0] =~ s/[\t\s]*//g;
+		$str[1] =~ s/[\t\s]*//g;
+		if ($str[0] eq 'SCOPE')
+		{
+			$_g_curr_scope = $str[1];
+		}
+		else
+		{
+            $value->{$str[0]} = $str[1];
+		}
+		#print ">>> $item ($str[0] = $str[1])\n";
+=for modifying
+		if ($1 eq 'SCOPE')
+		{
+			$_g_curr_scope = $2;
+		}
+		else
+		{
+            $value->{$1} = $2;
+		}
+		print ">>> $str ($1 = $2)\n";
+=cut
+    };
+
+    #print "Dumper \%value =============\n";
+	#print Dumper $value;
+    #print "Dumper \%value end =============\n";
+
+    return $value;
+}
+
+sub hash_merge ($$)
+{
+    my $target  = shift;
+    my $new     = shift;
+    my $newkey;
+
+    foreach $newkey ( keys %$new )
+    {
+        #        $target->{$newkey} = $new->{$newkey};
+
+		#if ( defined $target->{$newkey} )
+        {
+			if (length($new->{$newkey}) > 0)
+			{
+                $target->{$newkey} = $new->{$newkey};
+			}
+			else   ### It means unset the environment variables
+			{
+				delete $target->{$newkey};
+			}
+        }
+		#else
+        {
+			#$target->{OPTIONS} .= " -D $newkey=".$new->{$newkey}." ";
+        }
+    }
+	#print Dumper $target;
+}
+
+#########################################################
+# --+DECLARE <SERVER | CLIENT> <template> <name> [( n=v,...)]
+#########################################################
+sub parse_DECLARE ($)
+{
+    my $arg     = shift;
+
+    $arg =~ /(\w+)\s+(\w+)\s+(\w+)\s*/;
+
+	#print ">>> $arg\n";
+    eval '_parse_'.uc($1).'($2,$3,$\')';
+    warn $@ if $@;
+}
+
+
+#########################################################
+# copy properties for SERVER, CLIENT
+#########################################################
+sub copyProperty($$)
+{
+	my $source = shift;
+	my $target = shift;
+
+    my @key_list;
+
+	@key_list = keys %{$source} ;
+	foreach my $name (@key_list)
+	{
+	    $target->{$name} = $source->{$name};
+	}
+}
+
+sub makeContextList($$$)
+{
+	my $template   = shift;
+	my $find_name  = shift;
+	my $which_list = shift;
+
+	my $scope = $_g_curr_scope;
+	my $template_obj;
+
+	if ( $which_list =~ /server_list/)
+	{
+		$template_obj = $main::server_tmpl;
+	}
+	else
+	{
+		$template_obj = $main::client_tmpl;
+	}
+
+    if ( !defined $template_obj->{$template} && $template ne 'INHERIT' )
+	{
+		print $main::ERR "\nParsing Error ::  $template is not defined in the context file.\n";
+		print $main::ERR "> $_g_file($_nstr): $_g_stmt\n";
+		&main::_exit(255);
+	}
+
+
+	my $container = undef;
+	if (!defined $scope)
+	{
+		$scope = 'TC';
+	}
+	if ($scope eq 'TL')
+	{
+		$container = $main::tp->{current_tl};
+		if (!defined $container)
+		{
+			$scope = 'TS';
+		}
+	} 
+	if ($scope eq 'TS')
+	{
+		$container = $main::tp->{current_ts};
+		if (!defined $container)
+		{
+			$scope = 'TC';
+		}
+	}
+	if ($scope eq 'TC')
+	{
+		$container = $main::tp->{current_tc};
+	} 
+	if (!defined $scope)
+	{
+		print $main::ERR "\nParsing Error ::  $scope is invalid SCOPE value\n";
+		print $main::ERR "> $_g_file($_nstr): $_g_stmt\n";
+		&main::_exit(255);
+	}
+
+	if (!defined $container->{$which_list}{$find_name})
+	{
+		$container->{$which_list}{$find_name} = {};
+	}
+	if ($template =~ /INHERIT/)
+	{
+	    copyProperty($main::tp->get_higher_scope($find_name, $container, $which_list),
+	                 $container->{$which_list}{$find_name});
+	}
+	else
+	{
+	    copyProperty($template_obj->{DEFAULT},
+	                        $container->{$which_list}{$find_name});
+	    if ($which_list =~ /server_list/)
+		{
+	        copyProperty($template_obj->{$template},
+	                            $container->{$which_list}{$find_name});
+		}
+	}
+
+	return $container;
+}
+
+
+#########################################################
+# --+DECLARE SERVER <template> <server_name> [( n=v,...)]
+#########################################################
+sub _parse_SERVER ($$$)
+{
+    my $template    = shift;
+    my $server_name = shift;
+    my $arg         = shift;
+    my $key;
+
+    my $value = parse_argument ( $arg );
+
+	my $container = makeContextList($template, $server_name, 'server_list');
+=for modifying
+	my $scope = $_g_curr_scope;
+
+    if ( !defined $main::server_tmpl->{$template} && $template ne 'INHERIT' )
+	{
+		print $main::ERR "\nParsing Error ::  $template is not defined in the context file.\n";
+		print $main::ERR "> $_g_file($_nstr): $_g_stmt\n";
+		&main::_exit(255);
+	}
+
+
+	my $container = undef;
+	if (!defined $scope)
+	{
+		$scope = 'TC';
+	}
+	if ($scope eq 'TL')
+	{
+		$container = $main::tp->{current_tl};
+		if (!defined $container)
+		{
+			$scope = 'TS';
+		}
+	} 
+	if ($scope eq 'TS')
+	{
+		$container = $main::tp->{current_ts};
+		if (!defined $container)
+		{
+			$scope = 'TC';
+		}
+	}
+	if ($scope eq 'TC')
+	{
+		$container = $main::tp->{current_tc};
+	} 
+	if (!defined $scope)
+	{
+		print $main::ERR "\nParsing Error ::  $scope is invalid SCOPE value\n";
+		print $main::ERR "> $_g_file($_nstr): $_g_stmt\n";
+		&main::_exit(255);
+	}
+	#print "Dump : $server_name\n";
+	#print ">>> $scope\n";
+	#print Dumper $container;
+	if (!defined $container->{server_list}{$server_name})
+	{
+		$container->{server_list}{$server_name} = {};
+	}
+	if ($template =~ /INHERIT/)
+	{
+	    copyProperty($main::tp->get_higher_scope($server_name, $container, 
+	                                       'server_list'),
+	                                     $container->{server_list}{$server_name});
+	}
+	else
+	{
+	    copyProperty($main::server_tmpl->{DEFAULT},
+	                        $container->{server_list}{$server_name});
+	    copyProperty($main::server_tmpl->{$template},
+	                        $container->{server_list}{$server_name});
+	}
+=cut
+
+    # hash merge
+    hash_merge ( $container->{server_list}{$server_name}, $value );
+
+	$_g_curr_scope = undef;
+	#print Dumper $container->{server_list};
+
+}
+
+sub _parse_CLIENT($$$)
+{
+    my $template    = shift;
+    my $client_name = shift;
+    my $arg         = shift;
+
+    my $value = parse_argument ( $arg );;
+	my $container = makeContextList($template, $client_name, 'client_list');
+=for modifying
+	my $scope = $_g_curr_scope;
+
+    if ( !defined $main::client_tmpl->{$template} && $template ne 'INHERIT' )
+	{
+		print $main::ERR "\nParsing Error ::  $template is not defined in the context file.\n";
+		print $main::ERR "> $_g_file($_nstr): $_g_stmt\n";
+		&main::_exit(255);
+	}
+
+	my $container = undef;
+	if (!defined $scope)
+	{
+		$scope = 'TC';
+	}
+	if ($scope eq 'TL')
+	{
+		$container = $main::tp->{current_tl};
+		if (!defined $container)
+		{
+			$scope = 'TS';
+		}
+	} 
+	if ($scope eq 'TS')
+	{
+		$container = $main::tp->{current_ts};
+		if (!defined $container)
+		{
+			$scope = 'TC';
+		}
+	}
+	if ($scope eq 'TC')
+	{
+		$container = $main::tp->{current_tc};
+	} 
+	if (!defined $scope)
+	{
+		print $main::ERR "\nParsing Error ::  $scope is invalid SCOPE value\n";
+		print $main::ERR "> $_g_file($_nstr): $_g_stmt\n";
+		&main::_exit(255);
+	}
+	#print Dumper $container;
+	if (!defined $container->{client_list}{$client_name})
+	{
+		$container->{client_list}{$client_name} = {};
+	}
+	if ($template =~ /INHERIT/)
+	{
+	    copyProperty($main::tp->get_higher_scope($client_name, $container, 
+	                                       'client_list'),
+	                              $container->{client_list}{$client_name});
+	}
+	else
+	{
+	    copyProperty($main::client_tmpl->{DEFAULT},
+	                              $container->{client_list}{$client_name});
+	}
+=cut
+    hash_merge ($container->{client_list}{$client_name}, $value );
+   
+	$_g_curr_scope = undef;
+}
+
+
+1;
+

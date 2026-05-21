@@ -1,0 +1,4 @@
+#!/bin/sh
+
+trap "" TSTP
+${ALTIBASE_HOME}/bin/isql -s 127.0.0.1 -u system -p manager $*

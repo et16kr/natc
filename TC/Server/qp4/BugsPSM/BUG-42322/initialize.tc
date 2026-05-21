@@ -1,0 +1,30 @@
+INCLUDE stdFunc.i;
+
+def main()
+{
+NODISPLAY ON;
+CALL stdServerKill();
+NODISPLAY OFF;
+
+SET_ENV ALTIBASE___PSM_FORMAT_CALL_STACK_OID=9999;
+
+NODISPLAY ON;
+CALL stdServerStart();
+NODISPLAY OFF;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_output.sql";
+p_wait p1;
+print $Ret_;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_output.plb";
+p_wait p1;
+print $Ret_;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_utility.sql";
+p_wait p1;
+print $Ret_;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_utility.plb";
+p_wait p1;
+print $Ret_;
+}

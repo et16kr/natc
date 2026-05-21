@@ -1,0 +1,17 @@
+def main()
+{
+skip begin;
+drop public synonym dbms_alert;
+revoke execute on sys.dbms_alert from public;
+drop package dbms_alert;
+drop table t1;
+skip end;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_alert.sql";
+p_wait p1;
+print $Ret_;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_alert.plb";
+p_wait p1;
+print $Ret_;
+}

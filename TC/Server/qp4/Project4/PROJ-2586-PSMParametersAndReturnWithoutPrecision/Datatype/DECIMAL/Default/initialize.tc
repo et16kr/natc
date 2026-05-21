@@ -1,0 +1,19 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    var_defaultN decimal := 870201521;
+    var_defaultY decimal := 870201.521;
+
+    var1N decimal := 9803247361;
+    var1Y decimal := 980324.7361;
+    var2 decimal(38) := 9803247362;
+    var3 decimal(38 , 10) := 980324.7362;
+    var4 decimal(18) := 9803247363;
+    var5 decimal(18 , 5) := 980324.7363;
+    end;
+    /
+}

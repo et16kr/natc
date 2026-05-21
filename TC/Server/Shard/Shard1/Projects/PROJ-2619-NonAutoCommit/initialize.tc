@@ -1,0 +1,51 @@
+############################################################################
+# SET UP Shard DB System
+############################################################################
+include stdFunc.i;
+
+DECLARE SERVER SHARD_NODE1 DB1;
+DECLARE SERVER SHARD_NODE2 DB2;
+DECLARE SERVER SHARD_NODE3 DB3;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+
+DEF MAIN()
+{
+    NODISPLAY ON;
+    exec dbms_shard.set_node('NODE1','127.0.0.1',${ALTIBASE_PORT_NO@DB1});
+    exec dbms_shard.set_node('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB2});
+    NODISPLAY OFF;
+
+    ########################################
+    # initialize DB
+    ########################################
+    CREATE TABLE T1 (C1 VARCHAR(20), C2 INTEGER);
+    THREAD T1 C1
+    {
+        CREATE TABLE T1 (C1 VARCHAR(20), C2 INTEGER);
+    }
+    THREAD T2 C2
+    {
+        CREATE TABLE T1 (C1 VARCHAR(20), C2 INTEGER);
+    }
+    THREAD T3 C3
+    {
+        # Set Up NODE1 Alternative (F,G,H)
+        CREATE TABLE T1 (C1 VARCHAR(20), C2 INTEGER);
+    }
+    JOIN;
+
+    ########################################
+    # initialize meta
+    ########################################
+    select count(*) from sys_shard.nodes_;
+
+    exec dbms_shard.set_shard_table('SYS','T1','H','C1');
+    select count(*) from sys_shard.objects_;
+
+    exec dbms_shard.set_shard_hash('SYS','T1',500,'NODE1');
+    exec dbms_shard.set_shard_hash('SYS','T1',1000,'NODE2');
+    select count(*) from sys_shard.ranges_;
+}

@@ -1,0 +1,60 @@
+############################################################################
+# altiComp Environment Setting for SSL
+############################################################################
+
+############################################################################
+# Restart Two DB System
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER AUDIT_SERVER1 DB1;
+DECLARE SERVER AUDIT_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C12 (SERVER=DB2);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    SET_ENV SERVER @DB1 ALTIBASE_SSL_ENABLE = 1;
+    SET_ENV SERVER @DB1 ALTIBASE_SSL_CLIENT_AUTHENTICATION = 1;
+    SET_ENV SERVER @DB1 ALTIBASE_SSL_CA   = "${ALTIDEV_HOME}/ut/sample/CERT/ca-cert.pem";
+    SET_ENV SERVER @DB1 ALTIBASE_SSL_CERT = "${ALTIDEV_HOME}/ut/sample/CERT/server-cert.pem";
+    SET_ENV SERVER @DB1 ALTIBASE_SSL_KEY  = "${ALTIDEV_HOME}/ut/sample/CERT/server-key.pem";
+
+    SET_ENV SERVER @DB2 ALTIBASE_SSL_ENABLE = 1;
+    SET_ENV SERVER @DB2 ALTIBASE_SSL_CLIENT_AUTHENTICATION = 1;
+    SET_ENV SERVER @DB2 ALTIBASE_SSL_CA   = "${ALTIDEV_HOME}/ut/sample/CERT/ca-cert.pem";
+    SET_ENV SERVER @DB2 ALTIBASE_SSL_CERT = "${ALTIDEV_HOME}/ut/sample/CERT/server-cert.pem";
+    SET_ENV SERVER @DB2 ALTIBASE_SSL_KEY  = "${ALTIDEV_HOME}/ut/sample/CERT/server-key.pem";
+
+    THREAD T1 C11
+    {
+        ########################################
+        # Set Up DB 1 for SSL
+        ########################################
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    THREAD T2 C12
+    {
+        ########################################
+        # Set Up DB 2
+        ########################################
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    JOIN;
+}
+

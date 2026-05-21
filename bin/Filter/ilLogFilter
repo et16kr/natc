@@ -1,0 +1,9 @@
+sed -e '/^$/d' $1 > $1.tmp
+sed -e '/^<DataLoad>/!d' $1.tmp > $1
+sed -e '/^TableName :/!d' $1.tmp >> $1
+sed -e '/^Total Row Count :/!d' $1.tmp >> $1
+sed -e '/^Load Row Count  :/!d' $1.tmp >> $1
+sed -e '/^Error Row Count :/!d' $1.tmp >> $1
+sed -e '/^Start Time :/d' $1 
+sed -e '/^End Time :/d' $1 
+rm -f $1.tmp

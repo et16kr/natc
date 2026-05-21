@@ -1,0 +1,24 @@
+rem @echo off
+
+set STAF_HOME=c:/ataf_home
+set STAF_INSTANCE_NAME=STAForc
+set STAFCODEPAGEOVERRIDE=LATIN_1
+set STAFCONVDIR=%STAF_HOME%\codepage
+
+set ALTIBASE_DEV=c:/work/altidev4
+set ALTIBASE_HOME=%ALTIBASE_DEV%/altibase_home
+set ALTIBASE_NLS_USE=US7ASCII
+set ALTIBASE_PORT_NO=20570
+set ALTIBASE_IPC_PORT_NO=20571
+
+set ATAF_TEST_CASE=c:/work/natc
+set ATAF_TEST_RESULT=%ATAF_TEST_CASE%
+set ATAF_USER_TEST_CASE=%ATAF_TEST_CASE%
+set ATC_HOME=%ATAF_TEST_CASE%
+set ATC_WORK=%ATAF_TEST_RESULT%\work
+
+set HOSTNAME=localhost
+set LANG=C
+set LOGNAME=orc
+set OS_NAME=win32
+set PATH=.;%ALTIBASE_DEV%\win32-build\bin;%ALTIBASE_HOME%\bin;%STAF_HOME%\bin;%STAF_HOME%\lib;%ATAF_TEST_CASE%\bin;%ATAF_TEST_CASE%\lib;c:\cygwin;c:\cygwin\bin;%PATH%

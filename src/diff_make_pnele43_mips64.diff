@@ -1,0 +1,51 @@
+Index: ads/makefile
+===================================================================
+--- ads/makefile	(revision 33485)
++++ ads/makefile	(working copy)
+@@ -207,6 +207,9 @@
+ endif
+ endif
+ 
++CC = mips-wrs-linux-gnu-mips64_octeon2-glibc_std-g++
++LD = mips-wrs-linux-gnu-mips64_octeon2-glibc_std-g++
++
+ ifeq ($(OS_NAME),win32)
+ INCLUDES = /I$(STAF_HOME)/include \
+            /I$(ALTIBASE_DEV)/pd/src/port/windows/include \
+Index: atsclnt/makefile
+===================================================================
+--- atsclnt/makefile	(revision 33485)
++++ atsclnt/makefile	(working copy)
+@@ -192,6 +192,9 @@
+ endif
+ endif
+ 
++CC = mips-wrs-linux-gnu-mips64_octeon2-glibc_std-g++
++LD = mips-wrs-linux-gnu-mips64_octeon2-glibc_std-g++
++
+ INCLUDES = -I$(STAF_HOME)/include \
+            -I/usr/local/include \
+            -I../services/ats2 \
+@@ -222,7 +225,7 @@
+ 
+ $(TARGET): $(OBJECTS)
+ 	@echo "LD" $(ATAF_TEST_CASE)/bin/$(TARGET) 
+-	@$(LD) -o $(ATAF_TEST_CASE)/bin/$(TARGET) $(CFLAGS) $(LDFLAGS) $(LIBS) $(OBJECTS)
++	@$(LD) -o $(ATAF_TEST_CASE)/bin/$(TARGET) $(LDFLAGS) $(LIBS) $(OBJECTS)
+ 	cp atsclnt atsclnt.bat $(ATAF_TEST_CASE)/bin
+ 	cp atsclnt2 $(ATAF_TEST_CASE)/bin
+ 	cp atsclntp $(ATAF_TEST_CASE)/bin
+Index: ats2/makefile
+===================================================================
+--- ats2/makefile	(revision 33485)
++++ ats2/makefile	(working copy)
+@@ -207,6 +207,9 @@
+ endif
+ endif
+ 
++CC = mips-wrs-linux-gnu-mips64_octeon2-glibc_std-g++
++LD = mips-wrs-linux-gnu-mips64_octeon2-glibc_std-g++
++
+ ifeq ($(OS_NAME),win32)
+ INCLUDES = /I$(STAF_HOME)/include \
+            /I$(ALTIBASE_DEV)/src/pd/port/windows/include \

@@ -1,0 +1,57 @@
+#############################################################################
+# Software Testing Automation Framework (STAF)                              #
+# (C) Copyright IBM Corp. 2001                                              #
+#                                                                           #
+# This software is licensed under the Common Public License (CPL) V1.0.     #
+#############################################################################
+
+LIB_STAFADS = $(subst Name,STAFads,$(DLL))
+
+stafadsservice_targets += $(REL)/lib/$(LIB_STAFADS) \
+                          $(REL)/bin/adsclnt
+Targets += $(stafadsservice_targets)
+CleanupTargets += cleanup_stafadsservice
+
+ALL_INCLUDEDIR_LIST += -I../ats -I/usr/local/include
+
+$(stafadsservice_targets): SUBSYS_REL := services/ads
+SUBSYS_REL := services/ads
+
+#=====================================================================
+#   C/C++ Info Flags
+#=====================================================================
+
+$(stafadsservice_targets): OBJS = $(stafadsservice_objs)
+$(stafadsservice_targets): LIBS = STAF
+$(stafadsservice_targets): CFLAGS := $(CC_EXPORT_SHARED_LIB_SYMBOLS)
+
+stafadsservice_objs :=\
+  service_ads serviceManager_ads serviceThread_ads altibaseHandler_ads atsBaseThread
+  
+
+stafadsservice_objs        := $(foreach obj,$(stafadsservice_objs),$(O)/services/ads/$(obj)$(OS_OE))
+stafadsservice_dependents  := $(stafadsservice_objs:$(OS_OE)=.d)
+$(stafadsservice_dependents): SUBSYS_REL := services/ads
+
+ifeq ($(OS_NAME),win32)
+    stafadsservice_objs += $(SR_SRC)/service.def
+endif
+
+# Include dependencies
+ifneq ($(InCleanup), "1")
+    include $(stafadsservice_dependents)
+endif
+
+# Include inference rules
+include $(InferenceRules)
+
+# STAFads targets
+
+$(REL)/lib/$(LIB_STAFADS): $(stafadsservice_objs) $(LIB_STAF_FP) $(MAKEFILE_NAME)
+	$(SHARED_LIB_IT)
+$(REL)/bin/adsclnt: $(SRC)/services/ads/adsclnt $(MAKEFILE_NAME)
+	$(COPY_FILE)
+
+cleanup_stafadsservice:
+	-@$(DEL) $(O)/services/ads/* $(OUT_ERR_TO_DEV_NULL)
+	-@$(DEL) $(REL)/lib/libads.so $(OUT_ERR_TO_DEV_NULL)

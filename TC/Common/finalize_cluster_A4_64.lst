@@ -1,0 +1,35 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ############################################################################
+$T0> # PROJ-2375 Global Meta
+$T0> ############################################################################
+
+$T0> THREAD T1 DB1
+
+$T0> JOIN;
+
+$T0> THREAD T2 DB2
+
+$T0> JOIN;
+
+$T0> # stdFunc_cluster.i에 있는 함수는 cluster에 있는 모든 서버에 대해서 실행됩니다.
+$T0> # 따라서 아래 처럼 한번만 호출하면 DB1, DB2 모두 서버가 종료됩니다.
+
+$T0> RM -rf "db1";
+$T0> RM -rf "db2";
+$T0> RM "*.log";
+
+$T0> UNREGISTER CLUSTER;
+$T1> # CONNECT SYS/MANAGER AS SYSDBA;
+$T1> # ALTER SYSTEM DISCONNECT CLUSTER;
+$T1> # DISCONNECT;
+$T2> # CONNECT SYS/MANAGER AS SYSDBA;
+$T2> # ALTER SYSTEM DISCONNECT CLUSTER;
+$T2> # DISCONNECT;
+

@@ -1,0 +1,14 @@
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+    ######################################
+    SECTOR; PREPARATION
+    ######################################
+
+    NODISPLAY ON; 
+    CALL stdServerStop();
+    SET_ENV FIT_ENABLE="1";
+    CALL stdServerStart();
+    NODISPLAY OFF;
+}

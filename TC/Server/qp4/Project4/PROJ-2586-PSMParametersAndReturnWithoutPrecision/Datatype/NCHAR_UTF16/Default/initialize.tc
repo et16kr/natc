@@ -1,0 +1,15 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    var_default nchar(25) := 'MATTHEW FINNEN DOYLE';
+
+    var1 nchar(3) := 'AB1';
+    var2 nchar(6) := 'ABCDE1';
+    var3 nchar(9) := 'ABCDEFGH1';
+    end;
+    /
+}

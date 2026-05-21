@@ -1,0 +1,14 @@
+sed s,"iSQL> ","",g < $1 > $1.tmp
+sed s,"iSQL(sysdba)> ","",g < $1.tmp > $1.tmp2
+cat $1.tmp2 > $1
+rm -f $1.tmp $1.tmp2
+
+sed -n '$p' < $1 | grep ^$ > $1.tmp
+
+if [ -s "$1.tmp" ]
+then
+sed -e '$,/^$/d' < $1 > $1.tmp
+mv $1.tmp $1
+fi
+
+rm -f $1.tmp

@@ -1,0 +1,152 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function returnNumericDefaultN;
+    drop function returnNumericDefaultY;
+    drop function returnNumeric_38;
+    drop function returnNumeric_38_10;
+    drop function returnNumeric_18;
+    drop function returnNumeric_18_5;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table t1( c1 decimal , c2 decimal(38) , c3 decimal(38 , 10) , c4 decimal(18) , c5 decimal(18 , 5) );
+    insert into t1 values ( 90052395511 , 90052395512 , 90052395513 , 90052395514 , 90052395515 );
+    insert into t1 values ( 900523.95521 , 900523.95522 , 900523.95523 , 900523.95524 , 900523.95525 );
+    insert into t1 values ( 90052395531 , 90052395532 , 900523.95533 , 90052395534 , 900523.95535 );
+    insert into t1 values ( 900523.95541 , 90052395542 , 900523.95543 , 90052395544 , 900523.95545 );
+
+    create or replace package variables as
+    v1N decimal;
+    v1Y decimal;
+    v2 decimal(38);
+    v3 decimal(38 , 10);
+    v4 decimal(18);
+    v5 decimal(18 , 5);
+
+    revVar1 decimal;
+    revVar2 decimal(38);
+    revVar3 decimal(38 , 10);
+    revVar4 decimal(18);
+    revVar5 decimal(18 , 5);
+
+    procedure initializeVariables;
+    procedure showVariables;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure initializeVariables as
+    begin
+    v1N := 1512086381;
+    v1Y := 251208.6381;
+    v2 := 3512086382;
+    v3 := 451208.6382;
+    v4 := 5512086383;
+    v5 := 651208.6383;
+
+    revVar1 := NULL;
+    revVar2 := NULL;
+    revVar3 := NULL;
+    revVar4 := NULL;
+    revVar5 := NULL;
+    end;
+
+    procedure showVariables as
+    begin
+    println( 'v1N decimal : ' || v1N );
+    println( 'v1Y decimal : ' || v1Y );
+    println( 'v2 decimal(38) : ' || v2 );
+    println( 'v3 decimal(38 , 10) : ' || v3 );
+    println( 'v4 decimal(18) : ' || v4 );
+    println( 'v5 decimal(18 , 5) : ' || v5 );
+
+    println( 'revVar1 decimal : ' || revVar1 );
+    println( 'revVar2 decimal(38) : ' || revVar2 );
+    println( 'revVar3 decimal(38 , 10) : ' || revVar3 );
+    println( 'revVar4 decimal(18) : ' || revVar4 );
+    println( 'revVar5 decimal(18 , 5) : ' || revVar5 );
+    end;
+
+    end;
+    /
+
+    create or replace function returnNumericDefaultN return decimal as
+    begin
+    return variables.v1N;
+    end;
+    /
+    create or replace function returnNumericDefaultY return decimal as
+    begin
+    return variables.v1Y;
+    end;
+    /
+
+    create or replace function returnNumeric_38 return decimal as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function returnNumeric_38_10 return decimal as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnNumeric_18 return decimal as
+    begin
+    return variables.v4;
+    end;
+    /
+
+    create or replace function returnNumeric_18_5 return decimal as
+    begin
+    return variables.v5;
+    end;
+    /
+
+    create or replace function returnParam( p1 in decimal ) return decimal as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in decimal ) return decimal as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in decimal ) return decimal;
+    function sub_returnFunc1(p1 in decimal ) return decimal;
+    function sub_returnFunc2(p1 in decimal ) return decimal;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in decimal ) return decimal as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in decimal ) return decimal as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in decimal ) return decimal as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

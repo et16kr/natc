@@ -1,0 +1,18 @@
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+    ######################################
+    SECTOR; PREPARATION
+    ######################################
+
+    NODISPLAY ON; 
+    CALL stdServerStop();
+
+    # SPIN LOCK #
+    SET_ENV ALTIBASE_LOCK_MGR_TYPE="1";
+
+    SET_ENV FIT_ENABLE="1";
+    CALL stdServerStart();
+    NODISPLAY OFF;
+}

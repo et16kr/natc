@@ -1,0 +1,12 @@
+include stdFunc.i;
+
+def main()
+{
+    UNSET_ENV ALTIBASE_NLS_USE;
+
+    nodisplay on;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    nodisplay off;
+}

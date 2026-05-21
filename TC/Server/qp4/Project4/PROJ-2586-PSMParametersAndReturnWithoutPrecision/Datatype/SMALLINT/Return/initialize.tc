@@ -1,0 +1,84 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function returnint;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table T1( c1 smallint );
+    insert into T1 values ( 6 );
+    insert into T1 values ( 7 );
+    insert into T1 values ( 8 );
+    insert into T1 values ( 9 );
+    insert into T1 values ( 10 );
+    insert into T1 values ( 11 );
+    insert into T1 values ( 12 );
+
+    create or replace package variables as
+    v1 smallint := 6;
+    revVar1 smallint;
+
+    procedure getValue;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure getValue as
+    begin
+    println( 'v1 smallint : ' || v1 );
+    println( 'revVar1 smallint : ' || revVar1 );
+    end;
+
+    end;
+    /
+
+    create or replace function returnint return smallint as
+    begin
+    return variables.v1;
+    end;
+    /
+
+    create or replace function returnParam( p1 in smallint ) return smallint as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in smallint ) return smallint as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in smallint ) return smallint;
+    function sub_returnFunc1(p1 in smallint ) return smallint;
+    function sub_returnFunc2(p1 in smallint ) return smallint;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in smallint ) return smallint as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in smallint ) return smallint as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in smallint ) return smallint as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

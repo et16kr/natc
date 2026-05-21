@@ -1,0 +1,16 @@
+def main()
+{
+    skip begin;
+    drop user user1 cascade;
+    drop user user2 cascade;
+    drop user user3 cascade;
+    skip end;
+
+    create user user1 identified by user1;
+    create user user2 identified by user2;
+    create user user3 identified by user3;
+
+    grant all privileges to user1;
+    grant all privileges to user2;
+    grant all privileges to user3;
+}

@@ -1,0 +1,20 @@
+############################################################################
+# Environment Setting
+############################################################################
+
+include stdFunc.i;
+
+DEF MAIN()
+{
+SET_ENV ALTIBASE___OPTIMIZER_DEFAULT_TEMP_TBS_TYPE=1;
+SET_ENV ALTIBASE_REDUCE_TEMP_MEMORY_ENABLE=1;
+
+NODISPLAY ON;
+CALL stdServerKill();
+CALL stdClean();
+CALL stdServerStart();
+NODISPLAY OFF;
+
+select memory_value1 from x$property where name = '__OPTIMIZER_DEFAULT_TEMP_TBS_TYPE';
+select memory_value1 from x$property where name = 'REDUCE_TEMP_MEMORY_ENABLE';
+}

@@ -1,0 +1,27 @@
+###########################################################################
+# BUG-41168 SSL Extension
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+
+NODISPLAY ON;
+CALL stdServerKill();
+NODISPLAY OFF;
+
+$ALTIBASE_SSL_PORT_NO;
+SET_ENV ISQL_CONNECTION="SSL";
+SET_ENV ALTIBASE_TCP_ENABLE = 0;
+SET_ENV ALTIBASE_SSL_ENABLE = 1;
+
+SET_ENV ALTIBASE_SSL_CA   = "${ALTIDEV_HOME}/ut/sample/CERT/ca-cert.pem";
+SET_ENV ALTIBASE_SSL_CERT = "${ALTIDEV_HOME}/ut/sample/CERT/server-cert.pem";
+SET_ENV ALTIBASE_SSL_KEY  = "${ALTIDEV_HOME}/ut/sample/CERT/server-key.pem";
+
+NODISPLAY ON;
+CALL stdServerStart();
+NODISPLAY OFF;
+}
+

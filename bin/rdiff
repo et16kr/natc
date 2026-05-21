@@ -1,0 +1,5 @@
+#######################
+# Run rdiff.py
+#######################
+
+rdiff.py ${ATAF_TEST_CASE} ${ATAF_TEST_RESULT}

@@ -1,0 +1,78 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    drop function return3;
+    drop function return6;
+    drop function return9;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create or replace package variables as
+    v1 nibble(3) := nibble'AB3';
+    v2 nibble(6) := nibble'AB1CD2';
+    v3 nibble(9) := nibble'AB1CD2EF3';
+    revVar1 nibble(3);
+    revVar2 nibble(6);
+    revVar3 nibble(9);
+    end;
+    /
+
+    create or replace function return3 return nibble as
+    begin
+    return variables.v1;
+    end;
+    /
+    create or replace function return6 return nibble as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function return9 return nibble as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnParam( p1 in nibble ) return nibble as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in nibble ) return nibble as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in nibble ) return nibble;
+    function sub_returnFunc1(p1 in nibble ) return nibble;
+    function sub_returnFunc2(p1 in nibble ) return nibble;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in nibble ) return nibble as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in nibble ) return nibble as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in nibble ) return nibble as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

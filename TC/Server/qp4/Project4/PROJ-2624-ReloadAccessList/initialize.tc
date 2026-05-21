@@ -1,0 +1,14 @@
+################################################################################
+# PROJ-2624 Reload Access List
+################################################################################
+
+include stdFunc.i;
+
+DEF MAIN()
+{
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+}

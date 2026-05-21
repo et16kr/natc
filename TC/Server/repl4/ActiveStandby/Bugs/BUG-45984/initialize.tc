@@ -1,0 +1,59 @@
+############################################################################
+# Replication Environment Setting
+############################################################################
+include stdFunc.i;
+
+DECLARE SERVER REPL_SERVER1 DB1;
+DECLARE SERVER REPL_SERVER2 DB2;
+DECLARE SERVER REPL_SERVER3 DB3;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    THREAD T1 C1
+    {
+
+        SET_ENV ALTIBASE_IB_ENABLE = 1;
+        SET_ENV ALTIBASE_IB_LISTENER_DISABLE = 1;
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+
+        SELECT COUNT(PORT) FROM V$REPEXEC;
+    }   
+
+    THREAD T2 C2
+    {
+        SET_ENV ALTIBASE_IB_ENABLE = 1;
+        SET_ENV ALTIBASE_IB_LISTENER_DISABLE = 1;
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+        
+        SELECT COUNT(PORT) FROM V$REPEXEC;
+    }
+
+    THREAD T3 C3
+    {
+        SET_ENV ALTIBASE_IB_ENABLE = 1;
+        SET_ENV ALTIBASE_IB_LISTENER_DISABLE = 1;
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+
+        SELECT COUNT(PORT) FROM V$REPEXEC;
+    }
+    JOIN;
+}

@@ -1,0 +1,50 @@
+############################################################################
+# SET UP one DB System
+############################################################################
+include stdFunc.i;
+
+DECLARE SERVER REPL_SERVER1 DB1;
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    THREAD T1 C1
+    {
+        ########################################
+        # Set Up DB1
+        ########################################
+
+        RM -rf "${ALTIBASE_HOME@DB1}";
+
+        MKDIR -p "${ALTIBASE_HOME@DB1}";
+        MKDIR "${ALTIBASE_HOME@DB1}/bin";
+        MKDIR "${ALTIBASE_HOME@DB1}/msg";
+        MKDIR "${ALTIBASE_HOME@DB1}/lib";
+        MKDIR "${ALTIBASE_HOME@DB1}/install";
+        MKDIR "${ALTIBASE_HOME@DB1}/include";
+        MKDIR "${ALTIBASE_HOME@DB1}/conf";
+        MKDIR "${ALTIBASE_HOME@DB1}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB1}/logs";
+        MKDIR "${ALTIBASE_HOME@DB1}/trc";
+        MKDIR "${ALTIBASE_HOME@DB1}/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_C0}/bin/*" "${ALTIBASE_HOME@DB1}/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg/*" "${ALTIBASE_HOME@DB1}/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB1}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB1}/conf/license";
+
+        # for building program that uses altibase's library.
+        CP -r "${ALTIBASE_HOME_C0}/lib/*" "${ALTIBASE_HOME@DB1}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB1}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB1}/include";
+
+        NODISPLAY ON;
+        CALL stdClean();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+    JOIN;
+}

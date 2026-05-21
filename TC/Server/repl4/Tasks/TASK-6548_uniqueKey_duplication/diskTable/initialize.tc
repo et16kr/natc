@@ -1,0 +1,29 @@
+##########################################################################
+# UNIQUE KEY DUPLICATE TEST
+##########################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER REPL_SERVER1 DB1;
+DECLARE SERVER REPL_SERVER2 DB2;
+DECLARE SERVER REPL_SERVER3 DB3;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+
+DEF MAIN()
+{
+
+########################################
+Sector; PREPARATION
+########################################
+
+    THREAD T2 C2
+    {
+        ALTER SYSTEM SET REPLICATION_INSERT_REPLACE=1;
+        ALTER SYSTEM SET REPLICATION_UPDATE_REPLACE=1;
+        ALTER SYSTEM SET REPLICATION_LOCK_TIMEOUT=0;
+    }
+
+    JOIN;
+}

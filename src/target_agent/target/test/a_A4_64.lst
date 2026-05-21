@@ -1,0 +1,105 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+# 테스트 케이스를 실행하는 디렉토리에 test 디렉토리를 만들고 isql 실행파일을 
+# 복사해야 한다.
+
+--+RSYSTEM target1 mkdir abc;
+>>> [target1] BEGIN <<<
+mkdir abc - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 put test/isql abc;
+>>> [target1] BEGIN <<<
+put test/isql abc - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 copy abc/isql abc/isql2;
+>>> [target1] BEGIN <<<
+copy abc/isql abc/isql2 - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 delete abc/isql;
+>>> [target1] BEGIN <<<
+delete abc/isql - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 get abc/isql2;
+>>> [target1] BEGIN <<<
+get abc/isql2 - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 delete abc/isql2;
+>>> [target1] BEGIN <<<
+delete abc/isql2 - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 rmdir abc;
+>>> [target1] BEGIN <<<
+rmdir abc - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 execute /server args start return stdout;
+>>> [target1] BEGIN <<<
+
+-----------------------------------------------------------------
+     Altibase Client Query utility.
+     Release Version 5.1.5.25
+     Copyright 2000, ALTIBASE Corporation or its subsidiaries.
+     All Rights Reserved.
+-----------------------------------------------------------------
+ISQL_CONNECTION = TCP, SERVER = 127.0.0.1, PORT_NO = 20570
+[ERR-910FB : Connected to idle instance]
+Connecting to the DB server.... Connected.
+
+
+TRANSITION TO PHASE : PROCESS
+
+
+TRANSITION TO PHASE : CONTROL
+
+
+TRANSITION TO PHASE : META
+  [SM] Recovery Phase - 1 : Preparing Database
+                          : Dynamic Memory Version => Parallel Loading
+  [SM] Recovery Phase - 2 : Loading Database 
+  [SM] Recovery Phase - 3 : Skipping Recovery & Starting Threads...
+                            Refining Disk Table 
+  [SM] Refine Memory Table : .................................................................................................................. [SUCCESS]
+  [SM] Rebuilding Indices [Total Count:105] ......................................................................................................... [SUCCESS]
+
+
+TRANSITION TO PHASE : SERVICE
+  [CM] Listener started : TCP on port 20570
+  [CM] Listener started : UNIX
+  [RP] Initialization : [PASS]
+
+--- STARTUP Process SUCCESS ---   
+Command execute success.
+
+execute /server args start return stdout - SUCCESS
+>>> [target1] END <<<
+
+--+RSYSTEM target1 execute /server args stop return stdout;
+>>> [target1] BEGIN <<<
+
+-----------------------------------------------------------------
+     Altibase Client Query utility.
+     Release Version 5.1.5.25
+     Copyright 2000, ALTIBASE Corporation or its subsidiaries.
+     All Rights Reserved.
+-----------------------------------------------------------------
+ISQL_CONNECTION = TCP, SERVER = 127.0.0.1, PORT_NO = 20570
+Ok..Shutdown Proceeding....
+
+
+TRANSITION TO PHASE : Shutdown Altibase
+  [RP] Finalization : PASS
+shutdown immediate success.
+
+execute /server args stop return stdout - SUCCESS
+>>> [target1] END <<<
+

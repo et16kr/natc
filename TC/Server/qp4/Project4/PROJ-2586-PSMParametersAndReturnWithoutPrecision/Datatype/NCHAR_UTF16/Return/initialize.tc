@@ -1,0 +1,108 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function return3;
+    drop function return6;
+    drop function return9;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table t1( c1 nchar(3) , c2 nchar(6) , c3 nchar(9) );
+    insert into t1 values ( 'M'   , 'A'      , 'T'         );
+    insert into t1 values ( 'MA'  , 'TT'     , 'DO'        );
+    insert into t1 values ( 'MAT' , 'TDO'    , 'YLE'       );
+    insert into t1 values ( 'MAT' , 'MATT'   , 'DOYL'      );
+    insert into t1 values ( 'MAT' , 'MATTD'  , 'DOYLE'     );
+    insert into t1 values ( 'MAT' , 'MATTDO' , 'TDOYLE'    );
+    insert into t1 values ( 'MAT' , 'MATTDO' , 'TTDOYLE'   );
+    insert into t1 values ( 'MAT' , 'MATTDO' , 'ATTDOYLE'  );
+    insert into t1 values ( 'MAT' , 'MATTDO' , 'MATTDOYLE' );
+
+    create or replace package variables as
+    v1 nchar(3) := 'MAT';
+    v2 nchar(6) := 'MATTDO';
+    v3 nchar(9) := 'MATTDOYLE';
+    revVar1 nchar(3);
+    revVar2 nchar(6);
+    revVar3 nchar(9);
+
+    procedure getValue;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure getValue as
+    begin
+    println( 'v1 nchar(3) : ' || v1 );
+    println( 'v2 nchar(6) : ' || v2 );
+    println( 'v3 nchar(9) : ' || v3 );
+
+    println( 'revVar1 nchar(3) : ' || revVar1 );
+    println( 'revVar2 nchar(6) : ' || revVar2 );
+    println( 'revVar3 nchar(9) : ' || revVar3 );
+    end;
+
+    end;
+    /
+
+    create or replace function return3 return nchar as
+    begin
+    return variables.v1;
+    end;
+    /
+    create or replace function return6 return nchar as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function return9 return nchar as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnParam( p1 in nchar ) return nchar as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in nchar ) return nchar as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in nchar ) return nchar;
+    function sub_returnFunc1(p1 in nchar ) return nchar;
+    function sub_returnFunc2(p1 in nchar ) return nchar;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in nchar ) return nchar as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in nchar ) return nchar as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in nchar ) return nchar as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

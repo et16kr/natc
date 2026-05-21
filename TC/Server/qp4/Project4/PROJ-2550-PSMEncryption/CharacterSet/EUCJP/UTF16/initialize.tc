@@ -1,0 +1,13 @@
+include stdFunc.i;
+
+def main()
+{
+    nodisplay on;
+    call stdServerKill();
+    call stdServerCreate( "EUCJP" , "UTF16" );
+    call stdServerStart();
+    nodisplay off;
+
+    select * from v$nls_parameters;
+}
+

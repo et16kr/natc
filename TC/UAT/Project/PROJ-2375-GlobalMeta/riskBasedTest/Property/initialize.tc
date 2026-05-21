@@ -1,0 +1,61 @@
+############################################################################
+# PROJ-2375 Global Meta
+# 2 server initialize
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER PROJ_2375_SERVER1 DB1;
+DECLARE SERVER PROJ_2375_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11( SERVER=DB1 );
+DECLARE CLIENT DEFAULT C12( SERVER=DB2 );
+
+DEF MAIN()
+{
+$ALTIBASE_HOME;
+$ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+THREAD T1 C11
+{
+    $ALTIBASE_PORT_NO;
+    $ALTIBASE_PORT_NO_C11 = $ALTIBASE_PORT_NO + 1500;
+}
+THREAD T2 C12
+{
+    $ALTIBASE_PORT_NO;
+    $ALTIBASE_PORT_NO_C12 = $ALTIBASE_PORT_NO + 2500;
+}
+
+JOIN;
+
+THREAD T1 C11
+{
+    SET_ENV SERVER @DB1 ALTIBASE_SID="altibase0";
+    SET_ENV SERVER @DB1 ALTIBASE_CLUSTER_DATABASE=1;
+    SET_ENV SERVER @DB1 ALTIBASE_SPFILE="../db1/conf/altibase.sproperties";
+    SET_ENV SERVER @DB1 ALTIBASE_QUERY_TIMEOUT=30;
+
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+    sleep 1;
+}
+
+THREAD T2 C12
+{
+    SET_ENV SERVER @DB2 ALTIBASE_SID="altibase1";
+    SET_ENV SERVER @DB2 ALTIBASE_CLUSTER_DATABASE=1;
+    SET_ENV SERVER @DB2 ALTIBASE_SPFILE="../db2/conf/altibase.sproperties";
+    SET_ENV SERVER @DB2 ALTIBASE_QUERY_TIMEOUT=30;
+
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+    sleep 1;
+}
+
+JOIN;
+}

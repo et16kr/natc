@@ -1,0 +1,22 @@
+###########################################################################
+# PROJ-2590 support cp932 database character set
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+# SECTOR; INITIALIZE
+##################################
+
+NODISPLAY ON;
+
+CALL stdServerKill();
+ 
+CALL stdClean();
+  
+CALL stdServerStart();
+
+NODISPLAY OFF;
+}

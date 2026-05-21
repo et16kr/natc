@@ -1,0 +1,262 @@
+############################################################################
+# Generate dblink.conf file for DB-Link test
+############################################################################
+
+DECLARE SERVER NEW_DBLINK_SERVER1 DB1;
+DECLARE SERVER NEW_DBLINK_SERVER2 DB2;
+DECLARE SERVER NEW_DBLINK_SERVER3 DB3;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C12 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C13 (SERVER=DB3);
+
+$ALTIBASE_HOME;
+
+DEF MAIN()
+{
+    $sALTIBASE_LINKER_PORT_NO;
+    $sALTIBASE_PORT_NO_DB2;
+    $sALTIBASE_PORT_NO_DB3;
+    $sALTIBASE_HOME = $ALTIBASE_HOME;
+
+    THREAD T11 C11
+    {
+        $ALTIBASE_LINKER_PORT_NO;
+
+        $sALTIBASE_LINKER_PORT_NO = $ALTIBASE_LINKER_PORT_NO;
+    }
+
+    JOIN;
+
+    THREAD T12 C12
+    {
+        $ALTIBASE_PORT_NO;
+
+        $sALTIBASE_PORT_NO_DB2 = $ALTIBASE_PORT_NO;
+    }
+
+    JOIN;
+
+    THREAD T13 C13
+    {
+        $ALTIBASE_PORT_NO;
+
+        $sALTIBASE_PORT_NO_DB3 = $ALTIBASE_PORT_NO;
+    }
+
+    JOIN;
+
+    $sFILE = "F1";
+    $sFileName = "dblink.conf";
+
+    NODISPLAY ON;
+    OPEN $sFILE -m w $sFileName;
+
+    WRITE $sFILE "ALTILINKER_ENABLE                      = 1\n";
+    WRITE $sFILE "ALTILINKER_PORT_NO                     = ${sALTIBASE_LINKER_PORT_NO}\n";
+    WRITE $sFILE "\n";
+    WRITE $sFILE "ALTILINKER_RECEIVE_TIMEOUT             = 30\n";
+    WRITE $sFILE "ALTILINKER_REMOTE_NODE_RECEIVE_TIMEOUT = 5\n";
+    WRITE $sFILE "\n";
+    WRITE $sFILE "ALTILINKER_QUERY_TIMEOUT               = 20\n";
+    WRITE $sFILE "ALTILINKER_NON_QUERY_TIMEOUT           = 10\n";
+    WRITE $sFILE "\n";
+    WRITE $sFILE "ALTILINKER_THREAD_COUNT                = 10\n";
+    WRITE $sFILE "ALTILINKER_THREAD_SLEEP_TIME           = 200\n";
+    WRITE $sFILE "ALTILINKER_REMOTE_NODE_SESSION_COUNT   = 100\n";
+    WRITE $sFILE "\n";
+    WRITE $sFILE "ALTILINKER_TRACE_LOG_DIR               = \"?/trc\"\n";
+    WRITE $sFILE "ALTILINKER_TRACE_LOG_FILE_SIZE         = 30\n";
+    WRITE $sFILE "ALTILINKER_TRACE_LOG_FILE_COUNT        = 9\n";
+    WRITE $sFILE "ALTILINKER_TRACE_LOGGING_LEVEL         = 6\n";
+    WRITE $sFILE "\n";
+    WRITE $sFILE "ALTILINKER_JVM_MEMORY_POOL_INIT_SIZE   = 128\n";
+    WRITE $sFILE "ALTILINKER_JVM_MEMORY_POOL_MAX_SIZE    = 512\n";
+    WRITE $sFILE "\n";    
+    WRITE $sFILE "ALTILINKER_JVM_BIT_DATA_MODEL_VALUE    = 1\n";
+    WRITE $sFILE "\n";
+    WRITE $sFILE "TARGETS = (\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target1");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target2");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB3);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target4");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER                ($sFILE, "test");
+    CALL WRITE_PASSWORD            ($sFILE, "test");
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target5");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target6");
+    CALL WRITE_JDBC_DRIVER_WRONG   ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target7");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL_WRONG($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target11");
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target12");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target13");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target14");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target12");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target12");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    WRITE $sFILE "    )\n";
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target21");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB2);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    CALL WRITE_XADATASOURCE_CLASS_NAME      ($sFILE, "Altibase.jdbc.driver.AltibaseXADataSource"); 
+    CALL WRITE_XADATASOURCE_URL_SETTER_NAME ($sFILE, $"setURL");
+    WRITE $sFILE "    )\n";   
+    WRITE $sFILE "    ,\n";
+    WRITE $sFILE "    (\n";
+    CALL WRITE_NAME                ($sFILE, "target22");
+    CALL WRITE_JDBC_DRIVER         ($sFILE, $sALTIBASE_HOME);
+    CALL WRITE_CONNECTION_URL      ($sFILE, $sALTIBASE_PORT_NO_DB3);
+    CALL WRITE_USER_SYS            ($sFILE);
+    CALL WRITE_PASSWORD_MANAGER    ($sFILE);
+    CALL WRITE_XADATASOURCE_CLASS_NAME      ($sFILE, "Altibase.jdbc.driver.AltibaseXADataSource"); 
+    CALL WRITE_XADATASOURCE_URL_SETTER_NAME ($sFILE, $"setURL");
+    WRITE $sFILE "    )\n";    
+    WRITE $sFILE ")\n";
+    WRITE $sFILE "\n";
+
+    CLOSE $sFILE;
+    NODISPLAY OFF;
+
+    IF (FEXIST $sFileName)
+    {
+        PRINT "Generate success";
+    }
+    ELSE
+    {
+        PRINT "Generate failed!!!";
+    }
+}
+
+DEF WRITE_NAME(@aFILE, @aName)
+{
+    WRITE @aFILE "        NAME           = \"@{aName}\"\n";
+}
+
+DEF WRITE_JDBC_DRIVER(@aFILE, @aALTIBASE_HOME)
+{
+    WRITE @aFILE "        JDBC_DRIVER    = \"@{aALTIBASE_HOME}/lib/Altibase.jar\"\n";
+}
+
+DEF WRITE_JDBC_DRIVER_WRONG(@aFILE, @aALTIBASE_HOME)
+{
+    WRITE @aFILE "        JDBC_DRIVER    = \"@{aALTIBASE_HOME}/lib/test.jar\"\n";
+}
+
+DEF WRITE_CONNECTION_URL(@aFILE, @aALTIBASE_PORT_NO)
+{
+    WRITE @aFILE "        CONNECTION_URL = \"jdbc:Altibase://127.0.0.1:@{aALTIBASE_PORT_NO}/mydb\"\n";
+}
+
+DEF WRITE_CONNECTION_URL_WRONG(@aFILE, @aALTIBASE_PORT_NO)
+{
+    WRITE @aFILE "        CONNECTION_URL = \"jdbc:Alti://127.0.0.1:@{aALTIBASE_PORT_NO}/test\"\n";
+}
+
+DEF WRITE_USER(@aFILE, @aUser)
+{
+    WRITE @aFILE "        USER           = \"@{aUser}\"\n";
+}
+
+DEF WRITE_PASSWORD(@aFILE, @aPassword)
+{
+    WRITE @aFILE "        PASSWORD       = \"@{aPassword}\"\n";
+}
+
+DEF WRITE_USER_SYS(@aFILE)
+{
+    WRITE @aFILE "        USER           = \"sys\"\n";
+}
+
+DEF WRITE_PASSWORD_MANAGER(@aFILE)
+{
+    WRITE @aFILE "        PASSWORD       = \"manager\"\n";
+}
+
+DEF WRITE_XADATASOURCE_CLASS_NAME(@aFILE, @aCLASS_NAME)
+{
+    WRITE @aFILE "        XADATASOURCE_CLASS_NAME      = \"@{aCLASS_NAME}\"\n";
+}
+
+DEF WRITE_XADATASOURCE_URL_SETTER_NAME(@aFILE, @aURL_SETTER_NAME)
+{
+    WRITE @aFILE "        XADATASOURCE_URL_SETTER_NAME = \"@{aURL_SETTER_NAME}\"\n";
+}

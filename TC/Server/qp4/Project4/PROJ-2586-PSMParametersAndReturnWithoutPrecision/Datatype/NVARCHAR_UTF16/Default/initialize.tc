@@ -1,0 +1,15 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    var_default nvarchar(25) := 'MATTHEW FINNEN DOYLE';
+
+    var1 nvarchar(3) := 'AB1';
+    var2 nvarchar(6) := 'ABCDE1';
+    var3 nvarchar(9) := 'ABCDEFGH1';
+    end;
+    /
+}

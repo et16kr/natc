@@ -1,0 +1,13 @@
+
+INCLUDE stdFunc.i;
+INCLUDE stdFit.i;
+
+DEF MAIN()
+{
+    fitclient reset;
+    fitclient mode multi;
+
+    fitclient add -u qmoPartition::makeHashKeyFromPartKeyRange::__FT__ -a sigsegv;
+
+    fitclient enable off;
+}

@@ -1,0 +1,156 @@
+############################################################################
+# Database Link Environment Setting
+############################################################################
+
+############################################################################
+# SET UP three DB System
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER UAT_TPCH_FUNC_DBLINK_SERVER1 DB1;
+DECLARE SERVER UAT_TPCH_FUNC_DBLINK_SERVER2 DB2;
+DECLARE SERVER UAT_TPCH_FUNC_DBLINK_SERVER3 DB3;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C12 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C13 (SERVER=DB3);
+
+DEF MAIN()
+{
+
+########################################
+# Default Server Init
+########################################
+
+    SET_ENV ALTIBASE_DBLINK_ENABLE=1;
+    SET_ENV ALTIBASE_SYS_DATA_FILE_MAX_SIZE="4G";
+    SET_ENV ALTIBASE_SYS_TEMP_FILE_MAX_SIZE="2G";
+    SET_ENV ALTIBASE_SYS_UNDO_FILE_MAX_SIZE="2G";
+    SET_ENV ALTIBASE_BUFFER_AREA_SIZE="128M";
+    SET_ENV ALTIBASE_SYS_DATA_FILE_INIT_SIZE="1G";
+    SET_ENV ALTIBASE_SYS_DATA_FILE_NEXT_SIZE="512M"; 
+
+    CP -r "dblink.conf" "${ALTIBASE_HOME}/conf/dblink.conf";
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    SELECT * FROM DUAL;
+
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    THREAD T1 C11
+    {
+
+########################################
+# Set Up DB 1
+########################################
+
+        RM -rf "db1";
+
+        MKDIR "db1";
+        MKDIR "db1/conf";
+        MKDIR "db1/dbs";
+        MKDIR "db1/logs";
+        MKDIR "db1/trc";
+        MKDIR "db1/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+
+# copy the genetated dblink.conf
+        CP -r "dblink.conf" "db1/conf/dblink.conf";
+
+# for building program that uses altibase's library.
+        CP -r "${ALTIBASE_HOME_C0}/lib" "db1/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install" "db1/install";
+        CP -r "${ALTIBASE_HOME_C0}/include" "db1/include";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+        
+        SELECT * FROM DUAL;
+    }
+
+    THREAD T2 C12
+    {
+########################################
+# Set Up DB 2
+########################################
+
+        RM -rf "db2";
+
+        MKDIR "db2";
+        MKDIR "db2/conf";
+        MKDIR "db2/dbs";
+        MKDIR "db2/logs";
+        MKDIR "db2/trc";
+        MKDIR "db2/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+        
+        SELECT * FROM DUAL;
+    }
+
+    THREAD T3 C13
+    {
+
+########################################
+# Set Up DB 3 - Current Not Used
+########################################
+
+       # RM -rf "db3";
+
+       # MKDIR "db3";
+       # MKDIR "db3/conf";
+       # MKDIR "db3/dbs";
+       # MKDIR "db3/logs";
+       # MKDIR "db3/trc";
+       # MKDIR "db3/arch_logs";
+
+       # CP -r "${ALTIBASE_HOME_C0}/bin" "db3/bin";
+       # CP -r "${ALTIBASE_HOME_C0}/msg" "db3/msg";
+       # CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db3/conf/altibase.properties";
+       # CP -r "${ALTIBASE_HOME_C0}/conf/license" "db3/conf/license";
+
+       # NODISPLAY ON;
+       # CALL stdServerKill();
+       # CALL stdClean();
+
+       # CALL stdServerStart();
+       # NODISPLAY OFF;
+    
+       # SELECT * FROM DUAL;
+    }
+
+    JOIN;
+
+########################################
+# CREATE LINK 
+########################################
+
+    CREATE DATABASE LINK link1 USING target1;
+    CREATE DATABASE LINK link2 USING target2;
+
+}
+

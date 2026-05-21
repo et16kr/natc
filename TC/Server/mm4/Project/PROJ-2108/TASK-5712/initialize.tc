@@ -1,0 +1,14 @@
+INCLUDE stdFunc.i;
+INCLUDE task5712Func.i;
+
+DEF MAIN()
+{
+##################################
+# SECTOR; INITIALIZE
+##################################
+NODISPLAY ON;
+
+CALL CopyAltibasePropertiesFile();
+
+NODISPLAY OFF;
+}

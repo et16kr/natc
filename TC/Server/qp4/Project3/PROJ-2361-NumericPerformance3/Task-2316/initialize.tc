@@ -1,0 +1,15 @@
+
+
+DEF MAIN(){
+
+	alter session set autocommit = true;
+	
+	SKIP BEGIN;
+	DROP TABLE T1;        
+	SKIP END;
+
+
+	CREATE TABLE  T1 ( i INTEGER, b  BIGINT, s SMALLINT, d DOUBLE, n1 NUMBER(15,2), r  REAL, n2 NUMERIC, f FLOAT  )tablespace sys_tbs_disk_data;
+	insert into T1 select 12, 1234567, 123,  12.34 , 123.45, 123.45, 123.45, 123.45 from dual connect by level <=10;
+
+}

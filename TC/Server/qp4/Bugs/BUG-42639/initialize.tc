@@ -1,0 +1,21 @@
+###########################################################################
+# 
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+NODISPLAY ON;
+CALL stdServerStop();
+NODISPLAY OFF;
+
+NODISPLAY ON;
+CALL stdClean();
+NODISPLAY OFF;
+
+NODISPLAY ON;
+CALL stdServerStart();
+NODISPLAY OFF;
+}
+

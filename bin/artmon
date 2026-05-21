@@ -1,0 +1,11 @@
+#!/usr/local/bin/bash
+
+while true
+do 
+	tot=`cat $ALTIBASE_HOME/conf/recovery.dat | wc -l`
+	hit=`cat $ALTIBASE_HOME/conf/hitpoint.dat|wc -l`
+	echo "["`date '+20%y-%m-%d %H:%M:%S'`"] $hit/$tot = `expr $hit \* 100 \/ $tot` % (hit ratio)"
+	echo  
+	sleep 10
+done
+

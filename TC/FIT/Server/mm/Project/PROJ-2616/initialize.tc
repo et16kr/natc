@@ -1,0 +1,21 @@
+###########################################################################
+# PROJ-2616 test
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+NODISPLAY ON;
+CALL stdServerKill();
+NODISPLAY OFF;
+
+SET_ENV FIT_ENABLE=1;
+
+SET_ENV ALTIBASE_IPCDA_CHANNEL_COUNT=32;
+
+NODISPLAY ON;
+CALL stdServerStart();
+NODISPLAY OFF;
+}
+

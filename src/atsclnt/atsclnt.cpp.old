@@ -1,0 +1,67 @@
+/*****************************************************************************/
+/* Software Testing Automation Framework (STAF)                              */
+/* (C) Copyright IBM Corp. 2001                                              */
+/*                                                                           */
+/* This software is licensed under the Common Public License (CPL) V1.0.     */
+/*****************************************************************************/
+
+#include "STAF.h"
+#include "STAFString.h"
+#include "STAF_iostream.h"
+#include <stdlib.h>
+
+void printOutput(const STAFString &output);
+
+int main(int argc, char **argv)
+{
+    STAFHandlePtr handlePtr;
+    unsigned int rc = 0;
+
+    rc = STAFHandle::create("STAF/ats/atsclnt", handlePtr);
+
+    if (rc != 0)
+    {
+        cout << "Error registering with STAF, RC: " << rc << endl;
+        return rc;
+    }
+
+    STAFString local("local");
+    STAFString ats("ats");
+    STAFString star(kUTF8_STAR);
+    STAFString testString;
+
+    STAFResultPtr result = handlePtr->submit(local, ats, "run a.sql", kSTAFReqQueue );
+
+    if (result->rc != 0)
+    {
+        cout << "Error submitting request, RC: " << result->rc << endl;
+
+        if (result->result.length() != 0)
+            cout << "Additional info: " << result->result << endl;
+
+        return 5;
+    }
+
+    while( 1 )
+    {    
+        result = handlePtr->submit(local, "queue", "get wait" );
+        if (result->rc != 0)
+        {
+            cout << "Error submitting request, RC: " << result->rc << endl;
+
+            if (result->result.length() != 0)
+                cout << "Additional info: " << result->result << endl;
+
+            return 5;
+        }
+
+        cout << result->result << endl;
+ 
+        if( result->result == "end" )
+        {
+            break;
+        }
+    }
+
+    return 0;
+}

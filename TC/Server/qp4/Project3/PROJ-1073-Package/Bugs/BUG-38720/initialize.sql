@@ -1,0 +1,2 @@
+--+SYSTEM make clean;
+--+SYSTEM make

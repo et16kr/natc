@@ -1,0 +1,81 @@
+############################################################################
+# PROJ-1438 Job Scheduler
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER PROJ_1438_SERVER1 DB1;
+DECLARE SERVER PROJ_1438_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11( SERVER=DB1 );
+DECLARE CLIENT DEFAULT C12( SERVER=DB2 );
+
+DEF MAIN()
+{
+$ALTIBASE_HOME;
+$ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+THREAD T1 C11
+{
+    RM -rf "db1";
+
+    MKDIR "db1";
+    MKDIR "db1/conf";
+    MKDIR "db1/dbs";
+    MKDIR "db1/logs";
+    MKDIR "db1/trc";
+    MKDIR "db1/arch_logs";
+  
+    CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+    CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+    CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+    CP -r "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+
+    # copy the genetated dblink.conf
+    CP -r "dblink.conf" "db1/conf/dblink.conf";
+
+    # for building program that uses altibase's library.
+    CP -r "${ALTIBASE_HOME_C0}/lib" "db1/lib";
+    CP -r "${ALTIBASE_HOME_C0}/install" "db1/install";
+    CP -r "${ALTIBASE_HOME_C0}/include" "db1/include";
+
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+
+    CALL stdServerStart();
+    NODISPLAY OFF;
+    alter system set __DISPLAY_PLAN_FOR_NATC=1;
+    alter system set JOB_SCHEDULER_ENABLE =1;
+    sleep 1;
+}
+JOIN;
+
+THREAD T2 C12
+{
+    RM -rf "db2";
+  
+    MKDIR "db2";
+    MKDIR "db2/conf";
+    MKDIR "db2/dbs";
+    MKDIR "db2/logs";
+    MKDIR "db2/trc";
+    MKDIR "db2/arch_logs";
+  
+    CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+    CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+    CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+    CP -r "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+  
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+  
+    CALL stdServerStart();
+    NODISPLAY OFF;
+    sleep 1;
+}
+
+JOIN;
+
+}

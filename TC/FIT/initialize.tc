@@ -1,0 +1,25 @@
+############################################################################
+# FIT Initialization
+############################################################################
+include stdFunc.i;
+INCLUDE stdFit.i;
+
+DEF MAIN()
+{
+
+    SET_ENV FIT_ENABLE="1";
+
+    SHELL "ipcrm.sh";
+    SHELL "fitserver kill";
+    SHELL "fitserver start";
+    SHELL "server kill";
+    SHELL "clean";
+    SHELL "server start";
+
+    select 'alive' from dual;
+
+    SHELL -o $sRet "fitserver status";
+
+    PRINT $sRet;
+}
+

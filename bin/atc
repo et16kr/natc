@@ -1,0 +1,3 @@
+#!/bin/sh
+perl $ATC_HOME/bin/atc.pl $*
+

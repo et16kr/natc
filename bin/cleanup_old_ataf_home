@@ -1,0 +1,10 @@
+#!/usr/local/bin/bash
+
+cd $STAF_HOME/bin;
+
+rm -rf adsclnt  artclnt  ataf  atsc  atsclnt  atsclnt2  atsclntp  atsmon
+
+cd $STAF_HOME/lib;
+
+rm -rf libSTAFads.* libSTAFats.* libaltiutil_sl.* libgcc_s.so.1 libispapi_sl.* libodbccli_sl.* libstdc++.so.*
+

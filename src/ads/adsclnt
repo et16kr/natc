@@ -1,0 +1,3 @@
+#!/usr/local/bin/bash
+
+STAF local ads run "$1" dsn "127.0.0.1" user "sys" passwd "manager" nls_use "us7ascii" port "20300" conntype "tcp"

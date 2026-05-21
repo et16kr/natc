@@ -1,0 +1,5 @@
+--+SKIP BEGIN;
+--+SYSTEM server kill;
+--+SYSTEM clean;
+--+SYSTEM server start;
+--+SKIP END;

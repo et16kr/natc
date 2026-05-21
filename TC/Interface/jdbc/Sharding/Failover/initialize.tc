@@ -1,0 +1,84 @@
+############################################################################
+# SET UP Shard DB System
+############################################################################
+include stdFunc.i;
+
+DECLARE SERVER JDBC_SHARD_NODE1 DB1;
+DECLARE SERVER JDBC_SHARD_NODE2 DB2;
+DECLARE SERVER JDBC_SHARD_NODE3 DB3;
+DECLARE SERVER JDBC_SHARD_NODE4 DB4;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+DECLARE CLIENT DEFAULT C4 (SERVER=DB4);
+
+DEF MAIN()
+{
+    ########################################
+    # Initialize DB
+    ########################################
+    THREAD T1 C1
+    {
+        ########################################
+        # Set Up NODE1
+        ########################################
+        CREATE TABLE T1 (I1 VARCHAR(10), I2 VARCHAR(20));
+        INSERT INTO T1 SELECT * FROM (SELECT LOOP_LEVEL||'a' I1, 'hash_shard_varchar' I2 FROM DUAL LOOP 1000) WHERE MOD(HASH(I1),1000)+1 <= 500;
+        SELECT * FROM T1;
+    }
+    THREAD T2 C2
+    {
+        ########################################
+        # Set Up NODE2
+        ########################################
+        CREATE TABLE T1 (I1 VARCHAR(10), I2 VARCHAR(20));
+        INSERT INTO T1 SELECT * FROM (SELECT LOOP_LEVEL||'a' I1, 'hash_shard_varchar' i2 FROM DUAL LOOP 1000) WHERE MOD(HASH(I1),1000)+1 > 500;
+        SELECT * FROM T1;
+    }
+    THREAD T3 C3
+    {
+        ########################################
+        # Set Up NODE1 Alternative
+        ########################################
+        CREATE TABLE T1 (I1 VARCHAR(10), I2 VARCHAR(20));
+        INSERT INTO T1 SELECT * FROM (SELECT LOOP_LEVEL||'a' I1, 'hash_shard_varchar' I2 FROM DUAL LOOP 1000) WHERE MOD(HASH(I1),1000)+1 <= 500;
+        SELECT * FROM T1;
+    }
+    THREAD T4 C4
+    {
+        ########################################
+        # Set Up NODE2 Alternative
+        ########################################
+        CREATE TABLE T1 (I1 VARCHAR(10), I2 VARCHAR(20));
+        INSERT INTO T1 SELECT * FROM (SELECT LOOP_LEVEL||'a' I1, 'hash_shard_varchar' I2 FROM DUAL LOOP 1000) WHERE MOD(HASH(I1),1000)+1 > 500;
+        SELECT * FROM T1;
+    }
+    JOIN;
+
+    ########################################
+    # Initialize META 
+    ########################################
+    CREATE TABLE T1 (I1 VARCHAR(10), I2 VARCHAR(20));
+
+    NODISPLAY ON;
+    exec dbms_shard.set_node('NODE1','127.0.0.1',${ALTIBASE_PORT_NO@DB1},'127.0.0.1',${ALTIBASE_PORT_NO@DB3});
+    exec dbms_shard.set_node('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB2});
+
+    #exec dbms_shard.reset_alternate_node('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB4});
+    # * BUG-45998 Procedure 'RESET_NODE/RESET_ALTERNATE_NODE' remove.
+    #   exec dbms_shard.reset_node_external('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB2}, '127.0.0.1',${ALTIBASE_PORT_NO@DB4});
+    #   exec dbms_shard.reset_node_internal('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB2}, '127.0.0.1',${ALTIBASE_PORT_NO@DB4, 1});
+    exec dbms_shard.reset_node_external('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB2}, '127.0.0.1',${ALTIBASE_PORT_NO@DB4});
+    exec dbms_shard.reset_node_internal('NODE2','127.0.0.1',${ALTIBASE_PORT_NO@DB2}, '127.0.0.1',${ALTIBASE_PORT_NO@DB4, 1});
+    NODISPLAY OFF;
+
+    select count(*) from sys_shard.nodes_;
+
+    exec dbms_shard.set_shard_table('SYS','T1','H','I1');
+    select count(*) from sys_shard.objects_;
+
+    exec dbms_shard.set_shard_hash('SYS','T1',500,'NODE1');
+    exec dbms_shard.set_shard_hash('SYS','T1',1000,'NODE2');
+    select count(*) from sys_shard.ranges_;
+}

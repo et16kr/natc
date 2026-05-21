@@ -1,0 +1,8 @@
+--+IGNORE ;
+--+DECLARE SERVER INHERIT ALL (SCOPE=TL, ALTIBASE_SHM_DB_KEY=%SHM_DB_KEY, ALTIBASE_IPC_CHANNEL_COUNT=0, ALTIBASE_IPC_CHANNEL_BUF_COUNT=0);
+--+DECLARE CLIENT INHERIT ALL (SCOPE=TL, ISQL_CONNECTION=UNIX);
+--+SYSTEM server kill ;
+--+SYSTEM echo y | shmutil -e ;
+--+SYSTEM echo y | destroydb -n    mydb;
+--+SYSTEM echo y |  createdb -M 10;
+--+SYSTEM server start ;

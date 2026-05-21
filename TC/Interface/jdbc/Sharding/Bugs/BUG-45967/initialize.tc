@@ -1,0 +1,115 @@
+############################################################################
+# BUG-45967 Shard Meta를 변경했는데, 기존 Shard Session은 변경 전의 Shard Meta를 사용하고 있습니다.
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER JDBC_SHARD_NODE1 DB1;
+DECLARE SERVER JDBC_SHARD_NODE2 DB2;
+DECLARE SERVER JDBC_SHARD_NODE3 DB3;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+
+DEF MAIN()
+{
+    ################################################
+    # PREPARE
+    ################################################
+
+    CALL PREPARE();
+}
+
+DEF PREPARE()
+{
+    NODISPLAY ON;
+    CALL FINALIZE();
+    NODISPLAY OFF;
+
+JOIN;
+
+    SET_ENV ALTIBASE_SHARD_ENABLE = "1";
+
+    THREAD T1 C1
+    {
+        NODISPLAY ON;
+        CALL stdServerRestart();
+        NODISPLAY OFF;
+
+        CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+    }
+        THREAD T2 C2
+        {
+            NODISPLAY ON;
+            CALL stdServerRestart();
+            NODISPLAY OFF;
+
+            CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+        }
+            THREAD T3 C3
+            {
+                NODISPLAY ON;
+                CALL stdServerRestart();
+                NODISPLAY OFF;
+
+                CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+            }
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdClean();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    EXEC p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIBASE_HOME}/packages/dbms_shard.sql";
+    P_WAIT p1;
+
+    EXEC p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIBASE_HOME}/packages/dbms_shard.plb";
+    P_WAIT p1;
+
+    CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+
+    EXEC p1 "javac Test.java";
+    P_WAIT p1;
+
+JOIN;
+
+    EXEC DBMS_SHARD.CREATE_META(0);
+
+    EXEC DBMS_SHARD.SET_NODE('NODE1', '127.0.0.1', ${ALTIBASE_PORT_NO@DB1});
+    EXEC DBMS_SHARD.SET_NODE('NODE2', '127.0.0.1', ${ALTIBASE_PORT_NO@DB2});
+    EXEC DBMS_SHARD.SET_NODE('NODE3', '127.0.0.1', ${ALTIBASE_PORT_NO@DB3});
+
+    EXEC DBMS_SHARD.SET_SHARD_TABLE( 'SYS', 'T1', 'R', 'I1' );
+
+    EXEC DBMS_SHARD.SET_SHARD_RANGE( 'SYS', 'T1', 10, 'NODE1' );
+    EXEC DBMS_SHARD.SET_SHARD_RANGE( 'SYS', 'T1', 20, 'NODE2' );
+    EXEC DBMS_SHARD.SET_SHARD_RANGE( 'SYS', 'T1', 30, 'NODE3' );
+}
+
+DEF FINALIZE()
+{
+    THREAD T1 C1
+    {
+        DROP TABLE T1;
+    }
+        THREAD T2 C2
+        {
+            DROP TABLE T1;
+        }
+            THREAD T3 C3
+            {
+                DROP TABLE T1;
+            }
+
+    DROP TABLE T1;
+
+    EXEC DBMS_SHARD.UNSET_SHARD_TABLE( 'SYS','T1' );
+
+    UNSET_ENV ALTIBASE_SHARD_ENABLE;
+
+    RM -f "*.class" "*.res";
+
+JOIN;
+}

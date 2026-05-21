@@ -1,0 +1,151 @@
+#!/usr/local/bin/bash
+
+#if [ $# -ne 3 ]
+#then
+#    echo "[usage] $0 ts_or_sql seed module";
+#    exit;
+#fi
+
+if [ $# -eq 3 ]
+then
+ts_or_sql=$1;
+seed=$2;
+module=$3;
+fi
+
+if [ $# -eq 4 ]
+then
+ts_or_sql=$1;
+my_ts_or_sql=$2;
+seed=$3;
+module=$4;
+fi
+
+path=server_"$module";
+
+rm -rf $ATAF_TEST_RESULT/$path;
+
+if [ ! -d ${ATAF_TEST_RESULT} ]; then
+    mkdir ${ATAF_TEST_RESULT};
+fi
+
+if [ "$HOSTNAME" = "m5000" ]; then
+if [ $module == "p0" ]; then
+    rm -rf /data3/$LOGNAME/work/natc_result/result_p0;
+    mkdir /data3/$LOGNAME/work/natc_result/result_p0;
+    ln -s /data3/$LOGNAME/work/natc_result/result_p0 $ATAF_TEST_RESULT/result_p0;
+    rm -rf $HOME/work/natc_result/server_p0;
+    mkdir $HOME/work/natc_result/$path;
+    ln -s $HOME/work/natc_result/$path $ATAF_TEST_RESULT/$path;
+elif [ $module == "p1" ]; then
+    rm -rf $HOME/work/natc_result/result_p1;
+    mkdir $HOME/work/natc_result/result_p1;
+    ln -s $HOME/work/natc_result/result_p1 $ATAF_TEST_RESULT/result_p1;
+    rm -rf $HOME/work/natc_result/server_p1;
+    mkdir $HOME/work/natc_result/$path;
+    ln -s $HOME/work/natc_result/$path $ATAF_TEST_RESULT/$path;
+else
+    rm -rf $HOME/work/natc_result/$path;
+    mkdir $HOME/work/natc_result/$path;
+    ln -s $HOME/work/natc_result/$path $ATAF_TEST_RESULT/$path;
+fi
+elif [ "$HOSTNAME" = "sx1000" ]; then
+if [ $module == "p0" ]; then
+    rm -rf $ATAF_TEST_RESULT/log/atsclntp_p0.log;
+    mkdir $ATAF_TEST_RESULT/log;
+    ln -s $HOME/log/atsclntp_p0.log $ATAF_TEST_RESULT/log/atsclntp_p0.log
+
+    rm -rf $ATAF_TEST_RESULT/p0;
+    mkdir $ATAF_TEST_RESULT/p0;
+
+    rm -rf $ATAF_TEST_RESULT/server_p0;
+    mkdir $ATAF_TEST_RESULT/server_p0;
+else
+    rm -rf $ATAF_TEST_RESULT/log/atsclntp_"$module".log;
+    mkdir $ATAF_TEST_RESULT/log;
+    ln -s $HOME/log/atsclntp_"$module".log $ATAF_TEST_RESULT/log/atsclntp_"$module".log
+
+    rm -rf $HOME/work/natc_res/"$module";
+    mkdir -p $HOME/work/natc_res/"$module";
+    ln -s $HOME/work/natc_res/"$module" $ATAF_TEST_RESULT/"$module";
+
+    rm -rf $HOME/work/natc_res/$path;
+    mkdir -p $HOME/work/natc_res/$path;
+    ln -s $HOME/work/natc_res/$path $ATAF_TEST_RESULT/$path;
+fi
+fi
+
+mkdir $ATAF_TEST_RESULT/$path;
+mkdir $ATAF_TEST_RESULT/$path/bin;
+mkdir $ATAF_TEST_RESULT/$path/conf;
+mkdir $ATAF_TEST_RESULT/$path/msg;
+mkdir $ATAF_TEST_RESULT/$path/dbs;
+mkdir $ATAF_TEST_RESULT/$path/logs;
+mkdir $ATAF_TEST_RESULT/$path/trc;
+mkdir $ATAF_TEST_RESULT/$path/arch_logs;
+mkdir $ATAF_TEST_RESULT/$path/install;
+mkdir $ATAF_TEST_RESULT/$path/include;
+mkdir $ATAF_TEST_RESULT/$path/lib;
+
+cp -f ${ALTIBASE_HOME}/bin/*                    $ATAF_TEST_RESULT/$path/bin;
+cp -f ${ALTIBASE_HOME}/msg/*                    $ATAF_TEST_RESULT/$path/msg;
+cp -f ${ALTIBASE_HOME}/conf/*                   $ATAF_TEST_RESULT/$path/conf;
+cp -f ${ALTIBASE_HOME}/install/*                $ATAF_TEST_RESULT/$path/install;
+cp -f ${ALTIBASE_HOME}/include/*                $ATAF_TEST_RESULT/$path/include;
+cp -f ${ALTIBASE_HOME}/lib/*                    $ATAF_TEST_RESULT/$path/lib;
+
+#port1=`grep PORT_NO ${ALTIBASE_HOME}/conf/altibase.properties | grep -v REP | grep -v grep | awk '{print $3;}'`;
+port1=${ALTIBASE_PORT_NO}
+port2=`expr $port1 + $seed`;
+sed -e "s/$port1/$port2/g" $ATAF_TEST_RESULT/$path/conf/altibase.properties > $ATAF_TEST_RESULT/$path/conf/altibase.properties.old;
+mv $ATAF_TEST_RESULT/$path/conf/altibase.properties.old $ATAF_TEST_RESULT/$path/conf/altibase.properties;
+
+export ALTIBASE_HOME=$ATAF_TEST_RESULT/$path;
+export PATH=$ALTIBASE_HOME/bin:$PATH;
+
+if [ "$HOSTNAME" = "m5000" ]; then
+    export ATAF_TEST_RESULT=$ATAF_TEST_RESULT/result_"$module";
+elif [ "$HOSTNAME" = "sx1000" ]; then
+    export ATAF_TEST_RESULT=$ATAF_TEST_RESULT/"$module";
+fi
+
+export ALTIBASE_PORT_NO=$port2;
+
+server kill;
+echo y | shmutil -e;
+echo y | destroydb -n mydb;
+echo y | createdb -M 10;
+server start;
+
+#atsclnt $ts_or_sql $my_ts_or_sql;
+atsclnt $ts_or_sql --skip $ATC_HOME/TC/skip.ts
+
+server kill;
+
+if [ ! -d ${ATC_WORK} ]; then
+    mkdir ${ATC_WORK};
+fi
+if [ ! -d ${ATC_WORK}/log ]; then
+    mkdir ${ATC_WORK}/log; fi
+
+if [ ! -f ${ATC_WORK}/altibase.info ]; then
+    altibase -v > ${ATC_WORK}/altibase.info; fi
+
+if [ ! -f ${ATC_WORK}/TS999999.ts ]; then
+    echo "" >> ${ATC_WORK}/TS999999.ts;     
+    echo "TestSuiteDescription     =   Test for Test Case where have got FAIL test" >> ${ATC_WORK}/TS999999.ts;
+    echo "#########################################################################" >> ${ATC_WORK}/TS999999.ts; 
+fi
+
+cat ${ATAF_TEST_RESULT}/work/TS999999.ts | awk -F '\n' 'begin{a=0;} { a++; if( a > 3 ) print $0; } {}' >> ${ATC_WORK}/TS999999.ts;
+cat ${ATAF_TEST_RESULT}/work/log/report.log    >> ${ATC_WORK}/log/report.log; 
+cat ${ATAF_TEST_RESULT}/work/log/error.log     >> ${ATC_WORK}/log/error.log;
+cat ${ATAF_TEST_RESULT}/work/log/system.log    >> ${ATC_WORK}/log/system.log;
+cat ${ATAF_TEST_RESULT}/work/log/exception.log >> ${ATC_WORK}/log/exception.log;
+cat ${ATAF_TEST_RESULT}/work/log/lstout.log    >> ${ATC_WORK}/log/lstout.log;
+
+if [ -e ${ATAF_TEST_RESULT}/work/log/all_count.log ]
+then
+cat ${ATAF_TEST_RESULT}/work/log/all_count.log >> ${ATC_WORK}/log/all_count.log;
+fi
+

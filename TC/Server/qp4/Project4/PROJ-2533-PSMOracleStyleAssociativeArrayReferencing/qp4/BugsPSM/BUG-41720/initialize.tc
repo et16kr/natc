@@ -1,0 +1,33 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop typeset typ1;
+    drop package typ2;
+    skip end;
+
+    create table t1 ( c1 integer , c2 varchar2(32) );
+    insert into t1 values ( 1 , 'one' );
+    insert into t1 values ( 2 , 'two' );
+    insert into t1 values ( 4 , 'four' );
+    insert into t1 values ( 8 , 'eight' );
+    insert into t1 values ( 16 , 'sixteen' );
+    insert into t1 values ( 32 , 'thirty-two' );
+
+    create or replace typeset typ1 as
+    type rec1 is record( c1 integer , c2 varchar2(32) );
+    type arr1 is table of varchar2(32) index by integer;
+    type arr2 is table of rec1 index by integer;
+    type refCur1 is ref cursor;
+    end;
+    /
+
+
+    create or replace package typ2 as
+    type rec1 is record( c1 integer , c2 varchar2(32) );
+    type arr1 is table of varchar2(32) index by integer;
+    type arr2 is table of rec1 index by integer;
+    type refCur1 is ref cursor;
+    end;
+    /
+}

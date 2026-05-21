@@ -1,0 +1,4 @@
+def main()
+{
+    SHELL "eval 'cd src; make all'";
+}

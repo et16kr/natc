@@ -1,0 +1,299 @@
+############################################################################
+# Shard server list
+# - Shard Server        : DB1 ~ 3
+# - Alternative Server  : DB4 ~ 6
+# - Service Port        : PORT_NO0 + 1000 ~
+# - Replication Port    : PORT_NO0 + 15000 + 1000  ~
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER FIT_SHARD2_NODE1 DB1;
+DECLARE SERVER FIT_SHARD2_NODE2 DB2;
+DECLARE SERVER FIT_SHARD2_NODE3 DB3;
+DECLARE SERVER FIT_SHARD2_NODE4 DB4;
+DECLARE SERVER FIT_SHARD2_NODE5 DB5;
+DECLARE SERVER FIT_SHARD2_NODE6 DB6;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+DECLARE CLIENT DEFAULT C4 (SERVER=DB4);
+DECLARE CLIENT DEFAULT C5 (SERVER=DB5);
+DECLARE CLIENT DEFAULT C6 (SERVER=DB6);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    fitclient reset;
+    JOIN;
+
+    THREAD T1 C1
+    {
+        ########################################
+        # DB1
+        ########################################
+        RM -rf "${ALTIBASE_HOME@DB1}";
+
+        MKDIR "${ALTIBASE_HOME@DB1}";
+        MKDIR "${ALTIBASE_HOME@DB1}/install";
+        MKDIR "${ALTIBASE_HOME@DB1}/include";
+        MKDIR "${ALTIBASE_HOME@DB1}/conf";
+        MKDIR "${ALTIBASE_HOME@DB1}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB1}/logs";
+        MKDIR "${ALTIBASE_HOME@DB1}/trc";
+        MKDIR "${ALTIBASE_HOME@DB1}/arch_logs";
+
+        LN -s "${ALTIBASE_HOME_C0}/bin" "${ALTIBASE_HOME@DB1}/bin";
+        LN -s "${ALTIBASE_HOME_C0}/msg" "${ALTIBASE_HOME@DB1}/msg";
+        LN -s "${ALTIBASE_HOME_C0}/packages" "${ALTIBASE_HOME@DB1}/packages";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB1}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB1}/conf/license";
+
+        # for building program that uses altibase library.
+        LN -s "${ALTIBASE_HOME_C0}/lib" "${ALTIBASE_HOME@DB1}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB1}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB1}/include";
+
+        CALL cleanAndStartServer();
+    }
+
+    THREAD T2 C2
+    {
+        ########################################
+        # DB2
+        ########################################
+        RM -rf "${ALTIBASE_HOME@DB2}";
+
+        MKDIR "${ALTIBASE_HOME@DB2}";
+        MKDIR "${ALTIBASE_HOME@DB2}/install";
+        MKDIR "${ALTIBASE_HOME@DB2}/include";
+        MKDIR "${ALTIBASE_HOME@DB2}/conf";
+        MKDIR "${ALTIBASE_HOME@DB2}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB2}/logs";
+        MKDIR "${ALTIBASE_HOME@DB2}/trc";
+        MKDIR "${ALTIBASE_HOME@DB2}/arch_logs";
+
+        LN -s "${ALTIBASE_HOME_C0}/bin" "${ALTIBASE_HOME@DB2}/bin";
+        LN -s "${ALTIBASE_HOME_C0}/msg" "${ALTIBASE_HOME@DB2}/msg";
+        LN -s "${ALTIBASE_HOME_C0}/packages" "${ALTIBASE_HOME@DB2}/packages";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB2}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB2}/conf/license";
+
+        # for building program that uses altibase library.
+        LN -s "${ALTIBASE_HOME_C0}/lib" "${ALTIBASE_HOME@DB2}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB2}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB2}/include";
+
+        CALL cleanAndStartServer();
+    }
+
+    THREAD T3 C3
+    {
+        ########################################
+        # DB3
+        ########################################
+        RM -rf "${ALTIBASE_HOME@DB3}";
+
+        MKDIR "${ALTIBASE_HOME@DB3}";
+        MKDIR "${ALTIBASE_HOME@DB3}/install";
+        MKDIR "${ALTIBASE_HOME@DB3}/include";
+        MKDIR "${ALTIBASE_HOME@DB3}/conf";
+        MKDIR "${ALTIBASE_HOME@DB3}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB3}/logs";
+        MKDIR "${ALTIBASE_HOME@DB3}/trc";
+        MKDIR "${ALTIBASE_HOME@DB3}/arch_logs";
+
+        LN -s "${ALTIBASE_HOME_C0}/bin" "${ALTIBASE_HOME@DB3}/bin";
+        LN -s "${ALTIBASE_HOME_C0}/msg" "${ALTIBASE_HOME@DB3}/msg";
+        LN -s "${ALTIBASE_HOME_C0}/packages" "${ALTIBASE_HOME@DB3}/packages";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB3}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB3}/conf/license";
+
+        # for building program that uses altibase library.
+        LN -s "${ALTIBASE_HOME_C0}/lib" "${ALTIBASE_HOME@DB3}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB3}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB3}/include";
+
+        CALL cleanAndStartServer();
+    }
+
+    THREAD T4 C4
+    {
+        ########################################
+        # DB4
+        ########################################
+        RM -rf "${ALTIBASE_HOME@DB4}";
+
+        MKDIR "${ALTIBASE_HOME@DB4}";
+        MKDIR "${ALTIBASE_HOME@DB4}/install";
+        MKDIR "${ALTIBASE_HOME@DB4}/include";
+        MKDIR "${ALTIBASE_HOME@DB4}/conf";
+        MKDIR "${ALTIBASE_HOME@DB4}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB4}/logs";
+        MKDIR "${ALTIBASE_HOME@DB4}/trc";
+        MKDIR "${ALTIBASE_HOME@DB4}/arch_logs";
+
+        LN -s "${ALTIBASE_HOME_C0}/bin" "${ALTIBASE_HOME@DB4}/bin";
+        LN -s "${ALTIBASE_HOME_C0}/msg" "${ALTIBASE_HOME@DB4}/msg";
+        LN -s "${ALTIBASE_HOME_C0}/packages" "${ALTIBASE_HOME@DB4}/packages";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB4}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB4}/conf/license";
+
+        # for building program that uses altibase library.
+        LN -s "${ALTIBASE_HOME_C0}/lib" "${ALTIBASE_HOME@DB4}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB4}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB4}/include";
+
+        CALL cleanAndStartServer();
+    }
+
+    THREAD T5 C5
+    {
+        ########################################
+        # DB5
+        ########################################
+        RM -rf "${ALTIBASE_HOME@DB5}";
+
+        MKDIR "${ALTIBASE_HOME@DB5}";
+        MKDIR "${ALTIBASE_HOME@DB5}/install";
+        MKDIR "${ALTIBASE_HOME@DB5}/include";
+        MKDIR "${ALTIBASE_HOME@DB5}/conf";
+        MKDIR "${ALTIBASE_HOME@DB5}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB5}/logs";
+        MKDIR "${ALTIBASE_HOME@DB5}/trc";
+        MKDIR "${ALTIBASE_HOME@DB5}/arch_logs";
+
+        LN -s "${ALTIBASE_HOME_C0}/bin" "${ALTIBASE_HOME@DB5}/bin";
+        LN -s "${ALTIBASE_HOME_C0}/msg" "${ALTIBASE_HOME@DB5}/msg";
+        LN -s "${ALTIBASE_HOME_C0}/packages" "${ALTIBASE_HOME@DB5}/packages";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB5}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB5}/conf/license";
+
+        # for building program that uses altibase library.
+        LN -s "${ALTIBASE_HOME_C0}/lib" "${ALTIBASE_HOME@DB5}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB5}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB5}/include";
+
+        CALL cleanAndStartServer();
+    }
+
+    THREAD T6 C6
+    {
+        ########################################
+        # DB6
+        ########################################
+        RM -rf "${ALTIBASE_HOME@DB6}";
+
+        MKDIR "${ALTIBASE_HOME@DB6}";
+        MKDIR "${ALTIBASE_HOME@DB6}/install";
+        MKDIR "${ALTIBASE_HOME@DB6}/include";
+        MKDIR "${ALTIBASE_HOME@DB6}/conf";
+        MKDIR "${ALTIBASE_HOME@DB6}/dbs";
+        MKDIR "${ALTIBASE_HOME@DB6}/logs";
+        MKDIR "${ALTIBASE_HOME@DB6}/trc";
+        MKDIR "${ALTIBASE_HOME@DB6}/arch_logs";
+
+        LN -s "${ALTIBASE_HOME_C0}/bin" "${ALTIBASE_HOME@DB6}/bin";
+        LN -s "${ALTIBASE_HOME_C0}/msg" "${ALTIBASE_HOME@DB6}/msg";
+        LN -s "${ALTIBASE_HOME_C0}/packages" "${ALTIBASE_HOME@DB6}/packages";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties.release" "${ALTIBASE_HOME@DB6}/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "${ALTIBASE_HOME@DB6}/conf/license";
+
+        # for building program that uses altibase library.
+        LN -s "${ALTIBASE_HOME_C0}/lib" "${ALTIBASE_HOME@DB6}/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install/*" "${ALTIBASE_HOME@DB6}/install";
+        CP -r "${ALTIBASE_HOME_C0}/include/*" "${ALTIBASE_HOME@DB6}/include";
+
+        CALL cleanAndStartServer();
+    }
+    JOIN;
+
+    THREAD T1 C1
+    {
+		CALL createMeta( 1, "${ALTIBASE_HOME@DB1}" );
+    }
+    JOIN;
+
+    THREAD T2 C2
+    {
+		CALL createMeta( 2, "${ALTIBASE_HOME@DB2}" );
+    }
+    JOIN;
+
+    THREAD T3 C3
+    {
+		CALL createMeta( 3, "${ALTIBASE_HOME@DB3}" );
+    }
+    JOIN;
+
+    THREAD T4 C4
+    {
+		CALL createMeta( 4, "${ALTIBASE_HOME@DB4}" );
+    }
+    JOIN;
+
+    THREAD T5 C5
+    {
+		CALL createMeta( 5, "${ALTIBASE_HOME@DB5}" );
+    }
+    JOIN;
+
+    THREAD T6 C6
+    {
+		CALL createMeta( 6, "${ALTIBASE_HOME@DB6}" );
+    }
+    JOIN;
+}
+
+DEF cleanAndStartServer()
+{
+    # Server Kill, Clean, Start
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    SELECT * FROM DUAL;
+}
+
+DEF createMeta( @aMetaId, @aPath )
+{
+	# create interface without body
+    NODISPLAY ON;
+    EXEC P1 "isql -s 127.0.0.1 -u sys -p manager -silent -f @{aPath}/packages/dbms_shard.sql";
+    P_WAIT P1;
+    PRINT $Ret_;
+    NODISPLAY OFF;
+
+    EXEC P1 "isql -s 127.0.0.1 -u sys -p manager -silent -f @{aPath}/packages/dbms_shard.plb";
+    P_WAIT P1;
+    PRINT $Ret_;
+
+    EXEC DBMS_SHARD.CREATE_META(@{aMetaId});
+
+    # create interface without body
+    NODISPLAY ON;
+    EXEC P1 "isql -s 127.0.0.1 -u sys -p manager -silent -f @{aPath}/packages/dbms_lock.sql";
+    P_WAIT P1;
+    PRINT $Ret_;
+    NODISPLAY OFF;
+
+    EXEC P1 "isql -s 127.0.0.1 -u sys -p manager -silent -f @{aPath}/packages/dbms_lock.plb";
+    P_WAIT P1;
+    PRINT $Ret_;
+
+	# create interface without body
+    NODISPLAY ON;
+    EXEC P1 "isql -s 127.0.0.1 -u sys -p manager -silent -f @{aPath}/packages/utl_shard_online_rebuild.sql";
+    P_WAIT P1;
+    PRINT $Ret_;
+    NODISPLAY OFF;
+
+    EXEC P1 "isql -s 127.0.0.1 -u sys -p manager -silent -f @{aPath}/packages/utl_shard_online_rebuild.plb";
+    P_WAIT P1;
+    PRINT $Ret_;
+}

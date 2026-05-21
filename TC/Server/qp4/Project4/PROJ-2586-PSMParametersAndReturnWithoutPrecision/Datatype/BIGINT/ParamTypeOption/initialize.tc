@@ -1,0 +1,25 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    v1 bigint;
+
+    procedure showvariables;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure showvariables as
+    begin
+    println( 'v1 bigint : ' || v1 ); 
+    end;
+
+    end;
+    /
+
+    exec variables.showvariables;
+}

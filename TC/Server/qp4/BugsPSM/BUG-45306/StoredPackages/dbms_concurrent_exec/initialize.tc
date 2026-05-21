@@ -1,0 +1,21 @@
+include stdFunc.i
+
+def main()
+{
+    skip begin;
+    drop tablespace voltbs including contents and datafiles;
+    skip end;
+
+    create volatile data tablespace voltbs size 100m autoextend on;
+
+    set_env altibase_concurrent_exec_degree_max = 10;
+    set_env_altibase_concurrent_exec_degree_default = 4;
+    set_env altibase_job_thread_count = 1;
+    set_env altibase_fetch_timeout = 0;
+    set_env altibase_query_timeout = 0;
+    set_env altibase_utrans_timeout = 0;
+
+    nodisplay on;
+    call stdServerStart();
+    nodisplay off;
+}

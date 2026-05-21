@@ -1,0 +1,10 @@
+include stdFunc.i;
+
+DEF MAIN ( )
+{
+    SET_ENV ALTIBASE___DISABLE_TRANSACTION_BOUND_IN_CTS = 1;
+
+    NODISPLAY ON;
+    CALL stdServerRestart();
+    NODISPLAY OFF;
+}

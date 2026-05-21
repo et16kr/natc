@@ -1,0 +1,134 @@
+############################################################################
+# Generate jdbcAdapter.conf file for jdbcAdapter test
+############################################################################
+
+DECLARE SERVER ORAADAPTER_SERVER1 DB1;
+DECLARE SERVER ORAADAPTER_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C12 (SERVER=DB2);
+
+$ALTIBASE_HOME;
+
+DEF MAIN()
+{
+    $sALTIBASE_PORT_NO_DB1;
+    $sALTIBASE_PORT_NO_DB2;
+    $sALTIBASE_REPLICATION_PORT_NO_DB2;
+    $sALTIBASE_HOME;
+
+    THREAD T11 C11
+    {
+        $ALTIBASE_HOME;
+        $ALTIBASE_PORT_NO;
+        
+        $sALTIBASE_HOME = $ALTIBASE_HOME;
+        $sALTIBASE_PORT_NO_DB1 = $ALTIBASE_PORT_NO;
+    }
+    
+    JOIN;
+    
+    THREAD T12 C12
+    {
+        $ALTIBASE_PORT_NO;
+        $ALTIBASE_REPLICATION_PORT_NO;
+        
+        $sALTIBASE_PORT_NO_DB2 = $ALTIBASE_PORT_NO;
+        $sALTIBASE_REPLICATION_PORT_NO_DB2 = $ALTIBASE_REPLICATION_PORT_NO;
+    }
+
+    JOIN;
+    $sFileName = "Adapter/conf/jdbcAdapter.conf";
+    $sCopyFileName = "Adapter/conf/jdbcAdapter.conf.org";
+
+    NODISPLAY ON;
+    OPEN F1 -m a $sFileName;
+
+    CALL SED_ALTIBASE_PORT              ($sFileName, $sALTIBASE_PORT_NO_DB1);
+    CALL SED_ALA_RECEIVER_PORT          ($sFileName, $sALTIBASE_REPLICATION_PORT_NO_DB2);
+    CALL SED_OTHER_DATABASE_USER        ($sFileName);
+    CALL SED_OTHER_DATABASE_PASSWORD    ($sFileName);
+    CALL SED_OTHER_DATABASE_JDBC_DRIVER_PATH    ($sFileName, $sALTIBASE_HOME);
+    CALL SED_OTHER_DATABASE_JDBC_DRIVER_CLASS    ($sFileName);
+    CALL SED_OTHER_DATABASE_JDBC_CONNECTION_URL ($sFileName, $sALTIBASE_PORT_NO_DB2);
+    CALL SED_OTHER_DATABASE_CONFLICT_LOGGING_LEVEL   ($sFileName);
+
+    WRITE F1 "\n";
+    CLOSE F1;
+
+    CP $sFileName $sCopyFileName;
+        
+    $sFileName2 = "Adapter/conf/jdbcAdapter.conf.passwd";
+    
+    OPEN F1 -m a $sFileName;
+
+    CALL SED_ALTIBASE_PORT              ($sFileName2, $sALTIBASE_PORT_NO_DB1);
+    CALL SED_ALA_RECEIVER_PORT          ($sFileName2, $sALTIBASE_REPLICATION_PORT_NO_DB2);
+    CALL SED_OTHER_DATABASE_USER        ($sFileName2);
+    CALL SED_OTHER_DATABASE_PASSWORD    ($sFileName2);
+    CALL SED_OTHER_DATABASE_JDBC_DRIVER_PATH    ($sFileName2, $sALTIBASE_HOME);
+    CALL SED_OTHER_DATABASE_JDBC_DRIVER_CLASS    ($sFileName2);    
+    CALL SED_OTHER_DATABASE_JDBC_CONNECTION_URL ($sFileName2, $sALTIBASE_PORT_NO_DB2);
+    CALL SED_OTHER_DATABASE_CONFLICT_LOGGING_LEVEL   ($sFileName);
+
+    WRITE F1 "\n";
+    CLOSE F1;
+
+    NODISPLAY OFF;
+    
+    IF (FEXIST $sFileName)
+    {
+        IF (FEXIST $sFileName2)
+        {
+            PRINT "Generate success";
+        }
+        ELSE
+        {
+            PRINT "Generate failed!!!";
+        }
+    }
+    ELSE
+    {
+        PRINT "Generate failed!!!";
+    }
+}
+
+DEF SED_ALTIBASE_PORT(@aFILE, @aALTIBASE_PORT)
+{
+    SED "ALTIBASE_PORT = 20300" "ALTIBASE_PORT = @{aALTIBASE_PORT}" @aFILE;
+}
+
+DEF SED_ALA_RECEIVER_PORT(@aFILE, @aALA_RECEIVER_PORT)
+{
+    SED "ALA_RECEIVER_PORT = 25090" "ALA_RECEIVER_PORT = @{aALA_RECEIVER_PORT}" @aFILE;
+}
+
+DEF SED_OTHER_DATABASE_USER(@aFILE)
+{
+    SED "OTHER_DATABASE_USER = guest" "OTHER_DATABASE_USER = scott" @aFILE;
+}
+
+DEF SED_OTHER_DATABASE_PASSWORD(@aFILE)
+{
+    SED "OTHER_DATABASE_PASSWORD = guest" "OTHER_DATABASE_PASSWORD = tiger" @aFILE;
+}
+
+DEF SED_OTHER_DATABASE_JDBC_DRIVER_PATH(@aFILE, @aALTIBASE_HOME)
+{
+    SED "OTHER_DATABASE_JDBC_DRIVER_PATH =" "OTHER_DATABASE_JDBC_DRIVER_PATH = @{aALTIBASE_HOME}/lib/Altibase.jar" @aFILE;
+}
+
+DEF SED_OTHER_DATABASE_JDBC_DRIVER_CLASS(@aFILE)
+{
+    SED "OTHER_DATABASE_JDBC_DRIVER_CLASS =" "OTHER_DATABASE_JDBC_DRIVER_CLASS = Altibase.jdbc.driver.AltibaseDriver" @aFILE;
+}
+
+DEF SED_OTHER_DATABASE_JDBC_CONNECTION_URL(@aFILE, @aALTIBASE_PORT_NO)
+{
+    SED "OTHER_DATABASE_JDBC_CONNECTION_URL =" "OTHER_DATABASE_JDBC_CONNECTION_URL = \"jdbc:Altibase://127.0.0.1:@{aALTIBASE_PORT_NO}/mydb\"" @aFILE;
+}
+
+DEF SED_OTHER_DATABASE_CONFLICT_LOGGING_LEVEL(@aFILE)
+{
+    SED "OTHER_DATABASE_CONFLICT_LOGGING_LEVEL = 1" "OTHER_DATABASE_CONFLICT_LOGGING_LEVEL = 2" @aFILE;
+}

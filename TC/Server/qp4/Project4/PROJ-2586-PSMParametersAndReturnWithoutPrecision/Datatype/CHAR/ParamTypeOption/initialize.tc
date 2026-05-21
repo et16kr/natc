@@ -1,0 +1,29 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    v1 char(3);
+    v2 char(6);
+    v3 char(9);
+
+    procedure showvariables;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure showvariables as
+    begin
+    println( 'v1 char(3) : ' || v1 ); 
+    println( 'v2 char(6) : ' || v2 ); 
+    println( 'v3 char(9) : ' || v3 ); 
+    end;
+
+    end;
+    /
+
+    exec variables.showvariables;
+}

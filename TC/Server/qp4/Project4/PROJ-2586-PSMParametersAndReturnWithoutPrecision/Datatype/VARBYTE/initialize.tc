@@ -1,0 +1,89 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function return3;
+    drop function return6;
+    drop function return9;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table t1( c1 varbyte(3) , c2 varbyte(6) , c3 varbyte(9) );
+    insert into t1 values ( varbyte'1000' , varbyte'' , varbyte''  );
+    insert into t1 values ( varbyte'C01' , varbyte'' , varbyte''  );
+    insert into t1 values ( varbyte'C01' , varbyte'C010000' , varbyte''  );
+    insert into t1 values ( varbyte'C01' , varbyte'A11004' , varbyte''  );
+    insert into t1 values ( varbyte'' , varbyte'A11004' , varbyte''  );
+    insert into t1 values ( varbyte'C01' , varbyte'A11004' , varbyte'A110040000'  );
+    insert into t1 values ( varbyte'C01' , varbyte'A11004' , varbyte'CC01' );
+    insert into t1 values ( varbyte'' , varbyte'' , varbyte'CC01' );
+
+    create or replace package variables as
+    v1 varbyte(3) := varbyte'C01';
+    v2 varbyte(6) := varbyte'A11004';
+    v3 varbyte(9) := varbyte'C00511004';
+    revVar1 varbyte(3);
+    revVar2 varbyte(6);
+    revVar3 varbyte(9);
+    end;
+    /
+
+    create or replace function return3 return varbyte as
+    begin
+    return variables.v1;
+    end;
+    /
+    create or replace function return6 return varbyte as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function return9 return varbyte as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnParam( p1 in varbyte ) return varbyte as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in varbyte ) return varbyte as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in varbyte ) return varbyte;
+    function sub_returnFunc1(p1 in varbyte ) return varbyte;
+    function sub_returnFunc2(p1 in varbyte ) return varbyte;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in varbyte ) return varbyte as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in varbyte ) return varbyte as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in varbyte ) return varbyte as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

@@ -1,0 +1,14 @@
+include stdFunc.i
+
+DEF MAIN()
+{
+CP "${ALTIBASE_HOME}/conf/altibase.properties" "${ALTIBASE_HOME}/conf/altibase.properties.bug44652";
+SHELL -o $sResult "remove_property.sh EXTPROC_AGENT_SOCKET_FILEPATH";
+SHELL -o $sResult "cat property.txt >> ${ALTIBASE_HOME}/conf/altibase.properties";
+MKDIR "${ALTIBASE_HOME}/network";
+
+NODISPLAY ON;
+CALL stdServerKill();
+CALL stdServerStart();
+NODISPLAY OFF;
+}

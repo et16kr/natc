@@ -1,0 +1,142 @@
+###########################################################################
+# TestCase Description = TEST CASE Template
+# Project ID           = PROJ-XXXX
+###########################################################################
+INCLUDE stdFunc.i;
+
+$ALTIBASE_HOME;
+
+DEF MAIN()
+{
+    NODISPLAY ON;
+    CALL initialize();
+    NODISPLAY OFF;
+
+    # memory table create시 table마다 기본적으로 page 1개씩은 할당 된다. 
+    # 따라서 SYS_TBS_MEM_DATA에 create된 table에 할당 할 수 있는 page를
+    # 가지고있어야 한다.
+    SET_ENV ALTIBASE_MEM_MAX_DB_SIZE="20M";
+    SET_ENV ALTIBASE_CHECKPOINT_ENABLED="0";
+    SET_ENV ALTIBASE_DEFAULT_MEM_DB_FILE_SIZE="4M";
+
+    SET_ENV ALTIBASE_MEM_DELETE_THREAD="0";
+    SET_ENV ALTIBASE_MEM_GC_THREAD="0";
+
+    NODISPLAY ON;
+    CALL createArchiveDb();
+    PRINT $Ret_;
+    NODISPLAY OFF;
+
+    SET VERTICAL ON;
+
+    NODISPLAY ON;
+    SELECT SPACE_NAME, (ALLOC_PAGE_COUNT*32768)/1024 'ALLOC(KB)', ((ALLOC_PAGE_COUNT-FREE_PAGE_COUNT)*32768)/1024 'USED(KB)', (FREE_PAGE_COUNT*32768)/1024 'FREE(KB)' FROM V$MEM_TABLESPACES;
+    NODISPLAY OFF;
+
+    $i = 0;
+    $j = 0;
+    $sTableName = "TABLE";
+    $sSeqName   = "SEQ";
+
+    # SYS_TBS_MEM_DIC 확장 직전까지 table을 만든다.
+    NODISPLAY ON;
+    CREATE TABLE ${sTableName}_${i} ( A INTEGER, B CHAR(512) );
+    $i = $i + 1;
+    CREATE TABLE ${sTableName}_${i} ( A INTEGER, B CHAR(512) );
+    $i = $i + 1;
+    CREATE SEQUENCE ${sSeqName}_${j};
+    $j = $j + 1;
+
+    NODISPLAY ON;
+    SELECT SPACE_NAME, (ALLOC_PAGE_COUNT*32768)/1024 'ALLOC(KB)', ((ALLOC_PAGE_COUNT-FREE_PAGE_COUNT)*32768)/1024 'USED(KB)', (FREE_PAGE_COUNT*32768)/1024 'FREE(KB)' FROM V$MEM_TABLESPACES;
+    NODISPLAY OFF;
+
+    ALTER SYSTEM SET QUERY_TIMEOUT=0;
+    ALTER SYSTEM SET UTRANS_TIMEOUT=0;
+
+    INSERT INTO TABLE_0 VALUES( 1, 'ABCDEFG');
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+    INSERT INTO TABLE_0 SELECT * FROM TABLE_0;
+
+    LOOP 1375
+    {
+        CREATE SEQUENCE ${sSeqName}_${j};
+
+        SELECT SPACE_NAME, (ALLOC_PAGE_COUNT*32768)/1024 'ALLOC(KB)', ((ALLOC_PAGE_COUNT-FREE_PAGE_COUNT)*32768)/1024 'USED(KB)', (FREE_PAGE_COUNT*32768)/1024 'FREE(KB)' FROM V$MEM_TABLESPACES;
+
+        $j = $j + 1;
+    }
+
+    # MEM_DIC과 MEM_DATA가 8M씩 Alloc 받고, MEM_DIC은 거의 full 이 되도록
+    # 위에 LOOP count와 INSERT 구문의 크기를 조절한다.
+    NODISPLAY OFF;
+    CREATE SEQUENCE ${sSeqName}_5000;
+
+    NODISPLAY ON;
+#    SELECT COUNT(*) FROM SYSTEM_.SYS_TABLES_;
+    SELECT SPACE_NAME, (ALLOC_PAGE_COUNT*32768)/1024 'ALLOC(KB)', ((ALLOC_PAGE_COUNT-FREE_PAGE_COUNT)*32768)/1024 'USED(KB)', (FREE_PAGE_COUNT*32768)/1024 'FREE(KB)' FROM V$MEM_TABLESPACES;
+    NODISPLAY OFF;
+
+    NODISPLAY ON;
+    LOOP 10
+    {
+        CREATE TABLE ${sTableName}_${i} ( A INTEGER, B CHAR(512) );
+
+        SELECT SPACE_NAME, (ALLOC_PAGE_COUNT*32768)/1024 'ALLOC(KB)', ((ALLOC_PAGE_COUNT-FREE_PAGE_COUNT)*32768)/1024 'USED(KB)', (FREE_PAGE_COUNT*32768)/1024 'FREE(KB)' FROM V$MEM_TABLESPACES;
+
+        $i = $i + 1;
+    }
+    NODISPLAY OFF;
+
+    CREATE TABLE ${sTableName}_5000 ( A INTEGER, B CHAR(512)  );
+
+    NODISPLAY ON;
+    SELECT SPACE_NAME, (ALLOC_PAGE_COUNT*32768)/1024 'ALLOC(KB)', ((ALLOC_PAGE_COUNT-FREE_PAGE_COUNT)*32768)/1024 'USED(KB)', (FREE_PAGE_COUNT*32768)/1024 'FREE(KB)' FROM V$MEM_TABLESPACES;
+    SET VERTICAL OFF;
+
+#    SELECT COUNT(*) FROM SYSTEM_.SYS_TABLES_;
+    NODISPLAY OFF;
+}
+
+DEF initialize()
+{
+    CALL stdServerKill();
+ 
+    CALL stdDestroydb("mydb");
+ 
+    RM -rf "${ALTIBASE_HOME}/arch_logs" "${ALTIBASE_HOME}/logs";
+	SHELL "rm -rf ${ALTIBASE_HOME}/arch_logs ${ALTIBASE_HOME}/logs";
+    MKDIR "${ALTIBASE_HOME}/arch_logs" "${ALTIBASE_HOME}/logs";
+}
+
+DEF createArchiveDb()
+{
+    $sProcName = "P11";
+    $sPrompt = "$$EOF$$";
+    EXEC $sProcName -t 1800 "isql -u sys -p manager -sysdba -noprompt -ataf";
+ 
+    SEND $sProcName "startup process";
+    P_WAIT $sProcName $sPrompt;
+ 
+    # PRINT $Ret_;
+      
+    SEND $sProcName "create database mydb INITSIZE=4M archivelog character set ko16ksc5601 national character set utf16;";
+    P_WAIT $sProcName $sPrompt;
+               
+    SEND $sProcName "startup";
+    P_WAIT $sProcName $sPrompt;
+
+    SEND $sProcName "quit";
+    P_WAIT $sProcName;
+}

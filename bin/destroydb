@@ -1,0 +1,38 @@
+#!/usr/local/bin/bash
+#for ATC script
+
+ARGS="`echo $@ | sed 's/-[n]//g'`"
+
+ADMIN="${ALTIBASE_HOME}/bin/isql -u sys -p MANAGER -sysdba -noprompt"
+
+    ${ADMIN} << EOF
+startup process
+drop database $2;
+shutdown abort
+quit
+EOF
+
+function remove_log_files()
+{
+    log_dir=$1 
+    # if the log directory exists
+    if [ -e $log_dir ]
+    then
+       find $log_dir | grep -v '/.svn/' | xargs rm -f > /dev/null 2>&1
+    fi
+}
+
+#removes dropped database files
+remove_log_files ${ALTIBASE_HOME}/dbs
+remove_log_files ${ALTIBASE_HOME}/logs
+remove_log_files ${ALTIBASE_HOME}/arch_logs
+
+#remove all logfiles considering LFG
+i=0
+while [ $i -lt 32 ]
+do
+   remove_log_files ${ALTIBASE_HOME}/logs$i
+   remove_log_files ${ALTIBASE_HOME}/arch_logs$i
+   i=`expr $i + 1`
+done
+

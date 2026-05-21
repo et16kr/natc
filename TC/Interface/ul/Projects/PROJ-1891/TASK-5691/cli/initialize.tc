@@ -1,0 +1,16 @@
+####################################################################
+# TestCase Description = compile cpp files
+# Project ID           = PROJ-1891
+####################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+
+	# make clean
+	MAKE "clean";
+
+	# make
+	MAKE;
+
+}

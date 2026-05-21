@@ -1,0 +1,89 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function return8;
+    drop function return16;
+    drop function return24;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table t1( c1 varbit(8) , c2 varbit(16) , c3 varbit(24) );
+    insert into t1 values ( varbit'1000' , varbit'' , varbit''  );
+    insert into t1 values ( varbit'10000111' , varbit'' , varbit''  );
+    insert into t1 values ( varbit'10000111' , varbit'100001110000' , varbit''  );
+    insert into t1 values ( varbit'10000111' , varbit'1000011100000010' , varbit''  );
+    insert into t1 values ( varbit'' , varbit'1000011100000010' , varbit''  );
+    insert into t1 values ( varbit'10000111' , varbit'1000011100000010' , varbit'10000111000000100000'  );
+    insert into t1 values ( varbit'10000111' , varbit'1000011100000010' , varbit'100001110000001000000001' );
+    insert into t1 values ( varbit'' , varbit'' , varbit'100001110000001000000001' );
+
+    create or replace package variables as
+    v1 varbit(8) := varbit'10000111';
+    v2 varbit(16) := varbit'1000011100000010';
+    v3 varbit(24) := varbit'100001110000001000000001';
+    revVar1 varbit(8);
+    revVar2 varbit(16);
+    revVar3 varbit(24);
+    end;
+    /
+
+    create or replace function return8 return varbit as
+    begin
+    return variables.v1;
+    end;
+    /
+    create or replace function return16 return varbit as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function return24 return varbit as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnParam( p1 in varbit ) return varbit as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in varbit ) return varbit as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in varbit ) return varbit;
+    function sub_returnFunc1(p1 in varbit ) return varbit;
+    function sub_returnFunc2(p1 in varbit ) return varbit;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in varbit ) return varbit as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in varbit ) return varbit as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in varbit ) return varbit as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

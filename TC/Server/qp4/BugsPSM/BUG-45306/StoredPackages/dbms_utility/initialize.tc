@@ -1,0 +1,14 @@
+include stdFunc.i;
+
+def main()
+{
+    nodisplay on;
+    call stdServerKill();
+    nodisplay off;
+
+    SET_ENV ALTIBASE___PSM_FORMAT_CALL_STACK_OID=9999;
+
+    nodisplay on;
+    call stdServerStart();
+    nodisplay off;
+}

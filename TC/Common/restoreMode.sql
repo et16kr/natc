@@ -1,0 +1,3 @@
+--+SYSTEM echo y | shmutil -e;
+--+SYSTEM restoreMode.sh;
+--+SYSTEM server stop;

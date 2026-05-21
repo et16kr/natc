@@ -1,0 +1,205 @@
+#!/usr/local/bin/bash
+
+############################################
+# 환경 설정
+############################################
+
+#######################
+# ATC_HOME, ATC_WORK 설정
+#######################
+export ATC_HOME=$ATAF_TEST_CASE
+export ATC_WORK=$ATAF_TEST_RESULT/work
+export PATH=$PATH:.:$ATC_HOME/scripts
+
+#######################
+# ATAF_RESULT_SUFFIX 설정
+#######################
+if [ "$ATAF_RESULT_SUFFIX" = "" ]
+then
+    bit_test=`altibase -v | awk '{ printf("%s ",$3); }' | grep 32bit`
+    subString=`altibase -v | awk '{ printf("%s ",$3); }'`
+
+    if [ "$bit_test" = "" ]
+    then
+    bit=64;
+    else
+    bit=32;
+    fi
+    export ATAF_RESULT_SUFFIX=_A4_${bit}
+fi
+
+#######################
+# ATAF_ORACLE_SUFFIX 설정
+#######################
+if [ "$ATAF_ORACLE_SUFFIX" = "" ]
+then
+    oracleSuffix1=`echo $subString | awk -F_ '{ printf("%s",$1); printf("_"); printf("%s", $2); }'`
+    oracleSuffix2=$ATAF_RESULT_SUFFIX
+
+    if [ "$oracleSuffix1" = "XEON_LINUX" ]
+    then
+    oracleSuffix1="AMD64_LINUX"
+    fi
+
+    if [ "$bit" = "64" ]
+    then
+    real_oracleSuffix=`echo $oracleSuffix1 $HOSTNAME | awk '{printf("_A4_64"); printf(","); printf("_%s", $1); printf("_A4_64"); printf(","); printf("_%s", $2); printf("_A4_64"); }'`
+    else
+    real_oracleSuffix=`echo $oracleSuffix1 $HOSTNAME | awk '{printf("_A4_64"); printf(","); printf("_%s", $1); printf("_A4_64"); printf(","); printf("_%s", $2); printf("_A4_64"); printf(","); printf("_A4_32"); printf(","); printf("_%s", $1); printf("_A4_32");  printf(","); printf("_%s", $2); printf("_A4_32"); }'`
+    fi
+
+    export ATAF_ORACLE_SUFFIX=$real_oracleSuffix
+fi
+
+############################################
+# MAIN
+############################################
+if [ "$LANG" = "" ]
+then
+echo "Please set environment variable LANG"
+exit
+fi
+
+lang=$LANG
+
+if [ $# -eq 1 ]
+then
+    CommonCase=$1
+    MyCase=$1
+    ArgCnt=1
+    TestType="-t regressive"
+elif [ $# -eq 2 ]
+then
+    CommonCase=$1
+    if [ $2 == "regressive" ]
+	then
+        MyCase=$1
+        ArgCnt=1
+        TestType="-t "$2
+    elif [ $2 == "full" ]
+	then
+        MyCase=$1
+        ArgCnt=1
+        TestType="-t "$2
+    elif [ $2 == "sequential" ]
+	then
+        echo "[ ART SEQUENTIAL TEST USAGE ]"
+        echo "Usage: artclnt2 CommonCase [MyCase] sequential EndCondition"
+        echo ""
+		exit
+	else
+        MyCase=$2
+        ArgCnt=2
+	fi	
+
+elif [ $# -eq 3 ] 
+then
+    CommonCase=$1
+    if [ $2 == "regressive" ]
+	then
+        echo "[ ART REGRESSIVE TEST USAGE ]"
+        echo "Usage: artclnt2 CommonCase [MyCase] regressive"
+        echo ""
+		exit
+    elif [ $2 == "full" ]
+	then
+        echo "[ ART FULL TEST USAGE ]"
+        echo "Usage: artclnt2 CommonCase [MyCase] full"
+        echo ""
+		exit
+	elif [ $2 == "sequential" ]
+	then 
+        MyCase=$1
+        ArgCnt=1
+        TestType="-t "$2
+        HitRatio="-e "$3
+    else
+
+        if [ $3 == "regressive" ]
+    	then
+            MyCase=$2
+            ArgCnt=2
+            TestType="-t "$3
+        elif [ $3 == "full" ]
+    	then
+            MyCase=$2
+            ArgCnt=2
+            TestType="-t "$3
+        elif [ $3 == "sequential" ]
+	    then
+            echo "[ ART SEQUENTIAL TEST USAGE ]"
+            echo "Usage: artclnt2 CommonCase [MyCase] sequential EndCondition"
+            echo ""
+		    exit
+	    else
+            echo "[ USAGE ]"
+            echo "Usage: artclnt2 CommonCase [MyCase] [TestMode] [EndCondition]"
+	    	echo ""
+    		exit
+    	fi	
+
+	fi
+
+elif [ $# -eq 4 ]
+then
+
+    CommonCase=$1
+    MyCase=$2
+    ArgCnt=2
+    if [ $3 == "sequential" ]
+	then
+        TestType="-t "$3
+        HitRatio="-e "$4
+	else
+        echo "[ USAGE ]"
+        echo "Usage: artclnt2 CommonCase [MyCase] [TestMode] [EndCondition]"
+		echo ""
+		exit
+	fi	
+
+else
+    echo "[ USAGE ]"
+    echo "Usage: artclnt2 CommonCase [MyCase] [TestMode] [EndCondition]"
+    echo ""
+    exit
+fi
+
+# append current path
+if [ ${CommonCase:0:1} != '/' ]
+then
+    CommonCase=$PWD/$CommonCase
+fi
+
+if [ ${MyCase:0:1} != '/' ]
+then
+    MyCase=$PWD/$MyCase
+fi
+
+unset  LC_CTYPE
+export LC_ALL=C
+
+rm -rf $ATAF_TEST_RESULT/work &> /dev/null
+mkdir -p $ATAF_TEST_RESULT/work/log &> /dev/null
+altibase -v > $ATAF_TEST_RESULT/work/altibase.info
+
+if [ "$ATAF_TEST_CASE" != "$ATAF_TEST_RESULT" ]
+then
+
+old_pwd=`pwd`
+mkdir -p $ATAF_TEST_RESULT/src
+cp -r $ATAF_TEST_CASE/src/ses $ATAF_TEST_RESULT/src/ses &> /dev/null
+cp -r $ATAF_TEST_CASE/include $ATAF_TEST_RESULT/include &> /dev/null
+cd $ATAF_TEST_RESULT/src/ses && make clean &> /dev/null
+cd $ATAF_TEST_RESULT/src/ses && make &> /dev/null
+cd $old_pwd
+
+fi
+
+####################################
+# set default properties
+####################################
+${ALTIBASE_HOME}/bin/is -atc -silent -f $ATAF_TEST_CASE/scripts/system-default-properties.sql &> /dev/null
+
+time atsc -c $CommonCase -m $MyCase -l $lang -n $ArgCnt $TestType $HitRatio 2> $ATAF_TEST_RESULT/work/log/exception.log
+
+ps -ef | grep "./serverkill.sh" |  awk '{print $2}' | xargs -n1 kill -9 &> /dev/null

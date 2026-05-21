@@ -1,0 +1,18 @@
+<@!START!@>|3|P0|$P0> DROP TABLE T1;
+[ERR-31031 : Table not found :
+0001 : DROP TABLE T1
+                 ^ ^
+]
+
+<@!START!@>|2|P1|$P1> DROP TABLE T2;
+Drop success.
+
+<@!START!@>|1|P2|$P2> DROP TABLE T3;
+[ERR-31031 : Table not found :
+0001 : DROP TABLE T1
+                 ^ ^
+]
+
+<@!START!@>|0|P3|$P3> DROP TABLE T4;
+Drop success.
+<@!START!@>

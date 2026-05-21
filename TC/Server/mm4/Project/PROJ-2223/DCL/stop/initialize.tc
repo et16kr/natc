@@ -1,0 +1,49 @@
+###########################################################################
+# Audit Test
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+alter system stop audit;
+
+drop table t1;
+drop table t2;
+drop user user1 cascade;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+create user user1 identified by user1;
+
+create table t1(i1 integer);
+create table t2(i1 integer);
+create table user1.t3(i1 integer);
+create table user1.t4(i1 integer);
+
+audit select on t1;
+audit move,merge by user1;
+
+##################################
+# SECTOR; RESTART
+##################################
+
+NODISPLAY ON;
+CALL stdServerKill();
+CALL stdServerStart();
+NODISPLAY OFF;
+}

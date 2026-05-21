@@ -1,0 +1,10 @@
+#!/bin/bash
+
+if [ "none"$FIT_ENABLE != "none" ] 
+then
+    if [ $FIT_ENABLE -eq 1 ] 
+    then 
+        fitserver restart
+        fitclient reset
+    fi 
+fi

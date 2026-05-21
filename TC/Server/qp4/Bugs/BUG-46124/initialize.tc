@@ -1,0 +1,6 @@
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+        alter system set __KEY_PRESERVED_TABLE = 0;
+}

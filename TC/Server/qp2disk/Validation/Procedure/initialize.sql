@@ -1,0 +1,5 @@
+--+IGNORE;
+--+SYSTEM server kill;
+--+SET_ENV ALTIBASE_REPLICATION_PORT_NO=%REPLICATION_PORT_NO;
+--+SYSTEM server start;
+

@@ -1,0 +1,16 @@
+#!/usr/local/bin/bash
+
+a=`whoami`
+
+while :
+do :
+    b=`ps -u $a -f | grep altibase | grep boot | grep from | grep admin | grep -v grep | /usr/bin/wc -l`;
+
+    if [ "$b" = "0" ]; then
+        break;
+    fi
+
+    sleep 1;
+
+    echo sleep
+done

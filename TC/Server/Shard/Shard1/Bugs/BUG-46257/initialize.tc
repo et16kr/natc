@@ -1,0 +1,112 @@
+############################################################################
+# BUG-46257 shardcli에서 Node 추가/제거 지원
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER SHARD_NODE1 DB1;
+DECLARE SERVER SHARD_NODE2 DB2;
+DECLARE SERVER SHARD_NODE3 DB3;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+
+DEF MAIN()
+{
+    ################################################
+    # PREPARE
+    ################################################
+
+    CALL PREPARE();
+}
+
+DEF PREPARE()
+{
+    NODISPLAY ON;
+    CALL FINALIZE();
+    NODISPLAY OFF;
+
+JOIN;
+
+    THREAD T1 C1
+    {
+        CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+        INSERT INTO T1 VALUES ( 0, 'NODE1' );
+        INSERT INTO T1 VALUES ( 9, 'NODE1' );
+
+        ALTER SYSTEM SET SHARD_ALLOW_OLD_SMN = 1;
+    }
+        THREAD T2 C2
+        {
+            CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+            INSERT INTO T1 VALUES ( 10, 'NODE2' );
+            INSERT INTO T1 VALUES ( 19, 'NODE2' );
+
+            ALTER SYSTEM SET SHARD_ALLOW_OLD_SMN = 1;
+        }
+            THREAD T3 C3
+            {
+                CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+                INSERT INTO T1 VALUES ( 20, 'NODE3' );
+                INSERT INTO T1 VALUES ( 29, 'NODE3' );
+
+                ALTER SYSTEM SET SHARD_ALLOW_OLD_SMN = 1;
+            }
+
+    CREATE TABLE T1 ( I1 INTEGER, V1 VARCHAR(10) );
+
+    MAKE -f "Makefile" "all";
+
+JOIN;
+
+    CALL PREPARE_SHARD_META();
+}
+
+DEF FINALIZE()
+{
+    THREAD T1 C1
+    {
+        DROP TABLE T1;
+
+        ALTER SYSTEM SET SHARD_ALLOW_OLD_SMN = 0;
+    }
+        THREAD T2 C2
+        {
+            DROP TABLE T1;
+
+            ALTER SYSTEM SET SHARD_ALLOW_OLD_SMN = 0;
+        }
+            THREAD T3 C3
+            {
+                DROP TABLE T1;
+
+                ALTER SYSTEM SET SHARD_ALLOW_OLD_SMN = 0;
+            }
+
+    DROP TABLE T1;
+
+    MAKE -f "Makefile" "clean";
+
+JOIN;
+}
+
+DEF PREPARE_SHARD_META()
+{
+    NODISPLAY ON;
+    EXEC DBMS_SHARD.UNSET_SHARD_TABLE( 'SYS','T1' );
+
+    EXEC DBMS_SHARD.UNSET_NODE( 'NODE1' );
+    EXEC DBMS_SHARD.UNSET_NODE( 'NODE2' );
+    EXEC DBMS_SHARD.UNSET_NODE( 'NODE3' );
+    NODISPLAY OFF;
+
+    EXEC DBMS_SHARD.SET_NODE( 'NODE1', '127.0.0.1', ${ALTIBASE_PORT_NO@DB1} );
+    EXEC DBMS_SHARD.SET_NODE( 'NODE2', '127.0.0.1', ${ALTIBASE_PORT_NO@DB2} );
+    EXEC DBMS_SHARD.SET_NODE( 'NODE3', '127.0.0.1', ${ALTIBASE_PORT_NO@DB3} );
+
+    EXEC DBMS_SHARD.SET_SHARD_TABLE( 'SYS', 'T1', 'R', 'I1' );
+    EXEC DBMS_SHARD.SET_SHARD_RANGE( 'SYS', 'T1', 10, 'NODE1' );
+    EXEC DBMS_SHARD.SET_SHARD_RANGE( 'SYS', 'T1', 20, 'NODE2' );
+    EXEC DBMS_SHARD.SET_SHARD_RANGE( 'SYS', 'T1', 30, 'NODE3' );
+}

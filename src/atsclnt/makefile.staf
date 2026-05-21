@@ -1,0 +1,57 @@
+#############################################################################
+# Software Testing Automation Framework (STAF)                              #
+# (C) Copyright IBM Corp. 2001                                              #
+#                                                                           #
+# This software is licensed under the Common Public License (CPL) V1.0.     #
+#############################################################################
+
+atsclnt_targets += $(REL)/bin/atsc$(OS_EE) \
+                   $(REL)/bin/atsclnt \
+                   $(REL)/bin/atsclnt2 \
+                   $(REL)/bin/artclnt \
+                   $(REL)/bin/atsclntp
+
+Targets += $(atsclnt_targets)
+CleanupTargets += cleanup_atsclnt
+
+$(atsclnt_targets): SUBSYS_REL := atsclnt
+SUBSYS_REL := atsclnt
+
+#=====================================================================
+#   C/C++ Info Flags
+#=====================================================================
+
+$(atsclnt_targets): OBJS = $(atsclnt_objs)
+$(atsclnt_targets): LIBS = STAF
+
+atsclnt_objs :=\
+  atsc caseManager platformManager
+
+atsclnt_objs        := $(foreach obj,$(atsclnt_objs),$(O)/atsclnt/$(obj)$(OS_OE))
+atsclnt_dependents  := $(atsclnt_objs:$(OS_OE)=.d)
+$(atsclnt_dependents): SUBSYS_REL := atsclnt
+
+# Include dependencies
+ifneq ($(InCleanup), "1")
+    include $(atsclnt_dependents)
+endif
+
+# Include inference rules
+include $(InferenceRules)
+
+# ATSClnt targets
+
+$(REL)/bin/atsc$(OS_EE): $(atsclnt_objs) $(LIB_STAF_FP) $(MAKEFILE_NAME)
+	$(LINK_IT)
+$(REL)/bin/atsclnt: $(SRC)/atsclnt/atsclnt $(MAKEFILE_NAME)
+	$(COPY_FILE)
+$(REL)/bin/atsclnt2: $(SRC)/atsclnt/atsclnt2 $(MAKEFILE_NAME)
+	$(COPY_FILE)
+$(REL)/bin/atsclntp: $(SRC)/atsclnt/atsclntp $(MAKEFILE_NAME)
+	$(COPY_FILE)
+$(REL)/bin/artclnt: $(SRC)/atsclnt/artclnt $(MAKEFILE_NAME)
+	$(COPY_FILE)
+
+cleanup_atsclnt:
+	-@$(DEL) $(O)/atsclnt/* $(OUT_ERR_TO_DEV_NULL)
+	-@$(DEL) $(REL)/bin/atsc$(OS_EE) $(OUT_ERR_TO_DEV_NULL)

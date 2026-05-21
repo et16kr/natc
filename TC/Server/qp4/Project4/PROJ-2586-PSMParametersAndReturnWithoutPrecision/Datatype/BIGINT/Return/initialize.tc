@@ -1,0 +1,84 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function returnint;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table T1( c1 bigint );
+    insert into T1 values ( 980324 );
+    insert into T1 values ( 790216 );
+    insert into T1 values ( 790728 );
+    insert into T1 values ( 791121 );
+    insert into T1 values ( 791127 );
+    insert into T1 values ( 800819 );
+    insert into T1 values ( 810121 );
+
+    create or replace package variables as
+    v1 bigint := 980324;
+    revVar1 bigint;
+
+    procedure getValue;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure getValue as
+    begin
+    println( 'v1 bigint : ' || v1 );
+    println( 'revVar1 bigint : ' || revVar1 );
+    end;
+
+    end;
+    /
+
+    create or replace function returnint return bigint as
+    begin
+    return variables.v1;
+    end;
+    /
+
+    create or replace function returnParam( p1 in bigint ) return bigint as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in bigint ) return bigint as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in bigint ) return bigint;
+    function sub_returnFunc1(p1 in bigint ) return bigint;
+    function sub_returnFunc2(p1 in bigint ) return bigint;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in bigint ) return bigint as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in bigint ) return bigint as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in bigint ) return bigint as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

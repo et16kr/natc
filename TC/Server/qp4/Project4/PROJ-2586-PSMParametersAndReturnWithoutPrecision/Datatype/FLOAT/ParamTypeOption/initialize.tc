@@ -1,0 +1,46 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    v0 float;
+    v1 float;
+    v2 float(38);
+    v3 float(38);
+    v4 float(18);
+    v5 float(18);
+
+    procedure initializeVariables;
+    procedure showvariables;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure initializeVariables as
+    begin
+    v0 := NULL;
+    v1 := NULL;
+    v2 := NULL;
+    v3 := NULL;
+    v4 := NULL;
+    v5 := NULL;
+    end;
+
+    procedure showvariables as
+    begin
+    println( 'v0 float : ' || v0 );
+    println( 'v1 float : ' || v1 );
+    println( 'v2 float(38) : ' || v2 );
+    println( 'v3 float(38) : ' || v3 );
+    println( 'v4 float(18) : ' || v4 );
+    println( 'v5 float(18) : ' || v5 );
+    end;
+
+    end;
+    /
+
+    exec variables.showvariables;
+}

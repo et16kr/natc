@@ -1,0 +1,85 @@
+############################################################################
+# PROJ-2375 Global Meta
+############################################################################
+
+include stdFunc_cluster.i;
+
+# cluster.conf에 있는 서버를 cluster로 묶어서 등록. Test Case 내에서는 DB1, DB2로 사용.
+REGISTER CLUSTER CL1 ( DDLServer as DB1, NonDDLServer as DB2 );
+
+DEF MAIN()
+{
+    THREAD T1 DB1
+    {
+        $ALTIBASE_CLUSTER_PORT_NO;
+        $ALTIBASE_CLUSTER_DDL_PORT_NO = $ALTIBASE_CLUSTER_PORT_NO;
+    }
+    THREAD T2 DB2
+    {
+        $ALTIBASE_CLUSTER_PORT_NO;
+        $ALTIBASE_CLUSTER_DML_PORT_NO = $ALTIBASE_CLUSTER_PORT_NO;
+    }
+
+    JOIN;
+
+    THREAD T1 DB1
+    {
+        RM -rf "db1";
+
+        MKDIR "db1";
+        MKDIR "db1/conf";
+        MKDIR "db1/dbs";
+        MKDIR "db1/logs";
+        MKDIR "db1/trc";
+        MKDIR "db1/arch_logs";
+
+        CP -r "${ALTIBASE_HOME@DB0}/bin"                        "db1/bin";
+        CP -r "${ALTIBASE_HOME@DB0}/msg"                        "db1/msg";
+        CP -r "${ALTIBASE_HOME@DB0}/conf/altibase.properties"   "db1/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME@DB0}/conf/license"               "db1/conf/license";
+        CP -r "${ALTIBASE_HOME@DB0}/lib"                        "db1/lib";
+        CP -r "${ALTIBASE_HOME@DB0}/install"                    "db1/install";
+        CP -r "${ALTIBASE_HOME@DB0}/include"                    "db1/include";
+    }
+
+    THREAD T2 DB2
+    {
+        RM -rf "db2";
+
+        MKDIR "db2";
+        MKDIR "db2/conf";
+        MKDIR "db2/dbs";
+        MKDIR "db2/logs";
+        MKDIR "db2/trc";
+        MKDIR "db2/arch_logs";
+
+        CP -r "${ALTIBASE_HOME@DB0}/bin"                        "db2/bin";
+        CP -r "${ALTIBASE_HOME@DB0}/msg"                        "db2/msg";
+        CP -r "${ALTIBASE_HOME@DB0}/conf/altibase.properties"   "db2/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME@DB0}/conf/license"               "db2/conf/license";
+        CP -r "${ALTIBASE_HOME@DB0}/lib"                        "db2/lib";
+        CP -r "${ALTIBASE_HOME@DB0}/install"                    "db2/install";
+        CP -r "${ALTIBASE_HOME@DB0}/include"                    "db2/include";
+    }
+
+    JOIN;
+
+    OPEN F1 -m w "db1/conf/altibase.sproperties";
+    WRITE F1 "altibase1.INSTANCE_NUMBER=1\n";
+    WRITE F1 "altibase1.CLUSTER_IP=127.0.0.1\n";
+    WRITE F1 "altibase1.CLUSTER_PORT_NO=${ALTIBASE_CLUSTER_DDL_PORT_NO}\n";
+    WRITE F1 "altibase2.INSTANCE_NUMBER=2\n";
+    WRITE F1 "altibase2.CLUSTER_IP=127.0.0.1\n";
+    WRITE F1 "altibase2.CLUSTER_PORT_NO=${ALTIBASE_CLUSTER_DML_PORT_NO}\n";
+    CLOSE F1;
+
+    CP "db1/conf/altibase.sproperties" "db2/conf/altibase.sproperties";
+
+    # stdFunc_cluster.i에 있는 함수는 cluster에 있는 모든 서버에 대해서 실행됩니다.
+    # 따라서 아래 처럼 한번만 호출하면 DB1, DB2 모두 서버가 시작됩니다.
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+}

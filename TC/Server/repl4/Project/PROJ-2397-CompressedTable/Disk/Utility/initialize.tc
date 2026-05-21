@@ -1,0 +1,18 @@
+############################################################################
+# Server Stop DB2 System 
+############################################################################
+
+INCLUDE stdFunc.i;
+
+DECLARE SERVER REPL_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C1 ( SERVER = DB2 );
+
+DEF MAIN()
+{
+THREAD T1 C1
+{
+	CALL stdServerStop();
+}
+JOIN;
+} 

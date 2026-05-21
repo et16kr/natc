@@ -1,0 +1,73 @@
+############################################################################
+# SET UP Shard System (shard node1~3)
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER SHARD_NODE1 DB1;
+DECLARE SERVER SHARD_NODE2 DB2;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    THREAD T1 C1
+    {
+        ########################################
+        # Set Up NODE1 (PORT_NO+1000)
+        ########################################
+
+        NODISPLAY ON;
+        CALL stdClean();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    THREAD T2 C2
+    {
+        ########################################
+        # Set Up NODE2 (PORT_NO+2000)
+        ########################################
+
+        NODISPLAY ON;
+        CALL stdClean();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    ########################################
+    # Initialize META & NODE3
+    ########################################
+
+    SET_ENV ALTIBASE_SHARD_ENABLE = "1";
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdClean();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    EXEC p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIBASE_HOME}/packages/dbms_shard.sql";
+    P_WAIT p1;
+    PRINT $Ret_;
+
+    EXEC p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIBASE_HOME}/packages/dbms_shard.plb";
+    P_WAIT p1;
+    PRINT $Ret_;
+
+    EXEC DBMS_SHARD.CREATE_META(0);
+
+    EXEC dbms_shard.set_node('NODE1', '127.0.0.1', ${ALTIBASE_PORT_NO@DB1});
+    EXEC dbms_shard.set_node('NODE2', '127.0.0.1', ${ALTIBASE_PORT_NO@DB2});
+    EXEC dbms_shard.set_node('NODE3', '127.0.0.1', ${ALTIBASE_PORT_NO@DEFAULT});
+
+    SELECT memory_value1 FROM x$property WHERE name = 'SHARD_ENABLE';
+
+    UNSET_ENV ALTIBASE_SHARD_ENABLE;
+
+JOIN;
+}

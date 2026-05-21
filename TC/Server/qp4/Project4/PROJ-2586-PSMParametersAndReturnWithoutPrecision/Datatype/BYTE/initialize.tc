@@ -1,0 +1,89 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function return3;
+    drop function return6;
+    drop function return9;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table t1( c1 byte(3) , c2 byte(6) , c3 byte(9) );
+    insert into t1 values ( byte'1000' , byte'' , byte''  );
+    insert into t1 values ( byte'C01' , byte'' , byte''  );
+    insert into t1 values ( byte'C01' , byte'C010000' , byte''  );
+    insert into t1 values ( byte'C01' , byte'A11004' , byte''  );
+    insert into t1 values ( byte'' , byte'A11004' , byte''  );
+    insert into t1 values ( byte'C01' , byte'A11004' , byte'A110040000'  );
+    insert into t1 values ( byte'C01' , byte'A11004' , byte'CC01' );
+    insert into t1 values ( byte'' , byte'' , byte'CC01' );
+
+    create or replace package variables as
+    v1 byte(3) := byte'C01';
+    v2 byte(6) := byte'A11004';
+    v3 byte(9) := byte'C00511004';
+    revVar1 byte(3);
+    revVar2 byte(6);
+    revVar3 byte(9);
+    end;
+    /
+
+    create or replace function return3 return byte as
+    begin
+    return variables.v1;
+    end;
+    /
+    create or replace function return6 return byte as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function return9 return byte as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnParam( p1 in byte ) return byte as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in byte ) return byte as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in byte ) return byte;
+    function sub_returnFunc1(p1 in byte ) return byte;
+    function sub_returnFunc2(p1 in byte ) return byte;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in byte ) return byte as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in byte ) return byte as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in byte ) return byte as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

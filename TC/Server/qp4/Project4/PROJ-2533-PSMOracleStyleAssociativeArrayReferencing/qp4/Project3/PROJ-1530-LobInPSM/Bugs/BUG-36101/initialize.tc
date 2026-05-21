@@ -1,0 +1,21 @@
+################################################################################
+# BUG-36101 When using lob value, abnormally big memory can be allocated.
+################################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+    ##################################
+    # SECTOR; PREPARATION
+    ##################################
+
+    SET_ENV ALTIBASE_LOB_OBJECT_BUFFER_SIZE = 104857600;
+
+    NODISPLAY ON;
+    CALL stdServerRestart();
+    NODISPLAY OFF;
+
+    alter system set PREPARE_STMT_MEMORY_MAXIMUM = 10737418240;
+    alter system set EXECUTE_STMT_MEMORY_MAXIMUM = 10737418240;
+}

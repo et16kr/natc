@@ -1,0 +1,42 @@
+###########################################################################
+# PROJ-2474 TLS/SSL Support
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+    NODISPLAY ON;
+    CALL stdServerKill();
+    NODISPLAY OFF;
+
+    $ALTIBASE_SSL_PORT_NO;
+
+    SET_ENV ALTIBASE_SSL_ENABLE = 1;
+    SET_ENV ALTIBASE_SSL_CLIENT_AUTHENTICATION = 1;
+    SET_ENV ALTIBASE_IPC_CHANNEL_COUNT=1;
+
+    SET_ENV ALTIBASE_SSL_CIPHER_LIST = "RC4-MD5:DES-CBC-SHA:DES-CBC3-SHA:AES128-SHA";
+    SET_ENV ALTIBASE_SSL_CA   = "${ALTIDEV_HOME}/ut/sample/CERT/ca-cert.pem";
+    SET_ENV ALTIBASE_SSL_CERT = "${ALTIDEV_HOME}/ut/sample/CERT/server-cert.pem";
+    SET_ENV ALTIBASE_SSL_KEY  = "${ALTIDEV_HOME}/ut/sample/CERT/server-key.pem";
+
+    $BOOTLOGFILE_ORG = "${ALTIBASE_HOME}/trc/altibase_boot.log";
+    $BOOTLOGFILE     = "./altibase_boot.log";
+
+    RM -rf $BOOTLOGFILE_ORG $BOOTLOGFILE;
+
+    NODISPLAY ON;
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CP $BOOTLOGFILE_ORG $BOOTLOGFILE;
+                                                                
+    # OpenSSL version이 제대로 출력되면 PASS.
+    GETROW -f "${BOOTLOGFILE}" "SSL_version_str  : " $BOOTLOGFILE_RES;
+    PRINT $BOOTLOGFILE_RES;
+    GETROW -f "${BOOTLOGFILE}" "SSLeay_version() : " $BOOTLOGFILE_RES;
+    PRINT $BOOTLOGFILE_RES;
+
+    RM -rf $BOOTLOGFILE_ORG $BOOTLOGFILE;
+}

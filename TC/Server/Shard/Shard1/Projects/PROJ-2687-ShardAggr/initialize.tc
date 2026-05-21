@@ -1,0 +1,4 @@
+DEF MAIN()
+{
+alter system set __SHARD_AGGREGATION_TRANSFORM_DISABLE = 0;
+}

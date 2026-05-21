@@ -1,0 +1,116 @@
+############################################################################
+# PROJ-2375 Global Meta
+# 2 server initialize
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER PROJ_2375_SERVER1 DB1;
+DECLARE SERVER PROJ_2375_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11( SERVER=DB1 );
+DECLARE CLIENT DEFAULT C12( SERVER=DB2 );
+
+DEF MAIN()
+{
+$ALTIBASE_HOME;
+$ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+THREAD T1 C11
+{
+    $ALTIBASE_PORT_NO;
+    $ALTIBASE_PORT_NO_C11 = $ALTIBASE_PORT_NO + 1500;
+}
+THREAD T2 C12
+{
+    $ALTIBASE_PORT_NO;
+    $ALTIBASE_PORT_NO_C12 = $ALTIBASE_PORT_NO + 2500;
+}
+
+JOIN;
+
+THREAD T1 C11
+{
+    RM -rf "db1";
+
+    MKDIR "db1";
+    MKDIR "db1/conf";
+    MKDIR "db1/dbs";
+    MKDIR "db1/logs";
+    MKDIR "db1/trc";
+    MKDIR "db1/arch_logs";
+  
+    CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+    CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+    CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+    CP -r "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+
+    CP -r  "${ALTIBASE_HOME_C0}/lib" "db1/lib";
+    
+    CP -r "${ALTIBASE_HOME_C0}/install" "db1/install";
+    CP -r "${ALTIBASE_HOME_C0}/include" "db1/include";
+    
+    SET_ENV SERVER @DB1 ALTIBASE_SID="altibase0";
+    SET_ENV SERVER @DB1 ALTIBASE_CLUSTER_DATABASE=1;
+    SET_ENV SERVER @DB1 ALTIBASE_SPFILE="db1/conf/altibase.sproperties";
+
+    OPEN F1 -m w "db1/conf/altibase.sproperties";
+    WRITE F1 "altibase0.INSTANCE_NUMBER=1\n";
+    WRITE F1 "altibase0.CLUSTER_IP=127.0.0.1\n";
+    WRITE F1 "altibase0.CLUSTER_PORT_NO=${ALTIBASE_PORT_NO_C11}\n";
+    WRITE F1 "altibase1.INSTANCE_NUMBER=2\n";
+    WRITE F1 "altibase1.CLUSTER_IP=127.0.0.1\n";
+    WRITE F1 "altibase1.CLUSTER_PORT_NO=${ALTIBASE_PORT_NO_C12}\n";
+    CLOSE F1;
+
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+
+    CALL stdServerStart();
+    NODISPLAY OFF;
+    sleep 1;
+}
+
+THREAD T2 C12
+{
+    RM -rf "db2";
+  
+    MKDIR "db2";
+    MKDIR "db2/conf";
+    MKDIR "db2/dbs";
+    MKDIR "db2/logs";
+    MKDIR "db2/trc";
+    MKDIR "db2/arch_logs";
+  
+    CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+    CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+    CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+    CP -r "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+
+    CP -r  "${ALTIBASE_HOME_C0}/lib" "db2/lib";
+    
+    SET_ENV SERVER @DB2 ALTIBASE_SID="altibase1";
+    SET_ENV SERVER @DB2 ALTIBASE_CLUSTER_DATABASE=1;
+    SET_ENV SERVER @DB2 ALTIBASE_SPFILE="db2/conf/altibase.sproperties";
+
+    OPEN F1 -m w "db2/conf/altibase.sproperties";
+    WRITE F1 "altibase0.INSTANCE_NUMBER=1\n";
+    WRITE F1 "altibase0.CLUSTER_IP=127.0.0.1\n";
+    WRITE F1 "altibase0.CLUSTER_PORT_NO=${ALTIBASE_PORT_NO_C11}\n";
+    WRITE F1 "altibase1.INSTANCE_NUMBER=2\n";
+    WRITE F1 "altibase1.CLUSTER_IP=127.0.0.1\n";
+    WRITE F1 "altibase1.CLUSTER_PORT_NO=${ALTIBASE_PORT_NO_C12}\n";
+    CLOSE F1;
+
+    NODISPLAY ON;
+    CALL stdServerKill();
+    CALL stdClean();
+  
+    CALL stdServerStart();
+    NODISPLAY OFF;
+    sleep 1;
+}
+
+JOIN;
+}

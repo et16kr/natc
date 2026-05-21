@@ -1,0 +1,12 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    var_default integer := 870201;
+    var1 integer := 19870201;
+    end;
+    /
+}

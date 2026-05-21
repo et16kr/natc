@@ -1,0 +1,89 @@
+def main()
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    drop function return8;
+    drop function return16;
+    drop function return24;
+    drop function returnParam;
+    drop function returnFunc;
+    drop package functions;
+    skip end;
+
+    create table t1( c1 bit(8) , c2 bit(16) , c3 bit(24) );
+    insert into t1 values ( bit'1000' , bit'' , bit''  );
+    insert into t1 values ( bit'10000111' , bit'' , bit''  );
+    insert into t1 values ( bit'10000111' , bit'100001110000' , bit''  );
+    insert into t1 values ( bit'10000111' , bit'1000011100000010' , bit''  );
+    insert into t1 values ( bit'' , bit'1000011100000010' , bit''  );
+    insert into t1 values ( bit'10000111' , bit'1000011100000010' , bit'10000111000000100000'  );
+    insert into t1 values ( bit'10000111' , bit'1000011100000010' , bit'100001110000001000000001' );
+    insert into t1 values ( bit'' , bit'' , bit'100001110000001000000001' );
+
+    create or replace package variables as
+    v1 bit(8) := bit'10000111';
+    v2 bit(16) := bit'1000011100000010';
+    v3 bit(24) := bit'100001110000001000000001';
+    revVar1 bit(8);
+    revVar2 bit(16);
+    revVar3 bit(24);
+    end;
+    /
+
+    create or replace function return8 return bit as
+    begin
+    return variables.v1;
+    end;
+    /
+    create or replace function return16 return bit as
+    begin
+    return variables.v2;
+    end;
+    /
+
+    create or replace function return24 return bit as
+    begin
+    return variables.v3;
+    end;
+    /
+
+    create or replace function returnParam( p1 in bit ) return bit as
+    begin
+    return p1;
+    end;
+    /
+
+    create or replace function returnFunc(p1 in bit ) return bit as
+    begin
+    return returnParam( p1 );
+    end;
+    /
+
+    create or replace package functions as
+    function sub_returnParam( p1 in bit ) return bit;
+    function sub_returnFunc1(p1 in bit ) return bit;
+    function sub_returnFunc2(p1 in bit ) return bit;
+    end;
+    /
+
+    create or replace package body functions as
+
+    function sub_returnParam( p1 in bit ) return bit as
+    begin
+    return p1;
+    end;
+
+    function sub_returnFunc1(p1 in bit ) return bit as
+    begin
+    return sub_returnParam( p1 );
+    end;
+
+    function sub_returnFunc2(p1 in bit ) return bit as
+    begin
+    return returnParam( p1 );
+    end;
+
+    end;
+    /
+} 

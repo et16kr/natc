@@ -1,0 +1,21 @@
+###########################################################################
+# PROJ-1438 JOB Scheduler Test
+###########################################################################
+
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+NODISPLAY ON;
+CALL stdServerStop();
+NODISPLAY OFF;
+
+SET_ENV ALTIBASE_JOB_SCHEDULER_ENABLE=1;
+SET_ENV ALTIBASE_JOB_THREAD_COUNT=5;
+SET_ENV FIT_ENABLE=1;
+
+NODISPLAY ON;
+CALL stdServerStart();
+NODISPLAY OFF;
+}
+

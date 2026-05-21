@@ -1,0 +1,16 @@
+DEF MAIN()
+{
+SKIP BEGIN;
+DROP PUBLIC SYNONYM DBMS_CONCURRENT_EXEC;
+REVOKE EXECUTE ON SYS.DBMS_CONCURRENT_EXEC FROM PUBLIC;
+DROP PACKAGE DBMS_CONCURRENT_EXEC;
+SKIP END;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_concurrent_exec.sql";
+p_wait p1;
+print $Ret_;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_concurrent_exec.plb";
+p_wait p1;
+print $Ret_;
+}

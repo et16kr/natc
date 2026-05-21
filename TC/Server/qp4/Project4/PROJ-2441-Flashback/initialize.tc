@@ -1,0 +1,16 @@
+DEF MAIN()
+{
+SKIP BEGIN;
+DROP PUBLIC SYNONYM DBMS_RECYCLEBIN;
+REVOKE EXECUTE ON SYS.DBMS_RECYCLEBIN FROM PUBLIC;
+DROP PACKAGE DBMS_RECYCLEBIN;
+SKIP END;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_recyclebin.sql";
+p_wait p1;
+print $Ret_;
+
+exec p1 "isql -s 127.0.0.1 -u sys -p manager -silent -f ${ALTIDEV_HOME}/altibase_home/packages/dbms_recyclebin.plb";
+p_wait p1;
+print $Ret_;
+}

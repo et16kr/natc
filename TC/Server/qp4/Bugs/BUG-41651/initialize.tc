@@ -1,0 +1,14 @@
+############################################################################
+# BUG-41651 struct queue
+############################################################################
+
+include stdFunc.i;
+
+DEF MAIN()
+{
+NODISPLAY ON;
+CALL stdServerKill();
+CALL stdClean();
+CALL stdServerStart();
+NODISPLAY OFF;
+}

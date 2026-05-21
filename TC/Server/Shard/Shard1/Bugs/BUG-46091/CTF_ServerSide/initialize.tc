@@ -1,0 +1,11 @@
+include func.i;
+
+DEF MAIN()
+{
+	CALL FINALIZE_();
+	CALL PREPARE_();
+	CALL SHARD_UNSET_DEFAULT_NODE();
+	CALL SET_SHARD_TABLE();
+
+    CALL KILL_NODE1();
+}

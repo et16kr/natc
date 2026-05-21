@@ -1,0 +1,88 @@
+INCLUDE stdFunc.i;
+
+DECLARE SERVER BUG_37931_SERVER1 DB1;
+DECLARE SERVER BUG_37931_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C12 (SERVER=DB1);
+
+DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C22 (SERVER=DB2);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_CO = $ALTIBASE_HOME;
+
+    SET_ENV ALTIBASE_REPLICATION_LOCK_TIMEOUT=30;
+ 
+    THREAD T11 C11
+    {
+        ####################################
+        # ON ACTIVE SYSTEM
+        ####################################
+        SET_ENV @DB1 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+        RM -rf "db1";
+
+        MKDIR "db1";
+        MKDIR "db1/bin";
+        MKDIR "db1/conf";
+        MKDIR "db1/msg";
+        MKDIR "db1/dbs";
+        MKDIR "db1/logs";
+        MKDIR "db1/trc";
+        MKDIR "db1/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_CO}/bin/*" "db1/bin";
+        CP -r "${ALTIBASE_HOME_CO}/msg/*" "db1/msg";
+        CP -r "${ALTIBASE_HOME_CO}/conf/altibase.properties" "db1/conf";
+        CP -r "${ALTIBASE_HOME_CO}/conf/license" "db1/conf";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+
+    }
+
+    THREAD T12 C21
+    {
+        ###################################
+        # ON STANDBY SYSTEM
+        ###################################
+        SET_ENV @DB2 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+        RM -rf "db2";
+
+        MKDIR "db2";
+        MKDIR "db2/bin";
+        MKDIR "db2/conf";
+        MKDIR "db2/msg";
+        MKDIR "db2/dbs";
+        MKDIR "db2/logs";
+        MKDIR "db2/trc";
+        MKDIR "db2/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_CO}/bin/*" "db2/bin";
+        CP -r "${ALTIBASE_HOME_CO}/msg/*" "db2/msg";
+        CP -r "${ALTIBASE_HOME_CO}/conf/altibase.properties" "db2/conf";
+        CP -r "${ALTIBASE_HOME_CO}/conf/license" "db2/conf";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+JOIN;
+
+    THREAD T11 C11
+    {
+        SELECT COUNT(*) FROM V$LFG;
+    }
+    THREAD T12 C21
+    {
+        SELECT COUNT(*) FROM V$LFG;
+    }
+}

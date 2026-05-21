@@ -1,0 +1,38 @@
+#!/bin/sh
+
+ADMIN="svrmgr"
+
+case "$1" in
+'start')
+    ${ADMIN} << EOF
+startup
+quit
+EOF
+    ;;
+
+'stop')
+    killCheckServer
+    ${ADMIN} << EOF
+shutdown
+quit
+EOF
+    ;;
+'kill')
+ps -ef | grep 'ptime -d' | grep `whoami` | awk '{print $2}' | xargs -n1 kill -9;
+sleep 1
+    ;;
+'restart')
+    ${ADMIN} << EOF
+shutdown
+EOF
+    ${ADMIN} << EOF
+startup
+quit
+EOF
+    ;;
+*)
+    echo "Usage: $0 { start | stop | kill | restart }"
+    exit 1
+    ;;
+esac
+exit 0

@@ -1,0 +1,71 @@
+#!/usr/local/bin/bash
+
+cd $HOME
+ulimit -c unlimited &> /dev/null
+export LD_LIBRARY_PATH=$ATAF_TEST_CASE/lib:$STAF_HOME/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH_64=$ATAF_TEST_CASE/lib:$STAF_HOME/lib:$LD_LIBRARY_PATH_64
+if [ `uname` == "AIX" ]
+then
+    export LIBPATH=$ATAF_TEST_CASE/lib:$STAF_HOME/lib:$LIBPATH
+fi
+export SHLIB_PATH=$ATAF_TEST_CASE/lib:$STAF_HOME/lib:$SHLIB_PATH
+unset  BASH_ENV
+
+#######################
+# ATC_HOME, ATC_WORK ¼³Á¤
+#######################
+export ATC_HOME=$ATAF_TEST_CASE
+export ATC_WORK=$ATAF_TEST_RESULT/work
+
+if [ $# -eq 1 ];
+then
+    cfg=$ATAF_TEST_CASE/bin/STAF.cfg
+else
+    cfg=$2
+fi
+
+if [ "$STAF_INSTANCE_NAME" = "" ]; then
+echo "Please set environment variable STAF_INSTANCE_NAME"
+echo ""
+exit 1
+else
+echo "STAF_INSTANCE_NAME is $STAF_INSTANCE_NAME ($cfg)"
+echo ""
+fi
+
+unset  LC_CTYPE
+export LC_ALL=C
+#export STAF_THREAD_STACK_SIZE=128
+
+# fix BUG-14810
+export LD_LIBRARY_PATH=/usr/lib/lwp:$LD_LIBRARY_PATH
+
+case "$1" in
+'start')
+STAFProc $cfg 2> /dev/null &
+sleep 1
+echo ""
+        ;;
+'stop')
+STAF local shutdown shutdown;;
+'kill')
+STAF local ats kill 
+        ;;
+'status')
+STAF local service list 
+        ;;
+'ats_status')
+STAF local ats status 
+        ;;
+'version')
+STAF local ats version 
+        ;;
+'report')
+STAF local fs GET FILE $ATAF_TEST_RESULT/work/log/report.log
+        ;;
+*)
+echo "Usage: $0 { start | stop | kill | status | version }"
+exit 1
+        ;; 
+esac
+exit 0

@@ -1,0 +1,58 @@
+#!/bin/sh
+#
+# iSpeener Server Startup/Shutdown Script
+#
+# $Id: server.purecov 2 2006-04-13 15:48:39Z copyrei $
+
+ADMIN="${ALTIBASE_HOME}/bin/dbadmin -q"
+
+if [ "$1" = "status" ]; then
+	MODE=`echo $* | cut -f 2-4 -d ' '`
+	if [ "$MODE" = "status" ]; then
+		MODE=
+	fi
+fi
+
+case "$1" in
+'start')
+${ALTIBASE_HOME}/bin/altibase -n &
+sleep 30
+	;;
+
+'stop')
+	killCheckServer
+	${ADMIN} << EOF
+connect
+shutdown immediate
+quit
+EOF
+	;;
+'kill')
+	${ADMIN} << EOF
+connect
+shutdown abort
+quit
+EOF
+sleep 30
+	;;
+'status')
+	${ADMIN} << EOF
+connect
+status $MODE
+quit
+EOF
+	;;
+'restart')
+	${ADMIN} << EOF
+connect
+shutdown
+startup
+quit
+EOF
+	;;
+*)
+	echo "Usage: $0 { start | stop | kill | status | restart }"
+	exit 1
+	;;
+esac
+exit 0

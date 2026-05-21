@@ -1,0 +1,14 @@
+################################################################################
+################################################################################
+
+INCLUDE stdFunc.i;
+DEF MAIN()
+{
+
+SET_ENV ALTIBASE_IPCDA_CHANNEL_COUNT = 4;
+
+NODISPLAY ON;
+CALL stdServerRestart();
+NODISPLAY OFF;
+
+}

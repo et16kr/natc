@@ -1,0 +1,30 @@
+#!/usr/local/bin/bash
+#for ATC script
+
+ARGS="`echo $@ | sed 's/-[Ms]//g'`"
+
+CREATE_MEGA=$2
+ALIGN=4
+let ALIGNED_CREATE_MEGA=$CREATE_MEGA/$ALIGN*$ALIGN
+
+if [ $# == 2 ] 
+then
+DB_CHARSET=KO16KSC5601
+NATIONAL_CHARSET=UTF16
+fi
+
+if [ $# == 4 ] 
+then
+DB_CHARSET=$3
+NATIONAL_CHARSET=$4
+fi
+
+ADMIN="${ALTIBASE_HOME}/bin/isql -u sys -p MANAGER -sysdba -noprompt"
+
+
+        ${ADMIN} << EOF
+startup process;
+create database mydb INITSIZE=${ALIGNED_CREATE_MEGA}M noarchivelog character set ${DB_CHARSET} national character set ${NATIONAL_CHARSET};
+shutdown abort
+quit
+EOF

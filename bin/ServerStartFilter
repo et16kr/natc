@@ -1,0 +1,4 @@
+#!/usr/bin/sh
+sed -e '/^$/d' $1 > $1.tmp
+sed -e '/^--- STARTUP/!d' $1.tmp > $1
+rm -f $1.tmp

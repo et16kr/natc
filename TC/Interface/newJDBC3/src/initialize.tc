@@ -1,0 +1,152 @@
+DEF MAIN()
+{  
+        $ALTIBASE_HOME;
+        $ALTIBASE_PORT_NO;
+	$OS_NAME;
+        
+        
+        #NODISPLAY ON;
+        if ( $OS_NAME like "win" )
+        {
+            SET_ENV CLASSPATH="${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src;${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/lib/ojdbc14.jar;${ALTIBASE_HOME}/lib/Altibase.jar";
+	PRINT "set  win CLASSPATH";
+ 
+	 }
+        else
+        {
+            SET_ENV CLASSPATH="${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src:${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/lib/ojdbc14.jar:${ALTIBASE_HOME}/lib/Altibase.jar";
+	PRINT "set  CLASSPATH";
+        }
+        #NODISPLAY OFF; 
+        
+   
+
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/newJDBC3.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr  ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ABConnectionMethod.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/CancelThread.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/CommonMethod.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/CommonTest.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ConnectionMethod.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/DBConnect.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ExecuteThread.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ResultSetMethod.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/StatementMethod.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/XaMethod.java";
+	P_WAIT p0;	
+	EXEC p0 "javac -encoding euc-kr   ${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/newJDBC3.java";
+	P_WAIT p0;	
+
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/newJDBC3.class" )
+        {
+        PRINT "newJDBC3 SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "newJDBC3 FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ABConnectionMethod.class" )
+        {
+        PRINT "ABConnectionMethod SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "ABConnectionMethod FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/CancelThread.class" )
+        {
+        PRINT "CancelThread SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "CancelThread FAILURE";
+	}
+
+    	IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/CommonMethod.class" )
+        {
+        PRINT "CommonMethod SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "CommonMethod FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/CommonTest.class" )
+        {
+        PRINT "CommonTest SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "CommonTest FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ConnectionMethod.class" )
+        {
+        PRINT "ConnectionMethod SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "ConnectionMethod FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/DBConnect.class" )
+        {
+        PRINT "DBConnect SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "DBConnect FAILURE";
+        }
+
+       IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ExecuteThread.class" )
+        {
+        PRINT "ExecuteThread SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "ExecuteThread FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/ResultSetMethod.class" )
+        {
+        PRINT "ResultSetMethod SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "ResultSetMethod FAILURE";
+        }
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/StatementMethod.class" )
+        {
+        PRINT "StatementMethod SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "StatementMethod FAILURE";
+        }
+
+
+        IF ( FEXIST "${ATAF_TEST_CASE}/TC/Interface/newJDBC3/src/common/XaMethod.class" )
+        {
+        PRINT "XaMethod SUCCESS";
+        }
+        ELSE
+        {
+         PRINT "XaMethod FAILURE";
+        }
+	
+	
+}
+

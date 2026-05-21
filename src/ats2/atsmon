@@ -1,0 +1,25 @@
+#!/usr/local/bin/bash
+
+if [ $# -eq 1 ];
+then
+    delay=$1
+else
+    delay=1
+fi
+
+while [ 1 ];
+do
+    ataf ats_status
+
+    if [ $delay -eq 0 ];
+    then
+        exit 0
+    fi
+
+    sleep $delay
+
+    if [ $? -ne 0 ];
+    then
+        exit $?
+    fi
+done

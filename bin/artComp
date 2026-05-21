@@ -1,0 +1,20 @@
+#!/usr/local/bin/bash
+
+sync;
+sync;
+
+sleep 5;
+
+# change dir
+cd $ALTIBASE_HOME;
+
+# move core file 
+mv $ALTIBASE_HOME/core* $ALTIBASE_HOME/dbs/;
+
+tgzname=$1"."`date '+%m%d%H%M%S'`
+
+# tar altibase_home
+tar cvzf $tgzname trc logs dbs conf; 
+
+# remove core
+rm -f $ALTIBASE_HOME/core*;

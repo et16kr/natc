@@ -1,0 +1,16 @@
+###########################################################################
+# INITIALIZE 
+###########################################################################
+
+INCLUDE create_tbs.i;
+
+DEF MAIN()
+{
+SKIP BEGIN;
+CALL DROP_MEM_TBS();
+CALL DROP_DISK_TBS();
+SKIP END;
+
+CALL CREATE_MEM_TBS();
+CALL CREATE_DISK_TBS();
+}

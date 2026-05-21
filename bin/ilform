@@ -1,0 +1,5 @@
+#/usr/bin/sh
+il <<!
+formout -T $1 -f $2
+exit
+!

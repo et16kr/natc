@@ -1,0 +1,16 @@
+#!/bin/sh
+if  [ ! "$1" ] ||  [ "$1" =  "-h"  ] 
+then
+	echo "USAGE  : atm server_name atm_script_file_name"
+	echo "EXAMPLE: atm rtserver atm.compile.pl"
+	exit
+else
+  SCRPT=$1	
+  if [ "$2"  ]
+   then	
+   RCMD="rsh $1 " 
+   SCRPT=$2
+  fi  	
+fi
+echo $RCMD
+$JAVA_HOME/bin/java  -classpath ".:$ATC_HOME/bin/ErrorCaseManager.jar:$ATC_HOME/bin/ATMonitor.jar:" ATMonitor $RCMD atm.pl $SCRPT -v 7

@@ -1,0 +1,102 @@
+def main() 
+{
+    skip begin;
+    drop table t1;
+    drop package variables;
+    skip end;
+
+    create table t1( c1 varchar(30) );
+
+    create or replace package variables as
+    type rec1 is record( c1 varchar(30) );
+    var1 rec1;
+    var2 var1%type;
+    var3 t1%rowtype;
+    var4 varchar(30);
+
+    var_char char(30);
+    var_varchar varchar(30);
+    var_nchar nchar(30);
+    var_nvarchar nvarchar(30);
+    var_numeric numeric(10 , 3);
+    var_decimal decimal(10 , 3);
+    var_float float;
+    var_number number(10 , 3);
+    var_double double;
+    var_real real;
+    var_bigint bigint;
+    var_integer integer;
+    var_smallint smallint;
+    var_date date;
+    var_byte byte(10);
+    var_varbyte varbyte(10);
+    var_binary binary(30);
+    var_nibble nibble(30);
+    var_bit bit(30);
+    var_varbit varbit(30);
+    var_boolean boolean;
+
+    procedure initializeForINAndINOUT;
+    procedure showvariables;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure initializeForINAndINOUT as
+    begin
+    var1.c1 := 'JAMES BOND';
+    var2.c1 := 'KUROKO';
+    var3.c1 := 'KERRIGAN & LOWDERMILK';
+
+    var_char := char'MATTHEW FINNEN DOYLE';
+    var_varchar := varchar'CHRISTOPER PAUL COLFER';
+    var_nchar := nchar'JEON SEONG WOO';
+    var_nvarchar := nvarchar'LEE JAE KYOON';
+    var_numeric := numeric'123.456';
+    var_decimal := decimal'234.567';
+    var_float := float'345.678';
+    var_number := number'456.789';
+    var_double := double'567891';
+    var_real := real'678912';
+    var_bigint := bigint'789123';
+    var_integer := integer'100';
+    var_smallint := smallint'10';
+    var_date := date'01-FEB-1987';
+    var_byte := byte'536f6e67';
+    var_varbyte := varbyte'536f6e67';
+    var_binary := binary'100001110000001000000001';
+    var_nibble := nibble'536f6e67'; 
+    var_bit := bit'0001100110010011';
+    var_varbit := varbit'100100110000011000010100';
+    var_boolean := boolean'TRUE';
+
+    showvariables;
+    end;
+
+    procedure showvariables as
+    begin
+    println( 'var_char : ' || var_char );
+    println( 'var_varchar : ' || var_varchar );
+    println( 'var_nchar : ' || var_nchar );
+    println( 'var_nvarchar : ' || var_nvarchar );
+    println( 'var_numeric : ' || var_numeric );
+    println( 'var_decimal : ' || var_decimal );
+    println( 'var_float : ' || var_float );
+    println( 'var_number : ' || var_number );
+    println( 'var_double : ' || var_double );
+    println( 'var_real : ' || var_real );
+    println( 'var_bigint : ' || var_bigint );
+    println( 'var_integer : ' || var_integer);
+    println( 'var_smallint : ' || var_smallint);
+    println( 'var_date : ' || var_date );
+    println( 'var_byte : ' || var_byte );
+    println( 'var_varbyte : ' || var_varbyte );
+    println( 'var_nibble : ' || var_nibble ); 
+    println( 'var_bit : ' || var_bit );
+    println( 'var_varbit : ' || var_varbit );
+    end;
+
+    end;
+    /
+}

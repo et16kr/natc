@@ -1,0 +1,12 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    var_default smallint := 13;
+    var1 smallint := 1913;
+    end;
+    /
+}

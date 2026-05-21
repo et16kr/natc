@@ -1,0 +1,6 @@
+sed -e '/^$/d' $1 > $1.tmp
+sed -e '/^Time:/d' $1.tmp > $1.tmp2
+sed -e '/^JUnit version/d' $1.tmp2 > $1
+rm -f $1.tmp
+rm -f $1.tmp2
+

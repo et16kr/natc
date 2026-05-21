@@ -1,0 +1,46 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    v1N numeric;
+    v1Y numeric;
+    v2 numeric(38);
+    v3 numeric(38 , 10);
+    v4 numeric(18);
+    v5 numeric(18 , 5);
+
+    procedure initializeVariables;
+    procedure showvariables;
+    end;
+    /
+
+    create or replace package body variables as
+
+    procedure initializeVariables as
+    begin
+    v1N := NULL;
+    v1Y := NULL;
+    v2 := NULL;
+    v3 := NULL;
+    v4 := NULL;
+    v5 := NULL;
+    end;
+
+    procedure showvariables as
+    begin
+    println( 'v1N numeric : ' || v1N );
+    println( 'v1Y numeric : ' || v1Y );
+    println( 'v2 numeric(38) : ' || v2 );
+    println( 'v3 numeric(38 , 10) : ' || v3 );
+    println( 'v4 numeric(18) : ' || v4 );
+    println( 'v5 numeric(18 , 5) : ' || v5 );
+    end;
+
+    end;
+    /
+
+    exec variables.showvariables;
+}

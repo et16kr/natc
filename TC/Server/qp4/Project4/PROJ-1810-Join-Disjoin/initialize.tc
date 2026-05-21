@@ -1,0 +1,14 @@
+################################################################################
+# PROJ-1810 Join & Disjoin DDL
+################################################################################
+
+include stdFunc.i;
+
+DEF MAIN()
+{
+    nodisplay on;
+    CALL stdServerKill();
+    CALL stdClean();
+    CALL stdServerStart();
+    nodisplay off;
+}

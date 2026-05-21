@@ -1,0 +1,65 @@
+#!/usr/local/bin/bash
+
+if [ "$HOSTNAME" = "m5000" ] || [ "$HOSTNAME" = "sx1000" ]; then
+ts_sql=F1_p"$1".ts;
+else
+ts_sql=p"$1".ts;
+fi
+
+port="$1"0;
+module=p"$1";
+log="$2"/log/atsclntp_p"$1".log;
+user_id="$LOGNAME"_p"$1";
+
+export STAF_INSTANCE_NAME=STAF"$LOGNAME"_p$1;
+
+if [ "$HOSTNAME" = "m5000" ]; then
+STAF local PROCESS START SHELL COMMAND "atsclntp $ATC_HOME/TC/$ts_sql $port $module &> $log &" \
+ENV ATAF_TEST_RESULT=/data1/$LOGNAME/work/natc_result \
+ENV ATC_WORK=/data1/$LOGNAME/work/natc_result/work \
+ENV ALTIBASE_HOME=/data3/$LOGNAME/work/altidev4/altibase_home \
+ENV ALTIBASE_PORT_NO=$ALTIBASE_PORT_NO \
+ENV ALTIBASE_NLS_USE=KO16KSC5601 \
+ENV TEST_CASE_COUNT=TRUE \
+WAIT STDERRTOSTDOUT RETURNSTDOUT
+elif [ "$HOSTNAME" = "sx1000" ]; then
+STAF local PROCESS START SHELL COMMAND "atsclntp $ATC_HOME/TC/$ts_sql $port $module &> $log &" \
+ENV ATAF_TEST_RESULT=${HOME}/work/natc_res \
+ENV ATC_WORK=${HOME}/work/natc_res/work \
+ENV ALTIBASE_HOME=${HOME}/work/altidev4/altibase_home \
+ENV ALTIBASE_PORT_NO=$ALTIBASE_PORT_NO \
+ENV ALTIBASE_NLS_USE=KO16KSC5601 \
+ENV TEST_CASE_COUNT=TRUE \
+WAIT STDERRTOSTDOUT RETURNSTDOUT
+else
+STAF local PROCESS START SHELL COMMAND "atsclntp $ATC_HOME/TC/$ts_sql $port $module &> $log &" \
+ENV ATAF_TEST_RESULT=$HOME/work/natc_result \
+ENV ATC_WORK=$HOME/work/natc_result/work \
+ENV ALTIBASE_HOME=$HOME/work/altidev4/altibase_home \
+ENV ALTIBASE_PORT_NO=$ALTIBASE_PORT_NO \
+ENV ALTIBASE_NLS_USE=KO16KSC5601 \
+ENV TEST_CASE_COUNT=TRUE \
+WAIT STDERRTOSTDOUT RETURNSTDOUT
+fi
+sleep 3;
+
+#ps -ef | grep $user_id | grep atsclntp | grep -v grep | grep -v pre_atsclntp | grep -v log | awk '{print $2}' | xargs -n1 wait
+
+count=1;
+while [ $count -eq 1 ]
+do
+if [ $1 -eq 1 ]; then
+user_p10="$LOGNAME"_p10;
+user_p11="$LOGNAME"_p11;
+user_p12="$LOGNAME"_p12;
+user_p13="$LOGNAME"_p13;
+user_p14="$LOGNAME"_p14;
+#echo "ps -ef|grep $user_id|grep -v $user_p10|grep -v $user_p11|grep -v $user_p12|grep -v $user_p13|grep -v $user_p14| grep atsclntp | grep -v grep | grep -v pre_atsclntp | grep -v log";
+count=`ps -ef|grep $user_id|grep -v $user_p10|grep -v $user_p11|grep -v $user_p12|grep -v $user_p13|grep -v $user_p14|grep atsclntp| grep -v grep | grep -v pre_atsclntp | grep -v log | wc |  awk '{print $1}'`;
+else
+#echo "ps -ef|grep $user_id|grep atsclntp| grep -v grep | grep -v pre_atsclntp";
+count=`ps -ef|grep $user_id|grep atsclntp| grep -v grep | grep -v pre_atsclntp | grep -v log | wc |  awk '{print $1}'`;
+fi
+#echo "count : $count";
+sleep 60;
+done

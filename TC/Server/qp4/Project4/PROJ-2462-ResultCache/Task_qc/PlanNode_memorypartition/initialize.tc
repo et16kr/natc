@@ -1,0 +1,12 @@
+################################################################################
+# PROJ-2462 Result Cache
+################################################################################
+
+DEF MAIN()
+{
+alter system set result_cache_enable = 1;
+#alter system set trclog_detail_resultcache = 1;
+#alter system set trclog_detail_mtrnode = 1;
+
+}
+

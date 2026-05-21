@@ -1,0 +1,121 @@
+############################################################################
+# Database Link Environment Setting
+############################################################################
+
+############################################################################
+# SET UP three DB System
+############################################################################
+
+include stdFunc.i;
+INCLUDE stdFit.i;
+
+DECLARE SERVER FIT_DBLINK_SERVER1 DB1;
+DECLARE SERVER FIT_DBLINK_SERVER2 DB2;
+DECLARE SERVER FIT_DBLINK_SERVER3 DB3;
+
+DECLARE CLIENT DEFAULT C1 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C2 (SERVER=DB2);
+DECLARE CLIENT DEFAULT C3 (SERVER=DB3);
+
+DEF MAIN()
+{
+    $ALTIBASE_HOME;
+    $ALTIBASE_HOME_C0 = $ALTIBASE_HOME;
+
+    fitclient reset;
+
+    THREAD T1 C1
+    {
+        ########################################
+        # Set Up DB 1
+        ########################################
+
+        RM -rf "db1";
+
+        MKDIR "db1";
+        MKDIR "db1/conf";
+        MKDIR "db1/dbs";
+        MKDIR "db1/logs";
+        MKDIR "db1/trc";
+        MKDIR "db1/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+
+        # copy the genetated dblink.conf
+        CP -r "dblink.conf" "db1/conf/dblink.conf";
+
+        # for building program that uses altibase's library.
+        CP -r "${ALTIBASE_HOME_C0}/lib" "db1/lib";
+        CP -r "${ALTIBASE_HOME_C0}/install" "db1/install";
+        CP -r "${ALTIBASE_HOME_C0}/include" "db1/include";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    THREAD T2 C2
+    {
+        ########################################
+        # Set Up DB 2
+        ########################################
+
+        RM -rf "db2";
+
+        MKDIR "db2";
+        MKDIR "db2/conf";
+        MKDIR "db2/dbs";
+        MKDIR "db2/logs";
+        MKDIR "db2/trc";
+        MKDIR "db2/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    THREAD T3 C3
+    {
+        ########################################
+        # Set Up DB 3
+        ########################################
+
+        RM -rf "db3";
+
+        MKDIR "db3";
+        MKDIR "db3/conf";
+        MKDIR "db3/dbs";
+        MKDIR "db3/logs";
+        MKDIR "db3/trc";
+        MKDIR "db3/arch_logs";
+
+        CP -r "${ALTIBASE_HOME_C0}/bin" "db3/bin";
+        CP -r "${ALTIBASE_HOME_C0}/msg" "db3/msg";
+        CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db3/conf/altibase.properties";
+        CP -r "${ALTIBASE_HOME_C0}/conf/license" "db3/conf/license";
+
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdClean();
+
+        CALL stdServerStart();
+        NODISPLAY OFF;
+    }
+
+    JOIN;
+}
+

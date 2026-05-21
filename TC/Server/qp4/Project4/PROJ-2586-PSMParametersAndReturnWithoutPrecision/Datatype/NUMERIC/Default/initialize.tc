@@ -1,0 +1,19 @@
+def main()
+{
+    skip begin;
+    drop package variables;
+    skip end;
+
+    create or replace package variables as
+    var_defaultN numeric := 870201521;
+    var_defaultY numeric := 870201.521;
+
+    var1N numeric := 9803247361;
+    var1Y numeric := 980324.7361;
+    var2 numeric(38) := 9803247362;
+    var3 numeric(38 , 10) := 980324.7362;
+    var4 numeric(18) := 9803247363;
+    var5 numeric(18 , 5) := 980324.7363;
+    end;
+    /
+}
