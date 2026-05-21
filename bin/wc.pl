@@ -8,7 +8,7 @@ use FileHandle;
 use IO::File;
 
 my $fileFullName = $ARGV[0] ? shift @ARGV 
-    : die "File Name À» ÁöÁ¤ÇÏ¼¼¿ä ! \n";
+    : die "File Name ì„ ì§€ì •í•˜ì„¸ìš” ! \n";
 
 $fileFullName =~ s/\s+$//;
 $fileFullName =~ s/^\s+//;

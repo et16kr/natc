@@ -295,7 +295,7 @@ DBHandler::logon( SChar *aDsn,
 IDE_RC
 DBHandler::logout()
 {
-    // µ¥ÀÌÅÍº£ÀÌ½º Á¢¼Ó ÇØÁ¦
+    // ë°ì´í„°ë² ì´ìŠ¤ ì ‘ì† í•´ì œ
     disconnectDB();
 
     return IDE_SUCCESS;
@@ -934,8 +934,8 @@ DBHandler::executePSMStmt( SChar * aPSMStmt,
             break;
         }
 
-        // sParaOrder´Â ÇÔ¼ö³ª ÇÁ·Î½ÃÀúÀÇ create ½Ã ÆÄ¶ó¹ÌÅÍ ¼ø¼­
-        // order´Â bindpara ½Ã ¼ø¼­
+        // sParaOrderëŠ” í•¨ìˆ˜ë‚˜ í”„ë¡œì‹œì €ì˜ create ì‹œ íŒŒë¼ë¯¸í„° ìˆœì„œ
+        // orderëŠ” bindpara ì‹œ ìˆœì„œ
 
         // exec proc1(:a, :b, :c), exec proc1(:a, 'a', :b)
         if (t_node->element.para_order == sParaOrder )
@@ -1028,7 +1028,7 @@ no_bind_para:
 
     if (r_node != NULL)
     {
-        mSymbol->setSymbol(r_node); // BUGBUG : r_node ´Â ºÒÇÊ¿äÇÑ parameter
+        mSymbol->setSymbol(r_node); // BUGBUG : r_node ëŠ” ë¶ˆí•„ìš”í•œ parameter
     }
 
     idlOS::sprintf( mStringBuffer, gMessage );
@@ -1333,7 +1333,7 @@ DBHandler::fetchSelectStmt(idBool aPrepare)
                 sDisplayPos++;
             } // column-loop
         }
-        // mStringBuffer¿¡´Â ÇÑÁÙ¾¿¸¸ ¾´´Ù.
+        // mStringBufferì—ëŠ” í•œì¤„ì”©ë§Œ ì“´ë‹¤.
         mStringBuffer[sDisplayPos] = '\n';
         sDisplayPos = 0;
 

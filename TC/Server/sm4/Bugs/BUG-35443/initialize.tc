@@ -12,9 +12,9 @@ DEF MAIN()
     CALL initialize();
     NODISPLAY OFF;
 
-    # memory table create½Ã table¸¶´Ù ±âº»ÀûÀ¸·Î page 1°³¾¿Àº ÇÒ´ç µÈ´Ù. 
-    # µû¶ó¼­ SYS_TBS_MEM_DATA¿¡ createµÈ table¿¡ ÇÒ´ç ÇÒ ¼ö ÀÖ´Â page¸¦
-    # °¡Áö°íÀÖ¾î¾ß ÇÑ´Ù.
+    # memory table createì‹œ tableë§ˆë‹¤ ê¸°ë³¸ì ìœ¼ë¡œ page 1ê°œì”©ì€ í• ë‹¹ ëœë‹¤. 
+    # ë”°ë¼ì„œ SYS_TBS_MEM_DATAì— createëœ tableì— í• ë‹¹ í•  ìˆ˜ ìžˆëŠ” pageë¥¼
+    # ê°€ì§€ê³ ìžˆì–´ì•¼ í•œë‹¤.
     SET_ENV ALTIBASE_MEM_MAX_DB_SIZE="20M";
     SET_ENV ALTIBASE_CHECKPOINT_ENABLED="0";
     SET_ENV ALTIBASE_DEFAULT_MEM_DB_FILE_SIZE="4M";
@@ -38,7 +38,7 @@ DEF MAIN()
     $sTableName = "TABLE";
     $sSeqName   = "SEQ";
 
-    # SYS_TBS_MEM_DIC È®Àå Á÷Àü±îÁö tableÀ» ¸¸µç´Ù.
+    # SYS_TBS_MEM_DIC í™•ìž¥ ì§ì „ê¹Œì§€ tableì„ ë§Œë“ ë‹¤.
     NODISPLAY ON;
     CREATE TABLE ${sTableName}_${i} ( A INTEGER, B CHAR(512) );
     $i = $i + 1;
@@ -78,8 +78,8 @@ DEF MAIN()
         $j = $j + 1;
     }
 
-    # MEM_DIC°ú MEM_DATA°¡ 8M¾¿ Alloc ¹Þ°í, MEM_DICÀº °ÅÀÇ full ÀÌ µÇµµ·Ï
-    # À§¿¡ LOOP count¿Í INSERT ±¸¹®ÀÇ Å©±â¸¦ Á¶ÀýÇÑ´Ù.
+    # MEM_DICê³¼ MEM_DATAê°€ 8Mì”© Alloc ë°›ê³ , MEM_DICì€ ê±°ì˜ full ì´ ë˜ë„ë¡
+    # ìœ„ì— LOOP countì™€ INSERT êµ¬ë¬¸ì˜ í¬ê¸°ë¥¼ ì¡°ì ˆí•œë‹¤.
     NODISPLAY OFF;
     CREATE SEQUENCE ${sSeqName}_5000;
 

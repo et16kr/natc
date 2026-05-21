@@ -18,14 +18,14 @@ using namespace std;
 IDE_RC
 CaseManager::initialize()
 {
-    // ÀÚ·á±¸Á¶¸¦ ÃÊ±âÈ­ ÇÑ´Ù.
+    // ìë£Œêµ¬ì¡°ë¥¼ ì´ˆê¸°í™” í•œë‹¤.
     return IDE_SUCCESS;
 }
 
 IDE_RC
 CaseManager::destroy()
 {
-    // °´Ã¼ ÀÚ½ÅÀ» ÇØÁ¦ÇÑ´Ù.
+    // ê°ì²´ ìì‹ ì„ í•´ì œí•œë‹¤.
     return IDE_SUCCESS;
 }
 
@@ -105,7 +105,7 @@ CaseManager::load( SChar *aFileName, SInt aCurDepth, SInt aMark, std::map<STAFSt
     sBufIndex1 = 0;
     sLen = strlen(sTmp);
 
-    // sPathÀº ÆÄÀÏ ÀÌ¸§À» Á¦¿ÜÇÏ°í path¸¸ °®°í ÀÖ´ÙÆÄÀÏ ÀÌ¸§¸¸ °®°í ÀÖÀ½.
+    // sPathì€ íŒŒì¼ ì´ë¦„ì„ ì œì™¸í•˜ê³  pathë§Œ ê°–ê³  ìˆë‹¤íŒŒì¼ ì´ë¦„ë§Œ ê°–ê³  ìˆìŒ.
     for( sBufIndex1 = sLen; sBufIndex1 > 0 ; sBufIndex1-- )
     {
         if( sTmp[sBufIndex1] == FILE_SEPARATOR )
@@ -194,8 +194,8 @@ CaseManager::load( SChar *aFileName, SInt aCurDepth, SInt aMark, std::map<STAFSt
 
     if(sFp == NULL)
     {
-        // ÆÄÀÏÀÌ ¾ø´Â °æ¿ì, 
-        // ¿©±â¼­´Â °è¼Ó ÁøÇàÇÏ°í, ats ¼­¹ö¿¡¼­ ¿¡·¯Ã¼Å©¸¦ ÇÑ´Ù.
+        // íŒŒì¼ì´ ì—†ëŠ” ê²½ìš°, 
+        // ì—¬ê¸°ì„œëŠ” ê³„ì† ì§„í–‰í•˜ê³ , ats ì„œë²„ì—ì„œ ì—ëŸ¬ì²´í¬ë¥¼ í•œë‹¤.
         return IDE_SUCCESS; 
     }
 
@@ -597,8 +597,8 @@ CaseManager::mergeCase()
 			        mCaseList.end(), 
                                 CaseCompare(sCompareName));
 	
-        // »ç¿ëÀÚ ÄÉÀÌ½º°¡ °øÀ¯ ÄÉÀÌ½º¿¡µµ Á¸ÀçÇÒ °æ¿ì,
-        // »ç¿ëÀÚ ÄÉÀÌ½º·Î °øÀ¯ ÄÉÀÌ½º¸¦ update
+        // ì‚¬ìš©ì ì¼€ì´ìŠ¤ê°€ ê³µìœ  ì¼€ì´ìŠ¤ì—ë„ ì¡´ì¬í•  ê²½ìš°,
+        // ì‚¬ìš©ì ì¼€ì´ìŠ¤ë¡œ ê³µìœ  ì¼€ì´ìŠ¤ë¥¼ update
 	if( sIteratorTmp != mCaseList.end() )
 	{
 	    (*sIteratorTmp).caseName = (*sIterator).caseName;
@@ -610,20 +610,20 @@ CaseManager::mergeCase()
 	    sIteratorKeep = ++sIteratorTmp; 
 		
 	}
-        // °øÀ¯ ÄÉÀÌ½º¿¡ ¾ø°í, ÃÖÃÊÀÇ »ç¿ëÀÚ ÄÉÀÌ½º ÀÏ °æ¿ì,
-        // ¸Ç ¾Õ¿¡ insert
+        // ê³µìœ  ì¼€ì´ìŠ¤ì— ì—†ê³ , ìµœì´ˆì˜ ì‚¬ìš©ì ì¼€ì´ìŠ¤ ì¼ ê²½ìš°,
+        // ë§¨ ì•ì— insert
         else if( sIterator == mLocalCaseList.begin())
 	{
 	    mCaseList.insert(sIteratorTmp, (*sIterator));
 	    sIteratorKeep = sIteratorTmp; 
 	}
-        // »ç¿ëÀÚ ÄÉÀÌ½º°¡ °øÀ¯ ÄÉÀÌ½º¿¡ ¾øÀ» °æ¿ì, insert. 
-        // insert ÇÏ´Â À§Ä¡´Â ÀÌÀü¿¡ ¾÷µ¥ÀÌÆ®ÇÑ ÄÉÀÌ½º°¡ ÀÖÀ» °æ¿ì¿¡´Â
-        // ±× ÄÉÀÌ½º ¹Ù·Î µÚ(sIteratorKeep)¿¡ insertÇÏ°í,
-        // ¾÷µ¥ÀÌÆ®ÇÑ ÄÉÀÌ½º°¡ ¾øÀ» °æ¿ì¿¡´Â, °øÀ¯ ÄÉÀÌ½º ¸®½ºÆ®ÀÇ ¸Ç µÚ¿¡
-        // insert µÈ´Ù.
-        // sIteratorKeep¿¡ ++°¡ ¾ø´Â ÀÌÀ¯´Â insert ¸Ş¼Òµå°¡ sIteratorKeepÀÌ
-        // °¡¸£Å°°í ÀÖ´Â À§Ä¡ÀÇ ¹Ù·Î µÚ¿¡ insert ÇÏ±â ¶§¹®ÀÓ.
+        // ì‚¬ìš©ì ì¼€ì´ìŠ¤ê°€ ê³µìœ  ì¼€ì´ìŠ¤ì— ì—†ì„ ê²½ìš°, insert. 
+        // insert í•˜ëŠ” ìœ„ì¹˜ëŠ” ì´ì „ì— ì—…ë°ì´íŠ¸í•œ ì¼€ì´ìŠ¤ê°€ ìˆì„ ê²½ìš°ì—ëŠ”
+        // ê·¸ ì¼€ì´ìŠ¤ ë°”ë¡œ ë’¤(sIteratorKeep)ì— insertí•˜ê³ ,
+        // ì—…ë°ì´íŠ¸í•œ ì¼€ì´ìŠ¤ê°€ ì—†ì„ ê²½ìš°ì—ëŠ”, ê³µìœ  ì¼€ì´ìŠ¤ ë¦¬ìŠ¤íŠ¸ì˜ ë§¨ ë’¤ì—
+        // insert ëœë‹¤.
+        // sIteratorKeepì— ++ê°€ ì—†ëŠ” ì´ìœ ëŠ” insert ë©”ì†Œë“œê°€ sIteratorKeepì´
+        // ê°€ë¥´í‚¤ê³  ìˆëŠ” ìœ„ì¹˜ì˜ ë°”ë¡œ ë’¤ì— insert í•˜ê¸° ë•Œë¬¸ì„.
         else
 	{
 	    mCaseList.insert(sIteratorKeep, (*sIterator));

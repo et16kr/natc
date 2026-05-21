@@ -404,7 +404,7 @@ ATTRIBUTE_DEF
               gDateForm[0] = '\0';
               pAttrType = new iloTableNode(ATTRTYPE_NODE, (SChar *)"date", NULL, NULL);
               pAttrName = new iloTableNode(ATTRNAME_NODE, $1, NULL, pAttrType);
-              // nodeValue ¸¦ dateFormat ÀúÀåÀå¼Ò·Î »ç¿ë
+              // nodeValue ë¥¼ dateFormat ì €ìž¥ìž¥ì†Œë¡œ ì‚¬ìš©
               $$ = new iloTableNode(ATTR_NODE, $3, pAttrName, NULL);
               $$->setSkipFlag($4);
 #ifdef _ILOADER_DEBUG

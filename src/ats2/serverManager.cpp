@@ -47,7 +47,7 @@ ServerManager::load( SChar *aFileName)
 
     sFp = fopen( aFileName, "r" );
 
-    // ÆÄÀÏÀÌ ¾øÀ¸¸é ¹Ù·Î Á¾·á
+    // íŒŒì¼ì´ ì—†ìœ¼ë©´ ë°”ë¡œ ì¢…ë£Œ
     IDE_TEST( sFp == NULL );
 
     memset( sServer,
@@ -106,7 +106,7 @@ ServerManager::load( SChar *aFileName)
                 {
                     if( sBuffer[sBufIndex2] == ']' )
                     {
-                        // ¼­¹ö ÀÌ¸§ÀÌ ³¡³ª¸é map¿¡ ³Ö°í, clear ÇØÁØ´Ù.
+                        // ì„œë²„ ì´ë¦„ì´ ëë‚˜ë©´ mapì— ë„£ê³ , clear í•´ì¤€ë‹¤.
 			mSrvParam.clear();
                         break;
                     }

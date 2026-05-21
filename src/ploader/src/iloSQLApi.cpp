@@ -322,7 +322,7 @@ isql_bool iloSQLApi::OpenforUtil(SChar *szHost,
     rc = SQLAllocConnect(m_IEnv,&m_ICon) ;
     IDE_TEST_RAISE( rc != SQL_SUCCESS, err_alloc_con );
 
-/* TCP, UNIX ºĞ·ù */    
+/* TCP, UNIX ë¶„ë¥˜ */    
     if ( idlOS::getenv("ISQL_CONNECTION") != NULL )
     {
         idlOS::strcpy(sEnvConType, idlOS::getenv("ISQL_CONNECTION"));
@@ -342,7 +342,7 @@ isql_bool iloSQLApi::OpenforUtil(SChar *szHost,
     
     if ((sConType == 3 || sConType == 2) && szHost != NULL)
     {
-        sConType = 1; //unix, ipcÀÏ ¶§ hostnameÀÖÀ¸¸é TCP·Î ¹Ù²Ş
+        sConType = 1; //unix, ipcì¼ ë•Œ hostnameìˆìœ¼ë©´ TCPë¡œ ë°”ê¿ˆ
     }
     
     idlOS::sprintf(sConStr, "DSN=%s;UID=%s;PWD=%s;CONNTYPE=%d", 
@@ -951,7 +951,7 @@ isql_bool iloSQLApi::SelectExecute(iloTableInfo  *aTableInfo)
         case ISP_BIT :
             SQLBindCol(m_IStmt, i+1, SQL_C_CHAR, &m_Column.m_Value[i], MAX_VARCHAR_SIZE-1, &m_Column.m_Len[i]);
             break;
-//            idlOS::sprintf(m_ErrorMsg, "Query Error (%s) [BIT Àº Ç¥½ÃÇÒ ¼ö ¾ø½À´Ï´Ù.]\n", m_SQLStatement);
+//            idlOS::sprintf(m_ErrorMsg, "Query Error (%s) [BIT ì€ í‘œì‹œí•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.]\n", m_SQLStatement);
 //            return isql_false;
         case ISP_TNUMERIC :
         case ISP_NUMERIC :
@@ -1009,7 +1009,7 @@ isql_bool iloSQLApi::SelectExecute(iloTableInfo  *aTableInfo)
             break;
         
         default :
-            idlOS::sprintf(m_ErrorMsg, "Query Error (%s) [¾Ë·ÁÁöÁö ¾ÊÀº Å¸ÀÔÀÌ »ç¿ëµÇ¾ú½À´Ï´Ù.]\n", m_SQLStatement);
+            idlOS::sprintf(m_ErrorMsg, "Query Error (%s) [ì•Œë ¤ì§€ì§€ ì•Šì€ íƒ€ì…ì´ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.]\n", m_SQLStatement);
             return isql_false;
         }
 

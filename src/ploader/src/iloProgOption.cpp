@@ -225,47 +225,47 @@ isql_bool iloProgOption::ParsingCommandLine(SInt argc, SChar **argv)
     IDE_EXCEPTION( err_user );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("-U ¾Æ±Ô¸ÕÆ®°¡ Áßº¹ÇØ¼­ »ç¿ëµÇ¾ú½À´Ï´Ù.");
+        idlOS::printf("-U ì•„ê·œë¨¼íŠ¸ê°€ ì¤‘ë³µí•´ì„œ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_nouser );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("ÀÌ¿ëÀÚ ID°¡ ÀÔ·ÂµÇÁö ¾Ê¾Ò½À´Ï´Ù.");
+        idlOS::printf("ì´ìš©ì IDê°€ ì…ë ¥ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_passwd );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("-P ¾Æ±Ô¸ÕÆ®°¡ Áßº¹ÇØ¼­ »ç¿ëµÇ¾ú½À´Ï´Ù.");
+        idlOS::printf("-P ì•„ê·œë¨¼íŠ¸ê°€ ì¤‘ë³µí•´ì„œ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_nopasswd );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("ÀÌ¿ëÀÚ ºñ¹Ğ¹øÈ£°¡ ÀÔ·ÂµÇÁö ¾Ê¾Ò½À´Ï´Ù.");
+        idlOS::printf("ì´ìš©ì ë¹„ë°€ë²ˆí˜¸ê°€ ì…ë ¥ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_noserver );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("¼­¹öÀÌ¸§ÀÌ ÀÔ·ÂµÇÁö ¾Ê¾Ò½À´Ï´Ù.");
+        idlOS::printf("ì„œë²„ì´ë¦„ì´ ì…ë ¥ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_server );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("-S ¾Æ±Ô¸ÕÆ®°¡ Áßº¹ÇØ¼­ »ç¿ëµÇ¾ú½À´Ï´Ù.");
+        idlOS::printf("-S ì•„ê·œë¨¼íŠ¸ê°€ ì¤‘ë³µí•´ì„œ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_port );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("-port ¾Æ±Ô¸ÕÆ®°¡ Áßº¹ÇØ¼­ »ç¿ëµÇ¾ú½À´Ï´Ù.");
+        idlOS::printf("-port ì•„ê·œë¨¼íŠ¸ê°€ ì¤‘ë³µí•´ì„œ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_nst );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("-nst ¾Æ±Ô¸ÕÆ®°¡ Áßº¹ÇØ¼­ »ç¿ëµÇ¾ú½À´Ï´Ù.");
+        idlOS::printf("-nst ì•„ê·œë¨¼íŠ¸ê°€ ì¤‘ë³µí•´ì„œ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( err_silent );
     {
         m_bErrorExist = isql_true;
-        idlOS::printf("-silent ¾Æ±Ô¸ÕÆ®°¡ Áßº¹ÇØ¼­ »ç¿ëµÇ¾ú½À´Ï´Ù.");
+        idlOS::printf("-silent ì•„ê·œë¨¼íŠ¸ê°€ ì¤‘ë³µí•´ì„œ ì‚¬ìš©ë˜ì—ˆìŠµë‹ˆë‹¤.");
     }
     IDE_EXCEPTION( print_help_screen );
     {

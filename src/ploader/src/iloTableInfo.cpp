@@ -14,7 +14,7 @@ seqInfo gSeqArray[UT_MAX_SEQ_ARRAY_CNT];
 
 void InsertSeq(SChar *sName, SChar *cName, SChar *val)
 {
-    //±¸Á¶Ã¼¿¡ ³Ö¾îÁØ´Ù.
+    //êµ¬ì¡°ì²´ì— ë„£ì–´ì¤€ë‹¤.
     if (gSeqIndex > UT_MAX_SEQ_ARRAY_CNT)
     {
         idlOS::printf("Too Many Sequence !! LIMIT %d\n", UT_MAX_SEQ_ARRAY_CNT);
@@ -182,7 +182,7 @@ isql_bool iloTableInfo::GetTableInfo(iloTableNode *pTableNameNode)
 
     pNode = pTableNameNode->GetSon();
 
-    // ÃÖ»óÀ§ pTableNameNodeÀÇ Son Àº TABLE_DEF, DOWN_COND_DEF ÀÇ Á¶ÇÕ
+    // ìµœìƒìœ„ pTableNameNodeì˜ Son ì€ TABLE_DEF, DOWN_COND_DEF ì˜ ì¡°í•©
     if (pNode->GetNodeType() == DOWN_NODE)
     {
         m_bDownCond = isql_true;
@@ -194,7 +194,7 @@ isql_bool iloTableInfo::GetTableInfo(iloTableNode *pTableNameNode)
         m_bDownCond = isql_false;
     }
 
-    // pNode->GetNodeValue() ´Â TABLE_DEF
+    // pNode->GetNodeValue() ëŠ” TABLE_DEF
     idlOS::strcpy(m_TableName, pNode->GetNodeValue());
 
     pNode = pNode->GetSon();

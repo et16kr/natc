@@ -191,7 +191,7 @@ Laborer::runReal()
     STAFString    sTdxQueryTemp;
     STAFString    sTdxResultTemp;
     STAFString    sResult2;
-    // altibase handler·Î execute ÇÏÁö ¾Ê´Â Á¾·ùÀÇ ¹®Àå
+    // altibase handlerë¡œ execute í•˜ì§€ ì•ŠëŠ” ì¢…ë¥˜ì˜ ë¬¸ì¥
     idBool        sIsNormalString;
 
     while( 1 )
@@ -625,8 +625,8 @@ Laborer::runReal()
                           sData.sysdba.buffer(),
                           sData.sysdba.length() );
 
-                // print var ¶Ç´Â print varirable À» 
-                // ¼öÇàÇßÀ» °æ¿ì
+                // print var ë˜ëŠ” print varirable ì„ 
+                // ìˆ˜í–‰í–ˆì„ ê²½ìš°
                 if( sData.sysdba == "all" )
                 {
                     //mSymbol.print();
@@ -661,7 +661,7 @@ Laborer::runReal()
                           sData.sysdba.buffer(), 
                           sData.sysdba.length() );
 
-                // exec :a := NULL ÀÏ °æ¿ì
+                // exec :a := NULL ì¼ ê²½ìš°
                 if( strlen( sData2 ) == 0 )
                 {
                     //mSymbol.setValue( sData1 );
@@ -832,21 +832,21 @@ Laborer::runReal()
             {
                 IDE_TEST( logon() != IDE_SUCCESS );
                 
-                // tdx ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
-                // execute Àü¿¡, query¸¸ write
+                // tdx íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
+                // execute ì „ì—, queryë§Œ write
                 makeTdxPrefix();
                 sTdxQueryTemp = mTdxPrefix + "$" + mProcess + "> " + sBuffer + "\n";
                 
                 IDE_TEST( mRunner->execute( sBuffer, 
                                             sData.type ) != IDE_SUCCESS );
                 
-                // tdx ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
-                // execute ÈÄ¿¡, result¸¸ write
+                // tdx íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
+                // execute í›„ì—, resultë§Œ write
                 makeTdxPrefix();
                 sResultOnly = mRunner->getResultOnly();
                 sTdxResultTemp = mTdxPrefix + sResultOnly;
                 
-                // out ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
+                // out íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
                 sResult = mRunner->getResult( ID_TRUE );
                 
                 if( (sResult.find( "ERR-91015" ) !=  STAFString::kNPos) ||
@@ -867,15 +867,15 @@ Laborer::runReal()
                         //} 
                         IDE_TEST( mRunner->logon( &sLogonData ) != IDE_SUCCESS );
                         
-                        // tdx ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
-                        // execute Àü¿¡, query¸¸ write
+                        // tdx íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
+                        // execute ì „ì—, queryë§Œ write
                         makeTdxPrefix();
                         sTdxQueryTemp = mTdxPrefix + "$" + mProcess + "> " + sBuffer + "\n";
                         
                         IDE_TEST( mRunner->execute( sBuffer, 
                                                     sData.type ) != IDE_SUCCESS );
-                        // tdx ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
-                        // execute ÈÄ¿¡, result¸¸ write
+                        // tdx íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
+                        // execute í›„ì—, resultë§Œ write
                         makeTdxPrefix();
                         sResultOnly = mRunner->getResultOnly();
                         sTdxResultTemp = mTdxPrefix + sResultOnly;
@@ -910,15 +910,15 @@ Laborer::runReal()
             }
             else
             {
-                // PRJ-1552 Art Å×½ºÆ® ±â´É ¼öÇà
-                IDE_TEST( executeArtTest( sBuffer,        // ½ÇÁ¦ ½ÇÇà Query ¹®ÀÚ¿­
-                                          &sData,         // ÇöÀç query data
-                                          &sQueryRecPtr ) // recptr°ü·Ã query data
+                // PRJ-1552 Art í…ŒìŠ¤íŠ¸ ê¸°ëŠ¥ ìˆ˜í–‰
+                IDE_TEST( executeArtTest( sBuffer,        // ì‹¤ì œ ì‹¤í–‰ Query ë¬¸ìì—´
+                                          &sData,         // í˜„ì¬ query data
+                                          &sQueryRecPtr ) // recptrê´€ë ¨ query data
                           != IDE_SUCCESS );
             }
  	}  
         
-        // SQLÀÌ ¾Æ´Ñ °æ¿ì µû·Î mTdxResult¿¡ Ãß°¡ÇØÁØ´Ù.
+        // SQLì´ ì•„ë‹Œ ê²½ìš° ë”°ë¡œ mTdxResultì— ì¶”ê°€í•´ì¤€ë‹¤.
         if ( mTdxStringResult != "" )
         {
             mTdxResult += mTdxStringResult;
@@ -944,8 +944,8 @@ Laborer::runReal()
 
     mEnd = ID_TRUE;
 
-    // FATAL ÀÏ °æ¿ì,
-    // ÇØ´ç ¶óÀÎ printÇÏ°í, ¿¬°á ¿¡·¯ ¸Ş½ÃÁö print
+    // FATAL ì¼ ê²½ìš°,
+    // í•´ë‹¹ ë¼ì¸ printí•˜ê³ , ì—°ê²° ì—ëŸ¬ ë©”ì‹œì§€ print
     mResult += mStatus;
     mResult += "\n";
     mResult += mRunner->getResult();
@@ -1158,7 +1158,7 @@ Laborer::runWait( STAFString aIn )
     return IDE_FAILURE;
 }
 
-// runSystem ÇÔ¼ö´Â Æ¯Á¤ DB È¯°æ¿¡¼­ »ç¿ëµÇ´Â system ¸í·ÉÀ» À§ÇÑ °ÍÀÓ.
+// runSystem í•¨ìˆ˜ëŠ” íŠ¹ì • DB í™˜ê²½ì—ì„œ ì‚¬ìš©ë˜ëŠ” system ëª…ë ¹ì„ ìœ„í•œ ê²ƒì„.
 #if defined(STAF_OS_NAME_WIN32)
 IDE_RC                
 Laborer::runSystem( STAFString aIn, STAFString aAlias )
@@ -1296,7 +1296,7 @@ IDE_RC Laborer::runSystem( STAFString aIn, STAFString aAlias )
 }
 #endif
 
-// runSystem2 ÇÔ¼ö´Â default È¯°æ¿¡¼­ ¼öÇàµÇ´Â ÇÔ¼ö
+// runSystem2 í•¨ìˆ˜ëŠ” default í™˜ê²½ì—ì„œ ìˆ˜í–‰ë˜ëŠ” í•¨ìˆ˜
 IDE_RC                
 Laborer::runSystem2( STAFString aIn )
 {
@@ -1554,21 +1554,21 @@ Laborer::executeArtTest( SChar*       aBuffer,
     if ( mServicer->getArtRestart() == ID_TRUE ) 
     {
         /*************************************************
-         * °¡. HIT ÀÌÈÄ : ats°¡ ¼­¹ö¸¦ ´Ù½Ã Àç±¸µ¿ÇÑ °æ¿ì
-         *     ( restart ÇÃ·¡±×°¡ TRUEÀÎ°æ¿ì )
+         * ê°€. HIT ì´í›„ : atsê°€ ì„œë²„ë¥¼ ë‹¤ì‹œ ì¬êµ¬ë™í•œ ê²½ìš°
+         *     ( restart í”Œë˜ê·¸ê°€ TRUEì¸ê²½ìš° )
          *************************************************/
         
         if ( logon() != IDE_SUCCESS )
         {
             /*************************************************
-             * 1. Àç±¸µ¿ÀÌÈÄ¿¡µµ logonÀÌ ½ÇÆĞÇÑ °æ¿ì
-             *    : PROCESS[0]°¡ Ã³¸®ÇÔ.
-             *    : cleanServer¸¦ ¼öÇàÇÏ°í, logon ¼öÇà
+             * 1. ì¬êµ¬ë™ì´í›„ì—ë„ logonì´ ì‹¤íŒ¨í•œ ê²½ìš°
+             *    : PROCESS[0]ê°€ ì²˜ë¦¬í•¨.
+             *    : cleanServerë¥¼ ìˆ˜í–‰í•˜ê³ , logon ìˆ˜í–‰
              *************************************************/            
 
             if ( mProcess == "P0" )
             {
-                // cleanServer : tar/clean/server start¸¦ ¼öÇàÇÑ´Ù.
+                // cleanServer : tar/clean/server startë¥¼ ìˆ˜í–‰í•œë‹¤.
                 mRunner->clear();
                 cleanServer(); 
                 mLogon = ID_FALSE;
@@ -1580,15 +1580,15 @@ Laborer::executeArtTest( SChar*       aBuffer,
         else
         {
             /*************************************************
-             * 2. Àç±¸µ¿ÀÌÈÄ¿¡µµ logon ¼º°ø
+             * 2. ì¬êµ¬ë™ì´í›„ì—ë„ logon ì„±ê³µ
              *************************************************/            
             //cout << "[step0-1] : logon success" << endl; 
             //cout << " STARTUP SUCCESS ::  " << endl;
         }
 
         /*************************************************
-         * 3. HITÀÌÈÄ¿¡ Restart ÇÃ·¡±×¸¦ ID_FALSE·Î ¼³Á¤
-         *    : PROCESS[0]°¡ Ã³¸®ÇÔ.
+         * 3. HITì´í›„ì— Restart í”Œë˜ê·¸ë¥¼ ID_FALSEë¡œ ì„¤ì •
+         *    : PROCESS[0]ê°€ ì²˜ë¦¬í•¨.
          *************************************************/            
         if ( mProcess == "P0" )
         {
@@ -1598,25 +1598,25 @@ Laborer::executeArtTest( SChar*       aBuffer,
     else 
     {
         /*************************************************
-         * ³ª. ÀÏ¹İÀûÀÎ °æ¿ì ( restart ÇÃ·¡±×°¡ FALSE ÀÎ°æ¿ì )
+         * ë‚˜. ì¼ë°˜ì ì¸ ê²½ìš° ( restart í”Œë˜ê·¸ê°€ FALSE ì¸ê²½ìš° )
          *************************************************/
         
         if ( logon() != IDE_SUCCESS )
         {
             /*************************************************
-             * 1. logon ½ÇÆĞ
+             * 1. logon ì‹¤íŒ¨
              *************************************************/
             
             /*
-               ¼­¹ö°¡ ¿î¿µÁßÀÌÁö ¾ÊÀº°æ¿ì¿¡ º¹±¸ÁöÁ¡ °ü·Ã ¸í·ÉÀÌ Å×½ºÆ®ÄÉÀÌ½º
-               »ó¿¡ Á¸ÀçÇÏ´Â °æ¿ì ½ÇÆĞÇÏ°Ô µÇ´Âµ¥ ÀÌ¶§¿¡´Â logonÀÌ ½ÇÆĞÇÏ¹Ç·Î
-               Áß´ÜÇÏÁö ¾Ê°í ¼öÇàÇÏµµ·Ï Ã³¸®
+               ì„œë²„ê°€ ìš´ì˜ì¤‘ì´ì§€ ì•Šì€ê²½ìš°ì— ë³µêµ¬ì§€ì  ê´€ë ¨ ëª…ë ¹ì´ í…ŒìŠ¤íŠ¸ì¼€ì´ìŠ¤
+               ìƒì— ì¡´ì¬í•˜ëŠ” ê²½ìš° ì‹¤íŒ¨í•˜ê²Œ ë˜ëŠ”ë° ì´ë•Œì—ëŠ” logonì´ ì‹¤íŒ¨í•˜ë¯€ë¡œ
+               ì¤‘ë‹¨í•˜ì§€ ì•Šê³  ìˆ˜í–‰í•˜ë„ë¡ ì²˜ë¦¬
                
-               --+TEST_RECPTR CLEAR; // ½ÇÇàµÉ¸® ¾ø´Ù. ½ÇÆĞÁö¸¸ °è¼ÓÁøÇàÇÑ´Ù.
+               --+TEST_RECPTR CLEAR; // ì‹¤í–‰ë ë¦¬ ì—†ë‹¤. ì‹¤íŒ¨ì§€ë§Œ ê³„ì†ì§„í–‰í•œë‹¤.
                --+clean;
                --+server start;
 
-               ÇÏÁö¸¸, ±× ¿ÜÀÇ ¸í·ÉÀ» ¼öÇàÇÏ´Ù logonÀÌ ½ÇÆĞÇÏ¸é Áß´Ü..
+               í•˜ì§€ë§Œ, ê·¸ ì™¸ì˜ ëª…ë ¹ì„ ìˆ˜í–‰í•˜ë‹¤ logonì´ ì‹¤íŒ¨í•˜ë©´ ì¤‘ë‹¨..
             */
             
             IDE_TEST( aQuery->type != RECPOINT_COM );
@@ -1624,13 +1624,13 @@ Laborer::executeArtTest( SChar*       aBuffer,
         else
         {
             /*************************************************
-             * 2. logonÀÌ ¼º°ø
+             * 2. logonì´ ì„±ê³µ
              *************************************************/
         }
     }
 
     /*************************************************
-     * ´Ù. Query ½ÇÇà 
+     * ë‹¤. Query ì‹¤í–‰ 
      *************************************************/
     
     makeTdxPrefix();
@@ -1643,11 +1643,11 @@ Laborer::executeArtTest( SChar*       aBuffer,
     sResultOnly = mRunner->getResultOnly();
     sTdxResultTemp = mTdxPrefix + sResultOnly;
 
-    // out ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
+    // out íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
     sResult = mRunner->getResult( ID_TRUE );
 
     /*************************************************
-     * ¶ó. Query °á°ú È®ÀÎ 
+     * ë¼. Query ê²°ê³¼ í™•ì¸ 
      *************************************************/
     if( (sResult.find( "ERR-91015" ) !=  STAFString::kNPos) ||
         (sResult.find( "ERR-91020" ) !=  STAFString::kNPos) ||
@@ -1659,8 +1659,8 @@ Laborer::executeArtTest( SChar*       aBuffer,
         sResult2 = mRunner->getResult();
         mRunner->clear(); 
         /*************************************************
-        * 1. ¼­¹ö/Å¬¶óÀÌ¾ğÆ® Á¢¼Ó°ü·Ã ½ÇÇà ¿¡·¯ ¹ß»ı½Ã
-        *    ±âº»ÀûÀ¸·Î query Àç¼öÇà
+        * 1. ì„œë²„/í´ë¼ì´ì–¸íŠ¸ ì ‘ì†ê´€ë ¨ ì‹¤í–‰ ì—ëŸ¬ ë°œìƒì‹œ
+        *    ê¸°ë³¸ì ìœ¼ë¡œ query ì¬ìˆ˜í–‰
         *************************************************/
         IDE_TEST( retryExecution4ART( aBuffer,
                                       aQuery,
@@ -1673,15 +1673,15 @@ Laborer::executeArtTest( SChar*       aBuffer,
     
     if( mSbegin != ID_TRUE )
     {
-        /* SKIP_BEGINÀÌ ¾Æ´Ñ °æ¿ì query¿Í result¸¦ Ãâ·ÂÇÔ */
+        /* SKIP_BEGINì´ ì•„ë‹Œ ê²½ìš° queryì™€ resultë¥¼ ì¶œë ¥í•¨ */
         
         if ( aQuery->type != RECPOINT_COM )
         {
             if ( (sIsCheckServer == ID_TRUE) && 
                  (sIsBUGKILL == ID_FALSE) )
             {
-                /* º¹±¸ÁöÁ¡¿¡ ÀÇÇØ Á×Àº °æ¿ì 
-                   Ã¹¹øÂ° error¸¦ ÀúÀåÇÏ¿´´Ù°¡ Ãâ·ÂÇÔ */
+                /* ë³µêµ¬ì§€ì ì— ì˜í•´ ì£½ì€ ê²½ìš° 
+                   ì²«ë²ˆì§¸ errorë¥¼ ì €ì¥í•˜ì˜€ë‹¤ê°€ ì¶œë ¥í•¨ */
                 mRunner->clear();
                 mResult += sResult2;
             }
@@ -1692,10 +1692,10 @@ Laborer::executeArtTest( SChar*       aBuffer,
         }
         else
         {
-            /* º¹±¸ÁöÁ¡ ¸í·É ¼öÇàÈÄ Àç±¸µ¿(checkserver)ÀÌ
-               µÈÀÌÈÄ¿¡ fatal Ã³¸®°¡ µÇ¸é ÀÌÈÄ¿¡ clean
-               ¼­¹ö¸¦ ÇÏ±â¶§¹®¿¡ ¿©±â¼­ fatal ÇÃ·¡±×¸¦
-               clearÇÑ´Ù. ÀÌ´Â Å×½ºÆ®¸¦ °è¼Ó ¼öÇàÇÏ±â À§ÇÔ */
+            /* ë³µêµ¬ì§€ì  ëª…ë ¹ ìˆ˜í–‰í›„ ì¬êµ¬ë™(checkserver)ì´
+               ëœì´í›„ì— fatal ì²˜ë¦¬ê°€ ë˜ë©´ ì´í›„ì— clean
+               ì„œë²„ë¥¼ í•˜ê¸°ë•Œë¬¸ì— ì—¬ê¸°ì„œ fatal í”Œë˜ê·¸ë¥¼
+               clearí•œë‹¤. ì´ëŠ” í…ŒìŠ¤íŠ¸ë¥¼ ê³„ì† ìˆ˜í–‰í•˜ê¸° ìœ„í•¨ */
             
             mRunner->clear();
 
@@ -1707,7 +1707,7 @@ Laborer::executeArtTest( SChar*       aBuffer,
     }
     else
     {
-        /* SKIP_BEGIN ÀÎ °æ¿ì query¸¸ Ãâ·ÂÇÔ */
+        /* SKIP_BEGIN ì¸ ê²½ìš° queryë§Œ ì¶œë ¥í•¨ */
         mRunner->clear();
 
         mResult += "$"; 
@@ -1733,10 +1733,10 @@ Laborer::executeArtTest( SChar*       aBuffer,
 }
 
 /*************************************************
- * Decription : query Àç¼öÇà
+ * Decription : query ì¬ìˆ˜í–‰
  *
- * ¸¸¾à, query Àç¼öÇàÀÌ ½ÇÆĞÇÏ¸é ¼­¹öºñÁ¤»óÁ¾·á
- * ¿øÀÎ È®ÀÎÇÏ¿© Àç±¸µ¿ÇÏ´øÁö FATAL Ã³¸®½ÃÅ´
+ * ë§Œì•½, query ì¬ìˆ˜í–‰ì´ ì‹¤íŒ¨í•˜ë©´ ì„œë²„ë¹„ì •ìƒì¢…ë£Œ
+ * ì›ì¸ í™•ì¸í•˜ì—¬ ì¬êµ¬ë™í•˜ë˜ì§€ FATAL ì²˜ë¦¬ì‹œí‚´
  *************************************************/
 IDE_RC
 Laborer::retryExecution4ART( SChar*       aBuffer,
@@ -1753,9 +1753,9 @@ Laborer::retryExecution4ART( SChar*       aBuffer,
     if ( mRunner->logon( aLogonData ) == IDE_SUCCESS )
     {
         /*************************************************
-         * 1) Àç¼öÇà½Ã logon ¼º°ø
-         *     ´Ù½Ã Query ¼öÇà ¼º°øÇÏ¸é °è¼Ó ÁøÇà
-         *     ¼öÇà ½ÇÆĞÇÏ¸é ¼­¹ö°¡ Á×Àº ¿øÀÎ È®ÀÎÇØ¾ßÇÔ
+         * 1) ì¬ìˆ˜í–‰ì‹œ logon ì„±ê³µ
+         *     ë‹¤ì‹œ Query ìˆ˜í–‰ ì„±ê³µí•˜ë©´ ê³„ì† ì§„í–‰
+         *     ìˆ˜í–‰ ì‹¤íŒ¨í•˜ë©´ ì„œë²„ê°€ ì£½ì€ ì›ì¸ í™•ì¸í•´ì•¼í•¨
          *************************************************/
         makeTdxPrefix();
         sTdxQueryTemp = mTdxPrefix + "$" + mProcess + "> " + aBuffer + "\n";
@@ -1765,8 +1765,8 @@ Laborer::retryExecution4ART( SChar*       aBuffer,
         {
             *aIsCheckServer = ID_FALSE;
             
-            // tdx ÆÄÀÏ¿¡ µé¾î°¡´Â ³»¿ë
-            // execute ÈÄ¿¡, result¸¸ write
+            // tdx íŒŒì¼ì— ë“¤ì–´ê°€ëŠ” ë‚´ìš©
+            // execute í›„ì—, resultë§Œ write
             makeTdxPrefix();
             sResultOnly = mRunner->getResultOnly();
             sTdxResultTemp = mTdxPrefix + sResultOnly;
@@ -1779,14 +1779,14 @@ Laborer::retryExecution4ART( SChar*       aBuffer,
     else
     {
         /*************************************************
-         * 2) Àç¼öÇà½Ã logon ½ÇÆĞ
-         *    ¼­¹ö°¡ Á×Àº ¿øÀÎ È®ÀÎ ÇÊ¿äÇÔ.
+         * 2) ì¬ìˆ˜í–‰ì‹œ logon ì‹¤íŒ¨
+         *    ì„œë²„ê°€ ì£½ì€ ì›ì¸ í™•ì¸ í•„ìš”í•¨.
          *************************************************/
         *aIsCheckServer = ID_TRUE;
     }
 
     /*************************************************
-     * 3) ¼­¹ö ºñÁ¤»ó Á¾·á ¿øÀÎ È®ÀÎ ÈÄ ¼­¹ö Àç±¸µ¿
+     * 3) ì„œë²„ ë¹„ì •ìƒ ì¢…ë£Œ ì›ì¸ í™•ì¸ í›„ ì„œë²„ ì¬êµ¬ë™
      *************************************************/
     if ( *aIsCheckServer == ID_TRUE )
     {
@@ -1805,11 +1805,11 @@ Laborer::retryExecution4ART( SChar*       aBuffer,
 }
 
 /*************************************************
- * Decription : ¼­¹öÀÇ ºñÁ¤»óÁ¾·á ¿øÀÎ È®ÀÎ
+ * Decription : ì„œë²„ì˜ ë¹„ì •ìƒì¢…ë£Œ ì›ì¸ í™•ì¸
  *
- * 1. º¹±¸ÁöÁ¡¿¡ ÀÇÇØ ºñÁ¤»óÁ¾·áÇß´ÂÁö È®ÀÎ
- *    -> ¼­¹ö Àç±¸µ¿
- * 2. ¹ö±×¿¡ ÀÇÇØ Á×Àº °æ¿ì FATAL Ã³¸®
+ * 1. ë³µêµ¬ì§€ì ì— ì˜í•´ ë¹„ì •ìƒì¢…ë£Œí–ˆëŠ”ì§€ í™•ì¸
+ *    -> ì„œë²„ ì¬êµ¬ë™
+ * 2. ë²„ê·¸ì— ì˜í•´ ì£½ì€ ê²½ìš° FATAL ì²˜ë¦¬
  *************************************************/
 IDE_RC
 Laborer::doCheckServer4ART( queryData*    aQuery,
@@ -1823,18 +1823,18 @@ Laborer::doCheckServer4ART( queryData*    aQuery,
         {
              *aIsBugKILL = ID_FALSE;
             /*************************************************
-             * A. º¹±¸ÁöÁ¡¿¡ ÀÇÇØ ¼­¹ö ºñÁ¤»óÁ¾·á
-             *    : ´Ù½Ã ¼­¹ö Àç±¸µ¿½ÃÅ´
+             * A. ë³µêµ¬ì§€ì ì— ì˜í•´ ì„œë²„ ë¹„ì •ìƒì¢…ë£Œ
+             *    : ë‹¤ì‹œ ì„œë²„ ì¬êµ¬ë™ì‹œí‚´
              *************************************************/
             mServicer->setArtRestart( ID_TRUE );
             mLogon = ID_FALSE;
 
             if ( mServicer->getAtsTestKind() == ATS_TEST_FULL )
             {
-                // full testÄÉÀÌ½ºÀÎ °æ¿ì º¹±¸ÁöÁ¡À» ¼­¹ö°¡
-                // °è¼Ó ºñÁ¤»óÁ¾·áµÇ±â ¶§¹®¿¡ ¼­¹ö°¡ Àç±¸µ¿µÈ
-                // ÀÌÈÄ¿¡ °è¼Ó È°¼ºÈ­ ½ÃÄÑ¾ß ÇÏ±â¶§¹®¿¡
-                // query¸¦ °è¼Ó °­Á¦·Î Ãß°¡ÇÔ.
+                // full testì¼€ì´ìŠ¤ì¸ ê²½ìš° ë³µêµ¬ì§€ì ì„ ì„œë²„ê°€
+                // ê³„ì† ë¹„ì •ìƒì¢…ë£Œë˜ê¸° ë•Œë¬¸ì— ì„œë²„ê°€ ì¬êµ¬ë™ëœ
+                // ì´í›„ì— ê³„ì† í™œì„±í™” ì‹œì¼œì•¼ í•˜ê¸°ë•Œë¬¸ì—
+                // queryë¥¼ ê³„ì† ê°•ì œë¡œ ì¶”ê°€í•¨.
                 mQuery.push_front( *aQueryRecPtr );
             }
         }
@@ -1842,7 +1842,7 @@ Laborer::doCheckServer4ART( queryData*    aQuery,
         {
             *aIsBugKILL = ID_TRUE;
             /*************************************************
-             * B. ÀÏ¹İÀûÀÎ ¹ö±×·Î ÀÎÇÑ ¼­¹ö ºñÁ¤»óÁ¾·á
+             * B. ì¼ë°˜ì ì¸ ë²„ê·¸ë¡œ ì¸í•œ ì„œë²„ ë¹„ì •ìƒì¢…ë£Œ
              *************************************************/
             if ( aQuery->type != RECPOINT_COM ) 
             {
@@ -1914,7 +1914,7 @@ Laborer::runRsystem( STAFString aIn, STAFString aAlias, STAFString aID )
     rsysBuf    sRsysBuf;
     int        sRsysFd = 0;
 
-    // ÇöÀç µğ·ºÅä¸®ÀÇ °æ·Î¸¦ ¾ò¾î¿Â´Ù.
+    // í˜„ì¬ ë””ë ‰í† ë¦¬ì˜ ê²½ë¡œë¥¼ ì–»ì–´ì˜¨ë‹¤.
     sData = mServicer->getPath() + FILE_SEPARATORS;
     copyData( sPath,
               sData.buffer(),

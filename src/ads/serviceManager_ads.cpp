@@ -12,13 +12,13 @@
 
 extern STAFString       gLineSep;
 extern const STAFString gAdsVersionInfo("3.0.1_test");
-// ATAF ¹öÀüÀ» ÁöÁ¤ÇÑ´Ù.
-// »ç¿ëÀÚ´Â ¾Æ·¡ ¸í·É¾î¸¦ ÅëÇØ¼­ ¹öÀüÀ» È®ÀÎÇÒ ¼ö ÀÖ´Ù.
+// ATAF ë²„ì „ì„ ì§€ì •í•œë‹¤.
+// ì‚¬ìš©ìžëŠ” ì•„ëž˜ ëª…ë ¹ì–´ë¥¼ í†µí•´ì„œ ë²„ì „ì„ í™•ì¸í•  ìˆ˜ ìžˆë‹¤.
 // staf local ats version
-// °¢ ¼öÀÚ°¡ ÀÇ¹ÌÇÏ´Â ³»¿ëÀº ¾Æ·¡¿Í °°´Ù.
-// 3: STAF ¹öÀü
-// 0: ¼­ºñ½º°¡ Ãß°¡µÇ´Â °æ¿ì ++
-// 1: ¹ö±×°¡ fixµÇ´Â °æ¿ì ++
+// ê° ìˆ˜ìžê°€ ì˜ë¯¸í•˜ëŠ” ë‚´ìš©ì€ ì•„ëž˜ì™€ ê°™ë‹¤.
+// 3: STAF ë²„ì „
+// 0: ì„œë¹„ìŠ¤ê°€ ì¶”ê°€ë˜ëŠ” ê²½ìš° ++
+// 1: ë²„ê·¸ê°€ fixë˜ëŠ” ê²½ìš° ++
 extern const STAFString gLocal("local");
 extern const STAFString gHelp("help");
 extern const STAFString gVar("var");

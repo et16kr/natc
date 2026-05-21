@@ -95,8 +95,8 @@ public class ViewDiff extends JPanel {
             {
                 findFile.getAllEnv();
 
-                // altibase.info ÆÄÀÏÀ» ÀĞ¾î¼­
-                // lst, outÀÇ ÆÄÀÏ ÀÌ¸§°ú path¸¦ ±¸¼ºÇÏ´Â Á¤º¸¸¦ °¡Á®¿Â´Ù.
+                // altibase.info íŒŒì¼ì„ ì½ì–´ì„œ
+                // lst, outì˜ íŒŒì¼ ì´ë¦„ê³¼ pathë¥¼ êµ¬ì„±í•˜ëŠ” ì •ë³´ë¥¼ ê°€ì ¸ì˜¨ë‹¤.
                 findFile.readFile();
                 findFile.findPathName( t_case );
 
@@ -151,8 +151,8 @@ public class ViewDiff extends JPanel {
             {
                 findFile.getAllEnv();
 
-                // altibase.info ÆÄÀÏÀ» ÀĞ¾î¼­
-                // lst, outÀÇ ÆÄÀÏ ÀÌ¸§°ú path¸¦ ±¸¼ºÇÏ´Â Á¤º¸¸¦ °¡Á®¿Â´Ù.
+                // altibase.info íŒŒì¼ì„ ì½ì–´ì„œ
+                // lst, outì˜ íŒŒì¼ ì´ë¦„ê³¼ pathë¥¼ êµ¬ì„±í•˜ëŠ” ì •ë³´ë¥¼ ê°€ì ¸ì˜¨ë‹¤.
                 findFile.readFile();
                 findFile.findPathName( t_case );
 
@@ -213,8 +213,8 @@ public class ViewDiff extends JPanel {
                 try {
                     findFile.getAllEnv();
 
-                    // altibase.info ÆÄÀÏÀ» ÀĞ¾î¼­
-                    // lst, outÀÇ ÆÄÀÏ ÀÌ¸§°ú path¸¦ ±¸¼ºÇÏ´Â Á¤º¸¸¦ °¡Á®¿Â´Ù.
+                    // altibase.info íŒŒì¼ì„ ì½ì–´ì„œ
+                    // lst, outì˜ íŒŒì¼ ì´ë¦„ê³¼ pathë¥¼ êµ¬ì„±í•˜ëŠ” ì •ë³´ë¥¼ ê°€ì ¸ì˜¨ë‹¤.
                     findFile.readFile();
                     findFile.findPathName( t_case );
 

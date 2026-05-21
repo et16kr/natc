@@ -82,7 +82,7 @@ AdsServicer::run()
 IDE_RC
 AdsServicer::parseOption()
 {
-    // »ç¿ëÀÚ°¡ ÁöÁ¤ÇÑ ¿É¼ÇÀ» ¾ò¾î¿Â´Ù.
+    // ì‚¬ìš©ìžê°€ ì§€ì •í•œ ì˜µì…˜ì„ ì–»ì–´ì˜¨ë‹¤.
     // staf local ads run "QUERY" dsn "DSN" user "USER" passwd "PASSWORD" nls "NLS_USE" port "PORT" conntype "CONNTYPE"
 
     STAFResultPtr             sResult;
@@ -198,7 +198,7 @@ AdsServicer::runReal()
     {
     }
 
-    // È¯°æ ¼¼ÆÃ
+    // í™˜ê²½ ì„¸íŒ…
     if( sIsUserProcName == ID_TRUE )
     {
         mRunner->setUser( mQuery.strip().subWord( 1, 1 ).replace( ".", " " ).subWord( 0, 1 ) );
@@ -211,7 +211,7 @@ AdsServicer::runReal()
     mRunner->setLoginUser( mUser );
     mRunner->setPassword( mPasswd );
 
-    // ½ÇÁ¦ ¼öÇà ºÎºÐ 
+    // ì‹¤ì œ ìˆ˜í–‰ ë¶€ë¶„ 
     IDE_TEST( mRunner->logon( mDsn,
                               mUser,
                               mPasswd,

@@ -12,8 +12,8 @@
     iSQLParser.y
 
    DESCRIPTION
-    iSQLPreLexer�κ��� �Ѱܹ��� �Է¹��۸� parsing.
-    �̶� isql command�� �Ľ��ϰ� sql command�� �״�� ������ �����Ѵ�.
+    iSQLPreLexer로부터 넘겨받은 입력버퍼를 parsing.
+    이때 isql command만 파싱하고 sql command는 그대로 서버로 전송한다.
 
    PUBLIC FUNCTION(S)
 

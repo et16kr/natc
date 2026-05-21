@@ -246,7 +246,7 @@ PlatformManager::load( SChar *aFileName )
     return IDE_FAILURE;
 }
 
-// ¼­¹ö ±×·ì¿¡ ÀÚ½ÅÀÇ ¾ÆÀÌÇÇ°¡ Á¸ÀçÇÏ´ÂÁö Ã¼Å©
+// ì„œë²„ ê·¸ë£¹ì— ìì‹ ì˜ ì•„ì´í”¼ê°€ ì¡´ì¬í•˜ëŠ”ì§€ ì²´í¬
 idBool 
 PlatformManager::contains( STAFString aPlatGroup )
 {

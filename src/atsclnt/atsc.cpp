@@ -90,7 +90,7 @@ getopt(SInt nargc, SChar * const *nargv, const SChar *ostr)
 }
 #endif
 
-/*  PRJ-1552 º¹±¸ÁöÁ¡¸ñ·ÏÀÇ STL list */
+/*  PRJ-1552 ë³µêµ¬ì§€ì ëª©ë¡ì˜ STL list */
 RecPtrList         gRecPtrList;
 
 idBool runnable( PlatformManager *aPM,
@@ -1680,7 +1680,7 @@ printf( "%c\n", sCmdOpt );
         sEnvAll = getenv( "ENV_PROPERTIES" );
     }
 
-    /*  ATS Å×½ºÆ®Å¸ÀÔ °áÁ¤ */
+    /*  ATS í…ŒìŠ¤íŠ¸íƒ€ìž… ê²°ì • */
     
     if ( sIsArt == ID_FALSE  )
     {
@@ -1689,8 +1689,8 @@ printf( "%c\n", sCmdOpt );
     }
     else
     {
-        /* º¹±¸ÁöÁ¡¸ñ·Ï ÆÄÀÏÀÇ À§Ä¡
-           (°íÁ¤µÊ $ALTIBASE_HOME/conf/recovery.dat) */
+        /* ë³µêµ¬ì§€ì ëª©ë¡ íŒŒì¼ì˜ ìœ„ì¹˜
+           (ê³ ì •ë¨ $ALTIBASE_HOME/conf/recovery.dat) */
            
         sprintf( sFilePath, 
                         "%s%s%s%s%s",
@@ -1703,7 +1703,7 @@ printf( "%c\n", sCmdOpt );
         sRECDATAFILE = STAFString( sFilePath );
 
         /*
-           º¹±¸Å×½ºÆ®Å¸ÀÔ ¼³Á¤
+           ë³µêµ¬í…ŒìŠ¤íŠ¸íƒ€ìž… ì„¤ì •
            1) Regression Test
            2) Sequential Test
            3) Full Test
@@ -1719,8 +1719,8 @@ printf( "%c\n", sCmdOpt );
         }
         else if ( sTESTTYPE.find("sequential") != STAFString::kNPos )
         {
-            /* Sequential Test¸¦ À§ÇØ º¹±¸ÁöÁ¡¸ñ·Ï ÆÄÀÏÀ»
-               ÆÇµ¶ÇÏ¿© STL list ±¸Ãà */
+            /* Sequential Testë¥¼ ìœ„í•´ ë³µêµ¬ì§€ì ëª©ë¡ íŒŒì¼ì„
+               íŒë…í•˜ì—¬ STL list êµ¬ì¶• */
             
             if ( loadRECPOINT( sFilePath ) != IDE_SUCCESS )
             {
@@ -1730,7 +1730,7 @@ printf( "%c\n", sCmdOpt );
             sAtsTestType = ATS_TEST_SEQUENTIAL;
             sTotal       = gRecPtrList.size();
             
-            /* STL listÀÇ Ã¹¹øÂ° º¹±¸ÁöÁ¡ ¼±ÅÃ */
+            /* STL listì˜ ì²«ë²ˆì§¸ ë³µêµ¬ì§€ì  ì„ íƒ */
             sRecIterator = gRecPtrList.begin();
         }
         else
@@ -1751,8 +1751,8 @@ printf( "%c\n", sCmdOpt );
     sEnvRESULT     = sEnvRESULT.replace( "/", "\\" );
 #endif
 
-    // ATAF_TEST_CASE/conf¿¡ 
-    // platform.conf¿Í server.conf°¡ ÀÖ´ÂÁö Ã¼Å©ÇÑ´Ù.
+    // ATAF_TEST_CASE/confì— 
+    // platform.confì™€ server.confê°€ ìžˆëŠ”ì§€ ì²´í¬í•œë‹¤.
     checkConfFile( sEnvCASE, sEnvRESULT );
     
     if( sPM.initialize() != IDE_SUCCESS )
@@ -1986,14 +1986,14 @@ printf( "%c\n", sCmdOpt );
             sRequest += " progress ";
             sRequest += sPROGRESS;
 
-            // request ¿É¼ÇÀ¸·Î Ãß°¡µÈ ATS Å×½ºÆ®Å¸ÀÔ
+            // request ì˜µì…˜ìœ¼ë¡œ ì¶”ê°€ëœ ATS í…ŒìŠ¤íŠ¸íƒ€ìž…
             sRequest += " testtype ";
             sRequest +=  STAFHandle::wrapData(sTESTTYPE);
             
-            // º¹±¸Å×½ºÆ® ¼öÇà½Ã Ãß°¡ÀûÀ¸·Î ÇÊ¿äÇÑ ¿É¼Ç
+            // ë³µêµ¬í…ŒìŠ¤íŠ¸ ìˆ˜í–‰ì‹œ ì¶”ê°€ì ìœ¼ë¡œ í•„ìš”í•œ ì˜µì…˜
             if( sAtsTestType != ATS_TEST_NORMAL )
             {
-                // 1) »ç¿ëÇÒ º¹±¸ÁöÁ¡¸ñ·Ï ÆÄÀÏ °æ·Î ¿É¼Ç
+                // 1) ì‚¬ìš©í•  ë³µêµ¬ì§€ì ëª©ë¡ íŒŒì¼ ê²½ë¡œ ì˜µì…˜
                 sRequest += " recdatafile ";
                 sRequest += STAFHandle::wrapData(sRECDATAFILE);
 
@@ -2001,7 +2001,7 @@ printf( "%c\n", sCmdOpt );
                 {
                     sRECPOINTID = *sRecIterator;
 
-                    // 2) Å×½ºÆ®ÇÒ º¹±¸ÁöÁ¡ ID ¿É¼Ç 
+                    // 2) í…ŒìŠ¤íŠ¸í•  ë³µêµ¬ì§€ì  ID ì˜µì…˜ 
                     sRequest += " recpointid ";
                     sRequest += STAFHandle::wrapData(sRECPOINTID.replace(":", "^"));
                 }
@@ -2052,13 +2052,13 @@ printf( "%c\n", sCmdOpt );
                 else if( sResult->result.find( "HIT" ) 
                          != STAFString::kNPos )
                 {
-                    // ARTÀÇ Sequential/Full Å×½ºÆ® HIT °á°ú 
+                    // ARTì˜ Sequential/Full í…ŒìŠ¤íŠ¸ HIT ê²°ê³¼ 
                     sHIT++;
 
                     if ( sAtsTestType == ATS_TEST_SEQUENTIAL )
                     {
-                        /* 1. HITµÈ º¹±¸ÁöÁ¡Àº STL list·ÎºÎÅÍ Á¦°Å
-                           2. HITµÈ °æ¿ì Áö±Ý±îÁöÀÇ MISS ´©Àû°³¼ö ÃÊ±âÈ­ */
+                        /* 1. HITëœ ë³µêµ¬ì§€ì ì€ STL listë¡œë¶€í„° ì œê±°
+                           2. HITëœ ê²½ìš° ì§€ê¸ˆê¹Œì§€ì˜ MISS ëˆ„ì ê°œìˆ˜ ì´ˆê¸°í™” */
                         sRemRecIterator = sRecIterator;
                         sCHKMISS = 0;   
                         sRecIterator++;
@@ -2072,9 +2072,9 @@ printf( "%c\n", sCmdOpt );
 
                     if ( sAtsTestType == ATS_TEST_SEQUENTIAL )
                     {
-                        /* MISS ´©Àû°³¼ö¸¦ Ä«¿îÆ®ÇØ¼­
-                           ´ÙÀ½ º¹±¸ÁöÁ¡À¸·Î ³Ñ¾î°¥Áö °áÁ¤ÇÔ
-                           default °ª : ´©Àû°³¼ö 1°³ÀÌ¸é ³Ñ¾î°¨ */
+                        /* MISS ëˆ„ì ê°œìˆ˜ë¥¼ ì¹´ìš´íŠ¸í•´ì„œ
+                           ë‹¤ìŒ ë³µêµ¬ì§€ì ìœ¼ë¡œ ë„˜ì–´ê°ˆì§€ ê²°ì •í•¨
+                           default ê°’ : ëˆ„ì ê°œìˆ˜ 1ê°œì´ë©´ ë„˜ì–´ê° */
                         sCHKMISS++;
                         if ( sCHKMISS % 1 == 0 )
                         {
@@ -2119,10 +2119,10 @@ printf( "%c\n", sCmdOpt );
 
         sIterator++; // go to next testcase
 
-        /* Sequential TestÀÇ °æ¿ì Å×½ºÆ®½´Æ®(*.ts)¸¦
-           ¼öÇàÇÏ´Âµ¥ ÀÖ¾î¼­ ¹«ÇÑÁ¤ ¹Ýº¹¼öÇàÇÒ ¼ö ÀÖ±â¶§¹®¿¡
-           ¿Ï·áÁ¶°ÇÀÎ Hit Ratio¸¦ °è»êÇÏ°í °Ë»çÇÏ¿©
-           Å×½ºÆ®¸¦ ¿Ï·á½ÃÅ´ */
+        /* Sequential Testì˜ ê²½ìš° í…ŒìŠ¤íŠ¸ìŠˆíŠ¸(*.ts)ë¥¼
+           ìˆ˜í–‰í•˜ëŠ”ë° ìžˆì–´ì„œ ë¬´í•œì • ë°˜ë³µìˆ˜í–‰í•  ìˆ˜ ìžˆê¸°ë•Œë¬¸ì—
+           ì™„ë£Œì¡°ê±´ì¸ Hit Ratioë¥¼ ê³„ì‚°í•˜ê³  ê²€ì‚¬í•˜ì—¬
+           í…ŒìŠ¤íŠ¸ë¥¼ ì™„ë£Œì‹œí‚´ */
         if ( sAtsTestType == ATS_TEST_SEQUENTIAL )
         {
             sHitRatio = (sHIT * 100 / sTotal);
@@ -2364,7 +2364,7 @@ SInt checkConfFile( STAFString aEnvCASE,
               aEnvRESULT.buffer(),
               aEnvRESULT.length() );
 
-    // server.conf ÆÄÀÏ À¯¹« Ã¼Å©
+    // server.conf íŒŒì¼ ìœ ë¬´ ì²´í¬
     sprintf( sData3,
              "%s%s%s%s%s",
              sData1, FILE_SEPARATORS, "conf", FILE_SEPARATORS, SERVER_FILE );
@@ -2392,7 +2392,7 @@ SInt checkConfFile( STAFString aEnvCASE,
         return -1;
     }
 
-    // platform.conf ÆÄÀÏ À¯¹« Ã¼Å©
+    // platform.conf íŒŒì¼ ìœ ë¬´ ì²´í¬
     sprintf( sData3,
              "%s%s%s%s%s",
              sData1, FILE_SEPARATORS, "conf", FILE_SEPARATORS, PLATFORM_FILE );

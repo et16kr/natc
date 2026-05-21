@@ -11,7 +11,7 @@ class ReadFile
     public int max_time = 0;
     public int max_process = 0;
 
-    // ÀüÃ¼ ¶óÀÎ ¼ö(¸¶Áö¸· Ãß°¡·Î ³Ö¾îÁØ START ¸¶Å© »©ÁÖ±â À§ÇØ¼­)
+    // ì „ì²´ ë¼ì¸ ìˆ˜(ë§ˆì§€ë§‰ ì¶”ê°€ë¡œ ë„£ì–´ì¤€ START ë§ˆí¬ ë¹¼ì£¼ê¸° ìœ„í•´ì„œ)
     public int total_line_cnt = -1;
 
     public Vector tableData = new Vector();
@@ -59,8 +59,8 @@ class ReadFile
             System.exit(1);
         }
 
-        // max_process¸¦ ±¸ÇÏ±â À§ÇÑ loop
-        // max_timeÀ» ±¸ÇÏ±â À§ÇÑ loop
+        // max_processë¥¼ êµ¬í•˜ê¸° ìœ„í•œ loop
+        // max_timeì„ êµ¬í•˜ê¸° ìœ„í•œ loop
         while( true )
         {
             // get line
@@ -69,8 +69,8 @@ class ReadFile
                 // String Tokenizer
                 try
                 {
-                    // readLine() ÈÄ ´Ù½Ã ÀÌ ÁöÁ¡À¸·Î µ¹¾Æ¿À±â À§ÇØ marking
-                    // ÃÖ¼ÒÇÑ ÇÑ ¶óÀÎÀÇ ±ÛÀÚ¼ö¸¸Å­ µÇ¾ß ÇÑ´Ù.
+                    // readLine() í›„ ë‹¤ì‹œ ì´ ì§€ì ìœ¼ë¡œ ëŒì•„ì˜¤ê¸° ìœ„í•´ marking
+                    // ìµœì†Œí•œ í•œ ë¼ì¸ì˜ ê¸€ììˆ˜ë§Œí¼ ë˜ì•¼ í•œë‹¤.
                     bufReader1.mark( 300 );
                 }
                 catch( IOException e )
@@ -95,7 +95,7 @@ class ReadFile
                     {
                         strToken = stok.nextToken();
 
-                        // parseInt ½Ã, try, catch ÇØÁà¾ß ÇÔ
+                        // parseInt ì‹œ, try, catch í•´ì¤˜ì•¼ í•¨
                         switch ( i )
                         {
                             case 2:
@@ -143,7 +143,7 @@ class ReadFile
               // Stop readLine if null EOF same == null
                 break;
             }
-            // total_lint_cnt Áõ°¡
+            // total_lint_cnt ì¦ê°€
             this.total_line_cnt++;
         }
         try
@@ -160,38 +160,38 @@ class ReadFile
         // System.out.println( "!!! " + this.total_line_cnt );
         // System.exit(1);
 
-        // ¿ì¼± tableData¾ÈÀÇ ¸ğµç Element¸¦ ÃÊ±âÈ­ÇØÁà¾ß ÇÑ´Ù.
+        // ìš°ì„  tableDataì•ˆì˜ ëª¨ë“  Elementë¥¼ ì´ˆê¸°í™”í•´ì¤˜ì•¼ í•œë‹¤.
         for ( i = 0; i < ( this.total_line_cnt ) * ( this.max_process + 2 ); i++ )
         {
             tableData.add( "" );
         }
 
-        // ÃÑ ÄÃ·³ÀÇ °³¼ö
+        // ì´ ì»¬ëŸ¼ì˜ ê°œìˆ˜
         add_row = this.max_process + 2;
 
-        // vector¿¡ µ¥ÀÌÅÍ °ªÀ» Áı¾î³Ö´Â loop
-        // ¿©±â¼­ ¸¸µç vector¸¦ °¡Áö°í, TableModelÀ» ¸¸µç´Ù.
+        // vectorì— ë°ì´í„° ê°’ì„ ì§‘ì–´ë„£ëŠ” loop
+        // ì—¬ê¸°ì„œ ë§Œë“  vectorë¥¼ ê°€ì§€ê³ , TableModelì„ ë§Œë“ ë‹¤.
         while( true )
         {
             // get line
             try
             {
-                // readLine() ÈÄ ´Ù½Ã ÀÌ ÁöÁ¡À¸·Î µ¹¾Æ¿À±â À§ÇØ marking
-                // ÃÖ¼ÒÇÑ ÇÑ ¶óÀÎÀÇ ±ÛÀÚ¼ö¸¸Å­ µÇ¾ß ÇÑ´Ù.
+                // readLine() í›„ ë‹¤ì‹œ ì´ ì§€ì ìœ¼ë¡œ ëŒì•„ì˜¤ê¸° ìœ„í•´ marking
+                // ìµœì†Œí•œ í•œ ë¼ì¸ì˜ ê¸€ììˆ˜ë§Œí¼ ë˜ì•¼ í•œë‹¤.
                 bufReader2.mark( 300 );
 
-                // start mark°¡ ÀÖ°í, strBuf¿¡ ³»¿ëÀÌ µé¾îÀÖÀ¸¸é tableData¿¡ ÀÔ·ÂÇÑ´Ù.
+                // start markê°€ ìˆê³ , strBufì— ë‚´ìš©ì´ ë“¤ì–´ìˆìœ¼ë©´ tableDataì— ì…ë ¥í•œë‹¤.
                 if ( bufReader2.readLine().startsWith( "&^<@!START!@>") )
                 {
                     bufReader2.reset();
 
                     if ( strBuf.toString().length() != 0 )
                     {
-                        // START¹Ù·Î Àü¿¡ ÀĞÀº °ÍÀ» ¾´´Ù.
+                        // STARTë°”ë¡œ ì „ì— ì½ì€ ê²ƒì„ ì“´ë‹¤.
                         tableData.setElementAt( String.valueOf( cur_time ), cur_line - add_row );
                         tableData.setElementAt( bufReader2.readLine(), cur_line - add_row + cur_process + 1 );
 
-                        // strBuf ÃÊ±âÈ­
+                        // strBuf ì´ˆê¸°í™”
                         strBuf.delete( 0, strBuf.capacity() );
                         strBuf.setLength( 0 );
                     }
@@ -202,7 +202,7 @@ class ReadFile
                     {
                         strToken =  stok.nextToken();
 
-                        // parseInt ½Ã, try, catch ÇØÁà¾ß ÇÔ
+                        // parseInt ì‹œ, try, catch í•´ì¤˜ì•¼ í•¨
                         switch ( i )
                         {
                             case 0:
@@ -219,7 +219,7 @@ class ReadFile
                                 {
                                     cur_time = Integer.parseInt( strToken );
 
-                                    // ½Ã°£Àº Ç×»ó ÄÃ·³0 ¿¡ ÂïÈù´Ù.
+                                    // ì‹œê°„ì€ í•­ìƒ ì»¬ëŸ¼0 ì— ì°íŒë‹¤.
                                     tableData.setElementAt( String.valueOf( cur_time ), cur_line );
                                 }
                                 catch ( Exception ex )
@@ -241,11 +241,11 @@ class ReadFile
                                 }
                                 break;
                             }
-                            // ½ÇÁ¦ ³»¿ë( readLineÀÇ ¸¶Áö¸· ºÎºĞ )
+                            // ì‹¤ì œ ë‚´ìš©( readLineì˜ ë§ˆì§€ë§‰ ë¶€ë¶„ )
                             case 3:
                             {
-                                // cur_time, cur_process, max_process¸¦ ÀÌ¿ëÇÏ¿© °¢ ¿ø¼Ò°¡
-                                // tableÀÇ ¾îµğ¿¡ ÀÔ·ÂÇÒÁö °áÁ¤ÇÑ´Ù.
+                                // cur_time, cur_process, max_processë¥¼ ì´ìš©í•˜ì—¬ ê° ì›ì†Œê°€
+                                // tableì˜ ì–´ë””ì— ì…ë ¥í• ì§€ ê²°ì •í•œë‹¤.
                                 tableData.setElementAt( strToken, cur_line + cur_process + 1 );
                                 break;
                             }
@@ -283,18 +283,18 @@ class ReadFile
         }
     }
 
-    // TimeÀ¸·Î ¿À¸§Â÷¼ø Á¤·ÄÇÑ´Ù.
+    // Timeìœ¼ë¡œ ì˜¤ë¦„ì°¨ìˆœ ì •ë ¬í•œë‹¤.
     void tableSort()
     {
         int i, j, k;
         int cell_value1 = 0;
         int cell_value2 = 0;
 
-        // ÃÑ ÄÃ·³ÀÇ °³¼ö
+        // ì´ ì»¬ëŸ¼ì˜ ê°œìˆ˜
         int add_row = this.max_process + 2;
 
-        // ¿ì¼± tableData¾ÈÀÇ ¸ğµç Element¸¦ ÃÊ±âÈ­ÇØÁà¾ß ÇÑ´Ù.
-        // temp´Â ÄÃ·³ÀÇ ¼ö¸¸Å­ÀÇ element¸¦ °®´Â´Ù.
+        // ìš°ì„  tableDataì•ˆì˜ ëª¨ë“  Elementë¥¼ ì´ˆê¸°í™”í•´ì¤˜ì•¼ í•œë‹¤.
+        // tempëŠ” ì»¬ëŸ¼ì˜ ìˆ˜ë§Œí¼ì˜ elementë¥¼ ê°–ëŠ”ë‹¤.
         for ( i = 0; i < add_row; i++ )
         {
             temp.add( "" );
@@ -312,7 +312,7 @@ class ReadFile
 
                 if ( cell_value2 > cell_value1 )
                 {
-                    // Vector temp¿¡ ÇÑÁÙÀÇ ¿ø¼Ò¸¦ ³Ö±â À§ÇÑ loop
+                    // Vector tempì— í•œì¤„ì˜ ì›ì†Œë¥¼ ë„£ê¸° ìœ„í•œ loop
                     for( k = 0; k < add_row; k++ )
                     {
                         temp.setElementAt( tableData.elementAt((j - 1) * add_row + k), k );
@@ -341,8 +341,8 @@ class MakeTable extends AbstractTableModel
     {
         this.max_row = max_time;
 
-        // process°¡ 0ºÎÅÍ ½ÃÀÛÇÏ±â ¶§¹®¿¡ 1 ´õÇÏ°í,
-        // ¸Ç Ã³À½ columnÀº timeÀÌ¹Ç·Î 1 ´õÇÑ´Ù.
+        // processê°€ 0ë¶€í„° ì‹œì‘í•˜ê¸° ë•Œë¬¸ì— 1 ë”í•˜ê³ ,
+        // ë§¨ ì²˜ìŒ columnì€ timeì´ë¯€ë¡œ 1 ë”í•œë‹¤.
         this.max_column = max_process + 2;
         this.tableData = td;
     }
@@ -463,7 +463,7 @@ class TDXView
         ReadFile rf = new ReadFile( args[0] );
         rf.readFile();
 
-        // Ã¹¹øÂ° ÄÃ·³ÀÎ TimeÀ¸·Î ¿À¸§Â÷¼ø Á¤·ÄÇÑ´Ù.
+        // ì²«ë²ˆì§¸ ì»¬ëŸ¼ì¸ Timeìœ¼ë¡œ ì˜¤ë¦„ì°¨ìˆœ ì •ë ¬í•œë‹¤.
         rf.tableSort();
 
         MakeTable mt = new MakeTable( rf.total_line_cnt, rf.max_process, rf.tableData );

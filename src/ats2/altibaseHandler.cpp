@@ -33,11 +33,11 @@ AltibaseHandler::initialize( logonData *aLogonData,
     isql_o = NULL;
     isql_i_fd = 0;
 
-    // query, result ¹öÆÛ ÃÊ±âÈ­
+    // query, result ë²„í¼ ì´ˆê¸°í™”
     mQueryString = "";
     mResultString = "";
 
-    // ±âº»°ªÀÌ TRUE ÀÌ´Ù.
+    // ê¸°ë³¸ê°’ì´ TRUE ì´ë‹¤.
     mSetHeading = ID_TRUE;
 
     mMessage = aMessage;
@@ -49,26 +49,26 @@ AltibaseHandler::initialize( logonData *aLogonData,
                    mProcess.length() );
     mProcessNum[mProcess.length()] = '\0';
 
-    // DESC ¸í·É¿¡¼­ ¿Ü·¡Å°¸¦ º¸¿©ÁÙÁö¸¦ °áÁ¤
+    // DESC ëª…ë ¹ì—ì„œ ì™¸ë˜í‚¤ë¥¼ ë³´ì—¬ì¤„ì§€ë¥¼ ê²°ì •
     mShowForeignKeys = ID_FALSE;
 
-    // autocommit on, off ÀÎÁö ¼³Á¤.
+    // autocommit on, off ì¸ì§€ ì„¤ì •.
     mAutoCommit = ID_TRUE;
 
-    // explanin plan on, off ÀÎÁö ¼³Á¤.
+    // explanin plan on, off ì¸ì§€ ì„¤ì •.
     mSessionKind = EXPLAIN_PLAN_OFF;
 
-    // set timing on, offÀÎÁö ¼³Á¤.
+    // set timing on, offì¸ì§€ ì„¤ì •.
     mSetTiming = ID_FALSE;
 
-    // µğÆúÆ®·Î SYS/MANAGER·Î ¿¬°áµÈ´Ù.
+    // ë””í´íŠ¸ë¡œ SYS/MANAGERë¡œ ì—°ê²°ëœë‹¤.
     sprintf( mUserName, "%s", (SChar*) "SYS" );
     sprintf( mLoginUserName, "%s", (SChar*) "SYS" );
     sprintf( mPassWord, "%s", (SChar*) "MANAGER" );
 
     mIsRealQuery = ID_TRUE;
 
-    // sysdba ¸ğµåÀÎÁö ¼³Á¤
+    // sysdba ëª¨ë“œì¸ì§€ ì„¤ì •
     mIsSysdba = ID_FALSE;
 
     mLogonData = *aLogonData;
@@ -613,7 +613,7 @@ AltibaseHandler::getResult( idBool aPeek )
         clear();
     }
 
-    // fix BUG-14311 + P0 ¼­¹ö°¡ ¾Æ´Ò °æ¿ì¿¡µµ FATAL Ã³¸®ÇØ¾ß ÇÔ
+    // fix BUG-14311 + P0 ì„œë²„ê°€ ì•„ë‹ ê²½ìš°ì—ë„ FATAL ì²˜ë¦¬í•´ì•¼ í•¨
     if( sResult.find( "ERR-50032" ) != STAFString::kNPos )
 //        strcmp( mProcessNum, "P0" ) == 0 )
     {

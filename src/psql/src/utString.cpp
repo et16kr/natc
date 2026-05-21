@@ -14,7 +14,7 @@ void utString::eraseWhiteSpace(SChar *a_Str)
     SInt i, j;
     SInt len;
     
-    // 1. ¾Õ¿¡¼­ ºÎÅÍ °Ë»ç ½ÃÀÛ..
+    // 1. ì•ì—ì„œ ë¶€í„° ê²€ì‚¬ ì‹œì‘..
 
     len = idlOS::strlen(a_Str);
     if( len <= 0 )
@@ -24,7 +24,7 @@ void utString::eraseWhiteSpace(SChar *a_Str)
 
     for (i=0; i<len && a_Str[i]; i++)
     {
-        if (a_Str[i]==' ') // ½ºÆäÀÌ½º ÀÓ
+        if (a_Str[i]==' ') // ìŠ¤í˜ì´ìŠ¤ ì„
         {
             for (j=i; a_Str[j]; j++)
             {
@@ -38,7 +38,7 @@ void utString::eraseWhiteSpace(SChar *a_Str)
         }
     }
     
-    // 2. ³¡¿¡¼­ ºÎÅÍ °Ë»ç ½ÃÀÛ.. : ½ºÆäÀÌ½º ¾ø¾Ö±â
+    // 2. ëì—ì„œ ë¶€í„° ê²€ì‚¬ ì‹œì‘.. : ìŠ¤í˜ì´ìŠ¤ ì—†ì• ê¸°
 
     len = idlOS::strlen(a_Str);
     if( len <= 0 )
@@ -48,7 +48,7 @@ void utString::eraseWhiteSpace(SChar *a_Str)
 
     for (i=len-1; a_Str[i] && len>=0; i--)
     {
-        if (a_Str[i]==' ') // ½ºÆäÀÌ½º ¾ø¾Ö±â
+        if (a_Str[i]==' ') // ìŠ¤í˜ì´ìŠ¤ ì—†ì• ê¸°
         {
             a_Str[i] = 0;
         }

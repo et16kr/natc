@@ -19,8 +19,8 @@ import java.util.*;
         
         findFile.getAllEnv();
 
-        // altibase.info ÆÄÀÏÀ» ÀĞ¾î¼­
-        // lst, outÀÇ ÆÄÀÏ ÀÌ¸§°ú path¸¦ ±¸¼ºÇÏ´Â Á¤º¸¸¦ °¡Á®¿Â´Ù.
+        // altibase.info íŒŒì¼ì„ ì½ì–´ì„œ
+        // lst, outì˜ íŒŒì¼ ì´ë¦„ê³¼ pathë¥¼ êµ¬ì„±í•˜ëŠ” ì •ë³´ë¥¼ ê°€ì ¸ì˜¨ë‹¤.
         findFile.readFile();
 
         findFile.findPathName();
@@ -120,7 +120,7 @@ public class FindLstOut
 
         // System.out.println( "!!! " + onlyFileName );
 
-        // lstÀÇ Á¾·ù °áÁ¤
+        // lstì˜ ì¢…ë¥˜ ê²°ì •
         strToken = testOracleSuffix.split( "," );
 
 	int tokenLen = strToken.length;
@@ -128,7 +128,7 @@ public class FindLstOut
 
         i = 0;
 
-        // lstÀÇ Á¾·ù °áÁ¤ÇÏ±â À§ÇÑ while loop
+        // lstì˜ ì¢…ë¥˜ ê²°ì •í•˜ê¸° ìœ„í•œ while loop
         while( tokenLen > 0 )
         {
             try
@@ -159,7 +159,7 @@ public class FindLstOut
 
         i = 0;
 
-        // atc4/TC¿¡ ÀÖ´Â sqlÀÌ¹Ç·Î ATAF_TEST_RESULT·Î °æ·Î¸¦ ¹Ù²ãÁà¾ß ÇÑ´Ù.
+        // atc4/TCì— ìˆëŠ” sqlì´ë¯€ë¡œ ATAF_TEST_RESULTë¡œ ê²½ë¡œë¥¼ ë°”ê¿”ì¤˜ì•¼ í•œë‹¤.
         if ( path.matches( ".*atc.*TC.*" ) )
         {
             // System.out.println( "!!! It's ATC/TC" );
@@ -197,13 +197,13 @@ public class FindLstOut
 
 	/* 
 	   fix for BUG-31576
-	   º´·Ä Å×½ºÆ®ÀÇ °æ¿ì outName ¾ÈÀÇ ÆĞ½º¸¦ ¼öÁ¤ÇØ¾ßÇÑ´Ù.
+	   ë³‘ë ¬ í…ŒìŠ¤íŠ¸ì˜ ê²½ìš° outName ì•ˆì˜ íŒ¨ìŠ¤ë¥¼ ìˆ˜ì •í•´ì•¼í•œë‹¤.
 	   natc_result -> natc_result/result_p[0-13]
 	*/
 
         File file = new File( outName );
 
-	// outNameÀÇ ÆÄÀÏÀ» ¿­¾î º¸°í Á¸ÀçÇÏÁö ¾Ê´Ù¸é lstout.log¸¦ ÀÌ¿ëÇØ¼­ ´Ù½Ã Ã£¾Æº»´Ù.
+	// outNameì˜ íŒŒì¼ì„ ì—´ì–´ ë³´ê³  ì¡´ì¬í•˜ì§€ ì•Šë‹¤ë©´ lstout.logë¥¼ ì´ìš©í•´ì„œ ë‹¤ì‹œ ì°¾ì•„ë³¸ë‹¤.
 	if ( !file.exists() )
         {
 	    File lstoutFile = new File( testResultPath + pathSeparator + "work" + pathSeparator + "log" + pathSeparator + "lstout.log" );
@@ -216,7 +216,7 @@ public class FindLstOut
                 System.err.println(e);
             }
 
-	    // lstout.log ÆÄÀÏÀÌ ÀÖ´Ù¸é ½ÇÆĞÇÑ Å×½ºÆ® ÄÉÀÌ½ºÀÇ lst ÆÄÀÏ°ú out ÆÄÀÏÀÇ ÀüÃ¼ ÆĞ½º¸¦ ÇÑ ÁÙ¾¿ ÀĞ´Â´Ù.
+	    // lstout.log íŒŒì¼ì´ ìˆë‹¤ë©´ ì‹¤íŒ¨í•œ í…ŒìŠ¤íŠ¸ ì¼€ì´ìŠ¤ì˜ lst íŒŒì¼ê³¼ out íŒŒì¼ì˜ ì „ì²´ íŒ¨ìŠ¤ë¥¼ í•œ ì¤„ì”© ì½ëŠ”ë‹¤.
             if ( lstoutFile.canRead() )
             {
                 while( true )
@@ -233,7 +233,7 @@ public class FindLstOut
 
 			outPath = "";
 
-			// lstout.log¿¡¼­ ÀĞÀº Å×½ºÆ® ÄÉÀÌ½ºÀÇ ÀüÃ¼ pathÁß TC ÀÌÈÄÀÇ path¸¸ Àß¶ó³¿.
+			// lstout.logì—ì„œ ì½ì€ í…ŒìŠ¤íŠ¸ ì¼€ì´ìŠ¤ì˜ ì „ì²´ pathì¤‘ TC ì´í›„ì˜ pathë§Œ ì˜ë¼ëƒ„.
 			for ( i=0; i<pathToken.length; i++ )
 			{
 			    if ( isAfterPathTC == false )
@@ -249,10 +249,10 @@ public class FindLstOut
 			    }
 			}
 
-			// Àß¶ó³½ path¿Í outNameÀ» Ã£¾Æ¾ßÇÒ Å×½ºÆ® ÄÉÀÌ½ºÀÇ path¿Í ºñ±³ÇÔ.
+			// ì˜ë¼ë‚¸ pathì™€ outNameì„ ì°¾ì•„ì•¼í•  í…ŒìŠ¤íŠ¸ ì¼€ì´ìŠ¤ì˜ pathì™€ ë¹„êµí•¨.
 			regExp = ".*" + outPath + onlyFileName + ".*";
 
-			// matchingÀÌ µÈ´Ù¸é output fileÀÇ path¸¦ ±¸ÇÔ
+			// matchingì´ ëœë‹¤ë©´ output fileì˜ pathë¥¼ êµ¬í•¨
 			if ( str.matches( regExp ) )
 			{
 

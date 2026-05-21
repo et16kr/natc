@@ -32,7 +32,7 @@ isql_bool iloLoad::GetTableTree()
     IDE_TEST_RAISE( m_FormCompiler.SetInputFile(m_pProgOption->m_FormFile)
                     == isql_false, err_open );
 
-    /* -f *.dat -d *.fmt ¿¡¼­ ¿¡·¯ ¹ß»ýÇÏ¸é ÇØÁ¦ ¸øÇÏ´Â ºÎºÐ. */
+    /* -f *.dat -d *.fmt ì—ì„œ ì—ëŸ¬ ë°œìƒí•˜ë©´ í•´ì œ ëª»í•˜ëŠ” ë¶€ë¶„. */
     nRet = yyparse(&pTableRoot);
     g_memmgr->freeAll();
     
@@ -111,7 +111,7 @@ isql_bool iloLoad::LoadwithPrepare()
 
     uttTime g_qcuTimeCheck;
 
-    IDE_TEST( GetTableTree() == isql_false );  // ¿¡·¯ÇØÁ¦ ¸øÇÏ´Â ºÎºÐ.
+    IDE_TEST( GetTableTree() == isql_false );  // ì—ëŸ¬í•´ì œ ëª»í•˜ëŠ” ë¶€ë¶„.
 
     IDE_TEST( GetTableInfo() == isql_false );
 
@@ -202,7 +202,7 @@ isql_bool iloLoad::LoadwithPrepare()
         if ( sRealCount == sArrayCount || nRet == 2 ||
              m_pProgOption->m_bExist_L && (ix == m_pProgOption->m_LastRow) )
         {
-            if ( nRet == 2 )   // readOneRecord ¿¡¼­ (EOF) ¸¸ ÀÐ¾î¿ÔÀ»°æ¿ì
+            if ( nRet == 2 )   // readOneRecord ì—ì„œ (EOF) ë§Œ ì½ì–´ì™”ì„ê²½ìš°
             {
                 SQLSetStmtAttr( m_pISPApi->getStmt(),
                     SQL_ATTR_PARAMSET_SIZE,
@@ -223,7 +223,7 @@ isql_bool iloLoad::LoadwithPrepare()
                 nErrCount ++;
                 if ( m_pISPApi->mErrorCode == 0x3b032 ||
                      m_pISPApi->mErrorCode == 0x5003b || // buffer full
-                     m_pISPApi->mErrorCode == 0x51043 ) // Åë½Å Àå¾Ö
+                     m_pISPApi->mErrorCode == 0x51043 ) // í†µì‹  ìž¥ì• 
                 {
                     idlOS::fprintf(stdout, "Insert Error : %s\n",
                                    m_pISPApi->GetErrorMsg());
@@ -243,7 +243,7 @@ isql_bool iloLoad::LoadwithPrepare()
             {
                 if ( m_pISPApi->mErrorCode == 0x3b032 ||
                      m_pISPApi->mErrorCode == 0x5003b || // buffer full
-                     m_pISPApi->mErrorCode == 0x51043 ) // Åë½Å Àå¾Ö
+                     m_pISPApi->mErrorCode == 0x51043 ) // í†µì‹  ìž¥ì• 
                 {
                     idlOS::fprintf(stdout, "Insert Error : %s\n",
                                    m_pISPApi->GetErrorMsg());

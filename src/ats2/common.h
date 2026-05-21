@@ -34,9 +34,9 @@
 #include "atsBaseThread.h"
 
 /*  PRJ-1552 
-    ATS¿¡ ART ±â´ÉÀ» Ãß°¡ÇÏ±â À§ÇØ
-    Test¸¦ ±¸ºĞÇÒ ¼ö ÀÖµµ·Ï
-    Test Type Á¤ÀÇ  */
+    ATSì— ART ê¸°ëŠ¥ì„ ì¶”ê°€í•˜ê¸° ìœ„í•´
+    Testë¥¼ êµ¬ë¶„í•  ìˆ˜ ìˆë„ë¡
+    Test Type ì •ì˜  */
 
 enum ATSTestKind
 {
@@ -131,7 +131,7 @@ enum CommandKind
     ENV_COM,
     
 /* PRJ-1552
-   ARTÀÇ º¹±¸ÁöÁ¡ °ü·Ã ¸í·É Å¸ÀÔ Ãß°¡ */
+   ARTì˜ ë³µêµ¬ì§€ì  ê´€ë ¨ ëª…ë ¹ íƒ€ì… ì¶”ê°€ */
     RECPOINT_COM,
 
     // alter session set explain plan
@@ -245,8 +245,8 @@ enum LogType
     LOG_SYSTEM,
     
 /*  PRJ-1552
-    ARTÀÇ º¹±¸Å×½ºÆ® °á°úÁß CRASH ¹ß»ıÇÏ´Â
-    Å×½ºÆ®ÄÉÀÌ½º ¸ñ·ÏÀ» ÀúÀåÇÏ´Â ÆÄÀÏ */
+    ARTì˜ ë³µêµ¬í…ŒìŠ¤íŠ¸ ê²°ê³¼ì¤‘ CRASH ë°œìƒí•˜ëŠ”
+    í…ŒìŠ¤íŠ¸ì¼€ì´ìŠ¤ ëª©ë¡ì„ ì €ì¥í•˜ëŠ” íŒŒì¼ */
     LOG_CRASH
 };
 
@@ -263,12 +263,12 @@ enum LogType
 
 /*  PRJ-1552
     
-    ART º¹±¸Å×½ºÆ® ¼öÇà¿¡ ÇÊ¿äÇÑ ÆÄÀÏ
+    ART ë³µêµ¬í…ŒìŠ¤íŠ¸ ìˆ˜í–‰ì— í•„ìš”í•œ íŒŒì¼
     
-    1) RECPOINT_FILE : º¹±¸ÁöÁ¡¸ñ·Ï ÆÄÀÏ
-    2) CRASH_LOG     : º¹±¸½ÇÆĞÇÑ Å×½ºÆ®ÄÉÀÌ½º ¸ñ·Ï ÆÄÀÏ
-    3) BOOT_LOG      : º¹±¸ÁöÁ¡ºñÁ¤»óÁ¾·áÀÎÁö ÆÇ´ÜÇÏ±â À§ÇØ
-                       altibase_boot.log¸¦ ÆÇµ¶ */
+    1) RECPOINT_FILE : ë³µêµ¬ì§€ì ëª©ë¡ íŒŒì¼
+    2) CRASH_LOG     : ë³µêµ¬ì‹¤íŒ¨í•œ í…ŒìŠ¤íŠ¸ì¼€ì´ìŠ¤ ëª©ë¡ íŒŒì¼
+    3) BOOT_LOG      : ë³µêµ¬ì§€ì ë¹„ì •ìƒì¢…ë£Œì¸ì§€ íŒë‹¨í•˜ê¸° ìœ„í•´
+                       altibase_boot.logë¥¼ íŒë… */
 #define RECPOINT_FILE     "recovery.dat"
 #define CRASH_LOG         "CR999999.ts"
 #define BOOT_LOG          "altibase_boot.log"
@@ -327,15 +327,15 @@ typedef std::map<STAFString, STAFString> DefaultType;
 #define VAR_SIZE (1024)
 
 /* PRJ-1552
-   ARTÀÇ Sequential Test¸¦ ÇÏ±â À§ÇØ atsc¿¡¼­
-   º¹±¸ÁöÁ¡ ¸ñ·ÏÀ» STL list·Î °ü¸® */
+   ARTì˜ Sequential Testë¥¼ í•˜ê¸° ìœ„í•´ atscì—ì„œ
+   ë³µêµ¬ì§€ì  ëª©ë¡ì„ STL listë¡œ ê´€ë¦¬ */
 
 typedef std::list<STAFString> RecPtrList;
 typedef RecPtrList::iterator  RecPtrListIter;
 
 /* PRJ-1552
-   ARTÀÇ Sequential Test¸¦ ÇÏ±â À§ÇØ atsc¿¡¼­
-   º¹±¸ÁöÁ¡ ¸ñ·ÏÀ» STL list·Î °ü¸® */
+   ARTì˜ Sequential Testë¥¼ í•˜ê¸° ìœ„í•´ atscì—ì„œ
+   ë³µêµ¬ì§€ì  ëª©ë¡ì„ STL listë¡œ ê´€ë¦¬ */
 
 typedef struct recPointData
 {
@@ -350,14 +350,14 @@ typedef struct recPointData
 
 
 /* PRJ-1552
-   ARTÀÇ Regression Test, Sequential Test¸¦ ÇÏ±â À§ÇØ
-   ats¿¡¼­ º¹±¸ÁöÁ¡ ¸ñ·ÏÀ» STL map À¸·Î °ü¸® */
+   ARTì˜ Regression Test, Sequential Testë¥¼ í•˜ê¸° ìœ„í•´
+   atsì—ì„œ ë³µêµ¬ì§€ì  ëª©ë¡ì„ STL map ìœ¼ë¡œ ê´€ë¦¬ */
 
 typedef std::map<STAFString, recPointData> RecPtrMap;
 typedef RecPtrMap::iterator RecPtrMapIter;
 
 /* PRJ-1552
-   º¹±¸ÁöÁ¡¸ñ·Ï¿¡ ´ëÇÑ mapÀ» Àü¿ªÀ¸·Î cacheÇØµÒ */
+   ë³µêµ¬ì§€ì ëª©ë¡ì— ëŒ€í•œ mapì„ ì „ì—­ìœ¼ë¡œ cacheí•´ë‘  */
 
 typedef struct recPointCache
 {

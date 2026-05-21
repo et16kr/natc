@@ -5,14 +5,14 @@
 	     static Runner
 
      DESCRIPTION
-		Private ÇÔ¼ö·Î¼­ ÇØ´ç Å¬·¡½ºÀÇ ¸â¹ö ÇÔ¼öÀÎ
-        run()À» ¾²·¹µå·Î µ¿ÀÛ½ÃÅ²´Ù.
+		Private í•¨ìˆ˜ë¡œì„œ í•´ë‹¹ í´ë˜ìŠ¤ì˜ ë©¤ë²„ í•¨ìˆ˜ì¸
+        run()ì„ ì“°ë ˆë“œë¡œ ë™ì‘ì‹œí‚¨ë‹¤.
         
      ARGUMENTS
-     	Arg : Å¬·¡½º Æ÷ÀÎÅÍ (ÀÏ¹İÀûÀ¸·Î this)
+     	Arg : í´ë˜ìŠ¤ í¬ì¸í„° (ì¼ë°˜ì ìœ¼ë¡œ this)
         
      RETURNS
-     	¾ğÁ¦³ª NULL
+     	ì–¸ì œë‚˜ NULL
 ----------------------------------------------------------------------------*/
 void *atsBaseThread::staticRunner(void *Arg)
 {
@@ -38,13 +38,13 @@ void *atsBaseThread::staticRunner(void *Arg)
 	     start()
 
      DESCRIPTION
-     	ÇØ´ç Å¬·¡½º¸¦ ¾²·¹µå·Î µ¿ÀÛ½ÃÅ²´Ù. (run()ÀÌ È£ÃâµÊ)
+     	í•´ë‹¹ í´ë˜ìŠ¤ë¥¼ ì“°ë ˆë“œë¡œ ë™ì‘ì‹œí‚¨ë‹¤. (run()ì´ í˜¸ì¶œë¨)
         
      ARGUMENTS
-     	¾øÀ½
+     	ì—†ìŒ
         
      RETURNS
-     	idlOS::thr_create() ÇÔ¼öÀÇ ¸®ÅÏ°ª
+     	idlOS::thr_create() í•¨ìˆ˜ì˜ ë¦¬í„´ê°’
 ----------------------------------------------------------------------------*/
 IDE_RC atsBaseThread::start()
 {
@@ -81,14 +81,14 @@ IDE_RC atsBaseThread::start()
 	     isStated()
 
      DESCRIPTION
-     	¾²·¹µå°¡ »ı¼ºµÇ¾ú´ÂÁö °Ë»çÇÑ´Ù.
+     	ì“°ë ˆë“œê°€ ìƒì„±ë˜ì—ˆëŠ”ì§€ ê²€ì‚¬í•œë‹¤.
         
      ARGUMENTS
-     	¾øÀ½
+     	ì—†ìŒ
         
      RETURNS
-     	»ı¼ºµÇ¾úÀ¸¸é IDE_SUCCESS,
-        »ı¼ºµÇÁö ¾Ê¾ÒÀ¸¸é, IDE_FAILURE 
+     	ìƒì„±ë˜ì—ˆìœ¼ë©´ IDE_SUCCESS,
+        ìƒì„±ë˜ì§€ ì•Šì•˜ìœ¼ë©´, IDE_FAILURE 
 ----------------------------------------------------------------------------*/
 
 idBool atsBaseThread::isStarted()
@@ -103,7 +103,7 @@ idBool atsBaseThread::isStarted()
 }
 
 #define IDT_WAIT_LOOP_PER_SECOND     10
-// ¾²·¹µå·Î µ¿ÀÛÇÒ ¶§ ±îÁö ´ë±â
+// ì“°ë ˆë“œë¡œ ë™ì‘í•  ë•Œ ê¹Œì§€ ëŒ€ê¸°
 IDE_RC atsBaseThread::waitToStart(UInt second)
 {
     return IDE_SUCCESS;

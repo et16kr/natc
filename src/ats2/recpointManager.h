@@ -12,7 +12,7 @@
 
 #include "common.h"
 
-// PRJ-1552 º¹±¸ÁöÁ¡ °ü¸®ÀÚ 
+// PRJ-1552 ë³µêµ¬ì§€ì  ê´€ë¦¬ì 
 
 class RecPointer
 {
@@ -21,10 +21,10 @@ public:
     IDE_RC         initialize( STAFString aEnvHOME );
     IDE_RC         destroy();
 
-    // º¹±¸ÁöÁ¡¸ñ·ÏÆÄÀÏ·Î ºÎÅÍ STL map ±¸Ãà
+    // ë³µêµ¬ì§€ì ëª©ë¡íŒŒì¼ë¡œ ë¶€í„° STL map êµ¬ì¶•
     IDE_RC         load( SChar        * aFileName );
 
-    // altibase_boot.log·Î ¸¶Áö¸·¶óÀÎ ¹İÈ¯
+    // altibase_boot.logë¡œ ë§ˆì§€ë§‰ë¼ì¸ ë°˜í™˜
     STAFString     getLastLineFromBootLog();
 
     RecPtrMap    * getMap() { return &mRecPointMap; }
@@ -34,19 +34,19 @@ public:
     
 private:
 
-    // º¹±¸ÁöÁ¡¸ñ·Ï STL map
+    // ë³µêµ¬ì§€ì ëª©ë¡ STL map
     RecPtrMap          mRecPointMap;
 
-    // altibase_boot.log ÆÇµ¶½Ã µ¿½Ã¼º Á¦¾î
+    // altibase_boot.log íŒë…ì‹œ ë™ì‹œì„± ì œì–´
     pthread_mutex_t mCheckMutex;
     
-    // altibase_boot.log ÆÄÀÏ handle
+    // altibase_boot.log íŒŒì¼ handle
     FILE             * mBOOTLOG;
 
-    // altibase_boot.log ÆÄÀÏ °æ·Î
+    // altibase_boot.log íŒŒì¼ ê²½ë¡œ
     SChar              mBOOTLOG_PATH[1024];
     
-    // altibase_boot.log ÆÄÀÏÀÇ IO ¹öÆÛ
+    // altibase_boot.log íŒŒì¼ì˜ IO ë²„í¼
     SChar              mLastLine[1024];
     
     STAFString         mEnvHOME; // $ALTIBASE_HOME

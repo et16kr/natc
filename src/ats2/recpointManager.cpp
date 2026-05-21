@@ -121,7 +121,7 @@ RecPointer::load( SChar        * aFileName )
             
             sData.recPointID = STAFString( sRecPointID ).strip();
 
-            // FULL TEST½Ã ¼öÇàÇÒ query string »ı¼º
+            // FULL TESTì‹œ ìˆ˜í–‰í•  query string ìƒì„±
             sData.queryString  = "execute enable_recptr( ";
 
             // recpoint id

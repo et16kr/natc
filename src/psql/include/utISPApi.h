@@ -160,7 +160,7 @@ public:
     SQLRETURN GetReturnType(SChar *a_UserName, SChar *a_ProcName, 
                             SShort *a_ReturnDataType, SInt *a_ReturnDataTypeLen);
 
-/* BUGBUG-procedure, function directExecute ¼öÇàÇÏ¸é ¿¡·¯ */
+/* BUGBUG-procedure, function directExecute ìˆ˜í–‰í•˜ë©´ ì—ëŸ¬ */
     IDE_RC    Prepare();
     IDE_RC    Execute();
     IDE_RC    GetConnectAttr(SInt aAttr, SInt *aValue);
@@ -188,7 +188,7 @@ private:
     SQLHSTMT  m_IStmt;
     SQLHSTMT  m_TmpStmt;    // use Tables, Columns, GetProcInfo, FetchProcInfo
     SQLHSTMT  m_TmpStmt2;   // use GetReturnType
-    SQLHSTMT  m_TmpStmt3;   // use Prepare, ProcBindPara, Execute, BUGBUG-stmt prepare »ç¿ë ÈÄ directExecute »ç¿ëÇÏ¸é ¿¡·¯
+    SQLHSTMT  m_TmpStmt3;   // use Prepare, ProcBindPara, Execute, BUGBUG-stmt prepare ì‚¬ìš© í›„ directExecute ì‚¬ìš©í•˜ë©´ ì—ëŸ¬
     SChar     m_Query[COMMAND_LEN];
     SChar     m_ErrorMsg[IDCCLI_ERROR_MSG_LEN];
     SChar     m_ErrorState[6];

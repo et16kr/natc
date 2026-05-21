@@ -1265,7 +1265,7 @@ IDE_RC utISPApi::getTBSName(SChar *a_UserName,
     SQLRETURN rc;
 
     // BUGBUG-10990
-    // Performance View ¿Ï·á ÈÄ Table Space¸¦ ¾ò¾î¾ß ÇÔ.
+    // Performance View ì™„ë£Œ í›„ Table Spaceë¥¼ ì–»ì–´ì•¼ í•¨.
     
     // get tablespace
     idlOS::sprintf(m_Buf, 

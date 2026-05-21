@@ -183,7 +183,7 @@ iSQLSpool::PrintWithDouble(SInt *aPos)
 /***********************************************************************
  *
  * Description :
- *    DOUBLE °ªÀ» ÀûÀýÇÑ Æ÷¸äÀ¸·Î Ãâ·Â
+ *    DOUBLE ê°’ì„ ì ì ˆí•œ í¬ë©§ìœ¼ë¡œ ì¶œë ¥
  *
  * Implementation :
  *
@@ -193,7 +193,7 @@ iSQLSpool::PrintWithDouble(SInt *aPos)
     SChar  sTmp[32];
 
     // fix PR-12295
-    // 0¿¡ °¡±î¿î ÀÛÀº °ªÀº 0À¸·Î Ãâ·ÂÇÔ.
+    // 0ì— ê°€ê¹Œìš´ ìž‘ì€ ê°’ì€ 0ìœ¼ë¡œ ì¶œë ¥í•¨.
     if( ( m_DoubleBuf < 1E-7 ) &&
         ( m_DoubleBuf > -1E-7 ) )
     {
@@ -215,7 +215,7 @@ iSQLSpool::PrintWithFloat(SInt *aPos)
 /***********************************************************************
  *
  * Description :
- *    REAL °ªÀ» ÀûÀýÇÑ Æ÷¸äÀ¸·Î Ãâ·Â
+ *    REAL ê°’ì„ ì ì ˆí•œ í¬ë©§ìœ¼ë¡œ ì¶œë ¥
  *
  * Implementation :
  *
@@ -225,7 +225,7 @@ iSQLSpool::PrintWithFloat(SInt *aPos)
     SInt  sPos = 0;
 
     // fix PR-12295
-    // 0¿¡ °¡±î¿î ÀÛÀº °ªÀº 0À¸·Î Ãâ·ÂÇÔ.
+    // 0ì— ê°€ê¹Œìš´ ìž‘ì€ ê°’ì€ 0ìœ¼ë¡œ ì¶œë ¥í•¨.
     if( ( m_FloatBuf < 1E-7 ) &&
         ( m_FloatBuf > -1E-7 ) )
     {

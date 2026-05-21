@@ -9,7 +9,7 @@ private:
     SLong flags_;
     SInt size_;
     pthread_t tid_;
-    idBool started_;     // ¾²·¹µå·Î ½ÃÀÛµÇ¾ú´ÂÁö °Ë»ç
+    idBool started_;     // ì“°ë ˆë“œë¡œ ì‹œì‘ë˜ì—ˆëŠ”ì§€ ê²€ì‚¬
     
     static void *staticRunner(void *);
 public:

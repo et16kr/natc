@@ -88,7 +88,7 @@ isql_bool iloDataFile::PrintOneRecord(iloColumns *pCols)
         }
         switch (pCols->GetType(i))
         {
-        case ISP_INTEGER : /* SQLBindCol¿¡¼­ CHAR·Î ÁöÁ¤ÇÔ */
+        case ISP_INTEGER : /* SQLBindColì—ì„œ CHARë¡œ ì§€ì •í•¨ */
         case SQL_SMALLINT:
         case SQL_BIGINT  :
         case ISP_NIBBLE :
@@ -178,9 +178,9 @@ EDataToken iloDataFile::GetToken()
         else if (ixFT > 0) 
         {
             //ixFT = (ch == m_FieldTerm[0]) ? 1 : 0;
-            //<- ±¸ºÐÀÚÀÇ ±æÀÌ°¡ 1 º¸´Ù Å¬ °æ¿ì ¿¡·¯ ¹ß»ýÇÔ ( BUG-3606 )
-            /* ±¸ºÐÀÚ ºñ±³Áß ¾ÕÂÊÀÌ ¸Â´Â »óÈ²¿¡¼­ µÚÂÊ¿¡¼­ Æ²¸°°æ¿ì°¡ ¹ß»ýÇÏ¸é
-             * ´Ù½Ã ±¸ºÐÀÚ¸¦ Ã¼Å©ÇØ¾ß ÇÑ´Ù. */
+            //<- êµ¬ë¶„ìžì˜ ê¸¸ì´ê°€ 1 ë³´ë‹¤ í´ ê²½ìš° ì—ëŸ¬ ë°œìƒí•¨ ( BUG-3606 )
+            /* êµ¬ë¶„ìž ë¹„êµì¤‘ ì•žìª½ì´ ë§žëŠ” ìƒí™©ì—ì„œ ë’¤ìª½ì—ì„œ í‹€ë¦°ê²½ìš°ê°€ ë°œìƒí•˜ë©´
+             * ë‹¤ì‹œ êµ¬ë¶„ìžë¥¼ ì²´í¬í•´ì•¼ í•œë‹¤. */
             SInt sMinFT = ( vix > m_nFTLen ) ? m_nFTLen : vix;
             ixFT = 0;
             for ( j = 1; j <= sMinFT; j++ )
@@ -214,7 +214,7 @@ EDataToken iloDataFile::GetToken()
         }
         else if (ixRT > 0) 
         {
-            //ixRT = (ch == m_RowTerm[0]) ? 1 : 0; <- ±¸ºÐÀÚÀÇ ±æÀÌ°¡ 1 º¸´Ù Å¬ °æ¿ì ¿¡·¯ ¹ß»ýÇÔ
+            //ixRT = (ch == m_RowTerm[0]) ? 1 : 0; <- êµ¬ë¶„ìžì˜ ê¸¸ì´ê°€ 1 ë³´ë‹¤ í´ ê²½ìš° ì—ëŸ¬ ë°œìƒí•¨
             SInt sMinRT = ( vix > m_nRTLen ) ? m_nRTLen : vix;
             ixRT = 0;
             for ( j = 1; j <= sMinRT; j++ )
@@ -255,7 +255,7 @@ EDataToken iloDataFile::GetToken()
             }
             else if (ixEn > 0) 
             {
-                // BUG-3606 ¹ß»ýÇÒ ¼ÒÁö°¡ ÀÖÀ½
+                // BUG-3606 ë°œìƒí•  ì†Œì§€ê°€ ìžˆìŒ
                 ixEn = (ch == m_Enclosing[0]) ? 1 : 0;
             }
             

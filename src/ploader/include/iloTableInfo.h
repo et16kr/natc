@@ -91,8 +91,8 @@ public:
     } localSeqArray[UT_MAX_SEQ_ARRAY_CNT];
 
     isql_bool GetTableInfo(iloTableNode *pTableNameNode);
-    // TABLE_NODE¿¡ ´ëÇÑ Æ÷ÀÎÅÍ¸¦ ÀÔ·ÂÀ¸·Î ¹Þ¾Æ Å×ÀÌºí¿¡ ´ëÇÑ Á¤º¸¸¦ ¾ò´Â´Ù.
-    // ÀÌ¶§ ÇüÁ¦ Å×ÀÌºí ³ëµå°¡ ÀÖ´ÂÁö´Â °Ë»öÇÏÁö ¾Ê´Â´Ù.
+    // TABLE_NODEì— ëŒ€í•œ í¬ì¸í„°ë¥¼ ìž…ë ¥ìœ¼ë¡œ ë°›ì•„ í…Œì´ë¸”ì— ëŒ€í•œ ì •ë³´ë¥¼ ì–»ëŠ”ë‹¤.
+    // ì´ë•Œ í˜•ì œ í…Œì´ë¸” ë…¸ë“œê°€ ìžˆëŠ”ì§€ëŠ” ê²€ìƒ‰í•˜ì§€ ì•ŠëŠ”ë‹¤.
     isql_bool ExistDownCond()            { return m_bDownCond; }
 
     SChar *GetQueryString()              { return m_QueryString; }

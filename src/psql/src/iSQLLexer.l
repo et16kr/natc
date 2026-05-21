@@ -12,9 +12,9 @@
     iSQLLexer.l
 
    DESCRIPTION
-    iSQLPreLexer·ÎºÎÅÍ ³Ñ°Ü¹ÞÀº ÀÔ·Â¹öÆÛ¸¦ scanÇÏ¿© token´ÜÀ§·Î ³ª´«´Ù.
-    ÀÌ¶§ isql command¸¸ tokenÀ¸·Î ºÐÇØÇÏ°í 
-    sql command´Â ÇÏ³ªÀÇ ÅäÅ«À¸·Î Ã³¸®ÇÑ´Ù.
+    iSQLPreLexerë¡œë¶€í„° ë„˜ê²¨ë°›ì€ ìž…ë ¥ë²„í¼ë¥¼ scaní•˜ì—¬ tokenë‹¨ìœ„ë¡œ ë‚˜ëˆˆë‹¤.
+    ì´ë•Œ isql commandë§Œ tokenìœ¼ë¡œ ë¶„í•´í•˜ê³  
+    sql commandëŠ” í•˜ë‚˜ì˜ í† í°ìœ¼ë¡œ ì²˜ë¦¬í•œë‹¤.
 
    PUBLIC FUNCTION(S)
 

@@ -7,7 +7,7 @@ MAX=30;
 
 while [ $i -ne $k ]
 do
-  SC QUERY ${ALTIBASE_SERVICE} > tmp       #°³¹ßÀÚ¿ë ¼­ºñ½ºÀÌ¸§Àº ALTIBASE_PORTNUM
+  SC QUERY ${ALTIBASE_SERVICE} > tmp       #ê°œë°œìžìš© ì„œë¹„ìŠ¤ì´ë¦„ì€ ALTIBASE_PORTNUM
   k=`grep RUNNING tmp | wc -l`
   sleep 1
   tmp=`expr $tmp + 1`

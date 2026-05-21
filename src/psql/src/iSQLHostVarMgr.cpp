@@ -96,7 +96,7 @@ iSQLHostVarMgr::add( SChar       * a_name,
 
     if ( (t_node = getVar(a_name)) == NULL )
     {
-        // memory alloc error °¡ ¹ß»ıÇÑ °æ¿ì
+        // memory alloc error ê°€ ë°œìƒí•œ ê²½ìš°
         t_node = (HostVarNode*) idlOS::malloc(sizeof(HostVarNode));
         IDE_TEST_RAISE( t_node == NULL, mem_alloc_error );
         idlOS::memset(t_node, 0x00, sizeof(HostVarNode));
@@ -269,7 +269,7 @@ iSQLHostVarMgr::setValue( SChar * a_name )
 {
     HostVarNode *t_node;
 
-    // ¼±¾ğµÇÁö ¾ÊÀº È£½ºÆ® º¯¼ö
+    // ì„ ì–¸ë˜ì§€ ì•Šì€ í˜¸ìŠ¤íŠ¸ ë³€ìˆ˜
     IDE_TEST_RAISE((t_node = getVar(a_name)) == NULL, not_defined);                    
     t_node->element.assigned = ID_FALSE;
 
@@ -296,7 +296,7 @@ iSQLHostVarMgr::setValue( SChar * a_name,
     HostVarNode *t_node;
     SChar *begin_pos, *end_pos;
 
-    // ¼±¾ğµÇÁö ¾ÊÀº È£½ºÆ® º¯¼ö
+    // ì„ ì–¸ë˜ì§€ ì•Šì€ í˜¸ìŠ¤íŠ¸ ë³€ìˆ˜
     IDE_TEST_RAISE((t_node = getVar(a_name)) == NULL, not_defined);     
     
     if ( idlOS::strcasecmp(a_value, "NULL") == 0 )
@@ -310,13 +310,13 @@ iSQLHostVarMgr::setValue( SChar * a_name,
     case iSQL_DATE       :
     case iSQL_BYTE  :
     case iSQL_NIBBLE :
-    case iSQL_VARCHAR    :  // value°¡ const string('...') ÀÌ¾î¾ß ÇÑ´Ù.
+    case iSQL_VARCHAR    :  // valueê°€ const string('...') ì´ì–´ì•¼ í•œë‹¤.
         begin_pos = idlOS::strchr(a_value, '\'');
-        IDE_TEST_RAISE(begin_pos == NULL, type_mismatch); // value°¡ const stringÀÌ ¾Æ´Ñ°æ¿ì                              
+        IDE_TEST_RAISE(begin_pos == NULL, type_mismatch); // valueê°€ const stringì´ ì•„ë‹Œê²½ìš°                              
         
         end_pos = idlOS::strrchr(begin_pos+1, '\'');
-        IDE_TEST_RAISE(end_pos == NULL, type_mismatch);   // value°¡ '·Î ³¡³ªÁö ¾ÊÀº °æ¿ì, Àı´ë µé¾î¿Ã ¼ö ¾ø´Â °æ¿ì                             
-        // value°¡ null string ÀÎ °æ¿ì
+        IDE_TEST_RAISE(end_pos == NULL, type_mismatch);   // valueê°€ 'ë¡œ ëë‚˜ì§€ ì•Šì€ ê²½ìš°, ì ˆëŒ€ ë“¤ì–´ì˜¬ ìˆ˜ ì—†ëŠ” ê²½ìš°                             
+        // valueê°€ null string ì¸ ê²½ìš°
         IDE_TEST_RAISE(end_pos-begin_pos == 1, null_value);     
 
         idlOS::memset(t_node->element.c_value, 0x00,
@@ -334,14 +334,14 @@ iSQLHostVarMgr::setValue( SChar * a_name,
     case iSQL_INTEGER  :
     case iSQL_SMALLINT :
         begin_pos = idlOS::strchr(a_value, '\'');
-        if (begin_pos != NULL)    // value°¡ const stringÀÌ ¾Æ´Ñ°æ¿ì                              
+        if (begin_pos != NULL)    // valueê°€ const stringì´ ì•„ë‹Œê²½ìš°                              
         { 
             end_pos = idlOS::strrchr(begin_pos+1, '\'');
-            IDE_TEST_RAISE(end_pos == NULL, type_mismatch); // value°¡ '·Î ³¡³ªÁö ¾ÊÀº °æ¿ì, Àı´ë µé¾î¿Ã ¼ö ¾ø´Â °æ¿ì                             
-            // value°¡ null string ÀÎ °æ¿ì
+            IDE_TEST_RAISE(end_pos == NULL, type_mismatch); // valueê°€ 'ë¡œ ëë‚˜ì§€ ì•Šì€ ê²½ìš°, ì ˆëŒ€ ë“¤ì–´ì˜¬ ìˆ˜ ì—†ëŠ” ê²½ìš°                             
+            // valueê°€ null string ì¸ ê²½ìš°
             IDE_TEST_RAISE(end_pos-begin_pos == 1, null_value);     
         
-            // value°¡ const stringÀÎ °æ¿ì
+            // valueê°€ const stringì¸ ê²½ìš°
             IDE_RAISE(type_mismatch);                                  
         }
 
@@ -368,14 +368,14 @@ iSQLHostVarMgr::setValue( SChar * a_name,
         break;
     case iSQL_DOUBLE :
         begin_pos = idlOS::strchr(a_value, '\'');
-        if (begin_pos != NULL)    // value°¡ const stringÀÌ ¾Æ´Ñ°æ¿ì                              
+        if (begin_pos != NULL)    // valueê°€ const stringì´ ì•„ë‹Œê²½ìš°                              
         { 
             end_pos = idlOS::strrchr(begin_pos+1, '\'');
-            IDE_TEST_RAISE(end_pos == NULL, type_mismatch); // value°¡ '·Î ³¡³ªÁö ¾ÊÀº °æ¿ì, Àı´ë µé¾î¿Ã ¼ö ¾ø´Â °æ¿ì                             
-            // value°¡ null string ÀÎ °æ¿ì
+            IDE_TEST_RAISE(end_pos == NULL, type_mismatch); // valueê°€ 'ë¡œ ëë‚˜ì§€ ì•Šì€ ê²½ìš°, ì ˆëŒ€ ë“¤ì–´ì˜¬ ìˆ˜ ì—†ëŠ” ê²½ìš°                             
+            // valueê°€ null string ì¸ ê²½ìš°
             IDE_TEST_RAISE(end_pos-begin_pos == 1, null_value);     
 
-            // value°¡ const stringÀÎ °æ¿ì
+            // valueê°€ const stringì¸ ê²½ìš°
             IDE_RAISE(type_mismatch);
         }
 
@@ -383,15 +383,15 @@ iSQLHostVarMgr::setValue( SChar * a_name,
         break;
     case iSQL_REAL :
         begin_pos = idlOS::strchr(a_value, '\'');
-        if (begin_pos != NULL)    // value°¡ const stringÀÌ ¾Æ´Ñ°æ¿ì                              
+        if (begin_pos != NULL)    // valueê°€ const stringì´ ì•„ë‹Œê²½ìš°                              
         { 
             end_pos = idlOS::strrchr(begin_pos+1, '\'');
-            IDE_TEST_RAISE(end_pos == NULL, type_mismatch); // value°¡ '·Î ³¡³ªÁö ¾ÊÀº °æ¿ì, Àı´ë µé¾î¿Ã ¼ö ¾ø´Â °æ¿ì       
+            IDE_TEST_RAISE(end_pos == NULL, type_mismatch); // valueê°€ 'ë¡œ ëë‚˜ì§€ ì•Šì€ ê²½ìš°, ì ˆëŒ€ ë“¤ì–´ì˜¬ ìˆ˜ ì—†ëŠ” ê²½ìš°       
 
-            // value°¡ null string ÀÎ °æ¿ì
+            // valueê°€ null string ì¸ ê²½ìš°
             IDE_TEST_RAISE(end_pos-begin_pos == 1, null_value);     
 
-            // value°¡ const stringÀÎ °æ¿ì
+            // valueê°€ const stringì¸ ê²½ìš°
             IDE_RAISE(type_mismatch);
         }
 
@@ -689,10 +689,10 @@ iSQLHostVarMgr::putBindList( SChar * a_name,
     HostVarNode *t_node;
     HostVarNode *s_node;
 
-    // ¼±¾ğµÇÁö ¾ÊÀº È£½ºÆ® º¯¼ö
+    // ì„ ì–¸ë˜ì§€ ì•Šì€ í˜¸ìŠ¤íŠ¸ ë³€ìˆ˜
     IDE_TEST_RAISE((t_node = getVar(a_name)) == NULL, not_defined);
 
-    // memory alloc error °¡ ¹ß»ıÇÑ °æ¿ì
+    // memory alloc error ê°€ ë°œìƒí•œ ê²½ìš°
     IDE_TEST_RAISE( (s_node = (HostVarNode*)
                               idlOS::malloc(sizeof(HostVarNode)))
                     == NULL, mem_alloc_error);

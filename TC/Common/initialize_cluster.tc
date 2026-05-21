@@ -4,7 +4,7 @@
 
 include stdFunc_cluster.i;
 
-# cluster.conf¿¡ ÀÖ´Â ¼­¹ö¸¦ cluster·Î ¹­¾î¼­ µî·Ï. Test Case ³»¿¡¼­´Â DB1, DB2·Î »ç¿ë.
+# cluster.confì— ìˆëŠ” ì„œë²„ë¥¼ clusterë¡œ ë¬¶ì–´ì„œ ë“±ë¡. Test Case ë‚´ì—ì„œëŠ” DB1, DB2ë¡œ ì‚¬ìš©.
 REGISTER CLUSTER CL1 ( DDLServer as DB1, NonDDLServer as DB2 );
 
 DEF MAIN()
@@ -75,8 +75,8 @@ DEF MAIN()
 
     CP "db1/conf/altibase.sproperties" "db2/conf/altibase.sproperties";
 
-    # stdFunc_cluster.i¿¡ ÀÖ´Â ÇÔ¼ö´Â cluster¿¡ ÀÖ´Â ¸ğµç ¼­¹ö¿¡ ´ëÇØ¼­ ½ÇÇàµË´Ï´Ù.
-    # µû¶ó¼­ ¾Æ·¡ Ã³·³ ÇÑ¹ø¸¸ È£ÃâÇÏ¸é DB1, DB2 ¸ğµÎ ¼­¹ö°¡ ½ÃÀÛµË´Ï´Ù.
+    # stdFunc_cluster.iì— ìˆëŠ” í•¨ìˆ˜ëŠ” clusterì— ìˆëŠ” ëª¨ë“  ì„œë²„ì— ëŒ€í•´ì„œ ì‹¤í–‰ë©ë‹ˆë‹¤.
+    # ë”°ë¼ì„œ ì•„ë˜ ì²˜ëŸ¼ í•œë²ˆë§Œ í˜¸ì¶œí•˜ë©´ DB1, DB2 ëª¨ë‘ ì„œë²„ê°€ ì‹œì‘ë©ë‹ˆë‹¤.
     NODISPLAY ON;
     CALL stdServerKill();
     CALL stdClean();

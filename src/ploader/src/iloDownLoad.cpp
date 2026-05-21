@@ -225,7 +225,7 @@ isql_bool iloDownLoad::GetQueryString()
         }
         idlOS::strcat(m_QueryStr, ", ");
     }
-    m_QueryStr[idlOS::strlen(m_QueryStr) - 2] = '\0'; // ", " а╕╟е
+    m_QueryStr[idlOS::strlen(m_QueryStr) - 2] = '\0'; // ", " Л═°Й╠╟
 
     idlOS::strcat(m_QueryStr, " from ");
     idlOS::strcat(m_QueryStr, m_TableInfo.GetTableName());
@@ -273,8 +273,8 @@ isql_bool iloDownLoad::CompareAttrType()
 {
     IDE_TEST( m_TableInfo.GetAttrCount() != m_pISPApi->m_Column.GetSize() );
 
-    /* юл╟В©║ Form фдюо©║ ╠Б╪З╣х ╣╔юлем е╦ют╟З ╩Г©Кюз╟║ ют╥бгя
-     * ╣╔юлем е╦ютю╩ ╨Я╠Ёго╢б дз╣Е╦╕ ╩Пютгя╢ы.
+    /* Л²╢ЙЁЁЛ≈░ Form М▄▄Л²╪Л≈░ Й╦╟Л┬═К░° К█╟Л²╢М└╟ М┐─Л·┘ЙЁ╪ Л┌╛Л ╘Л·░Й╟─ Л·┘К═╔М∙°
+     * К█╟Л²╢М└╟ М┐─Л·┘Л²└ К╧└Й╣░М∙≤К┼■ Л╫■К⌠°К╔╪ Л┌╫Л·┘М∙°К▀╓.
      */
 
     return isql_true;

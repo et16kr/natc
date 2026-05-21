@@ -127,24 +127,24 @@ public:
     
     STAFString                 server( STAFString aAlias );
     
-    /*  PRJ-1552  ART º¹±¸Å×½ºÆ®±â´É °ü·Ã ÇÔ¼ö */
+    /*  PRJ-1552  ART ë³µêµ¬í…ŒìŠ¤íŠ¸ê¸°ëŠ¥ ê´€ë ¨ í•¨ìˆ˜ */
 
-    IDE_RC                     saveArtRESULT();      // ART º¹±¸Å×½ºÆ®°á°ú ÀúÀå : out, tdx
-    ATSTestKind                getAtsTestKind();     // º¹±¸Å×½ºÆ® Å¸ÀÔ ¹İÈ¯
+    IDE_RC                     saveArtRESULT();      // ART ë³µêµ¬í…ŒìŠ¤íŠ¸ê²°ê³¼ ì €ì¥ : out, tdx
+    ATSTestKind                getAtsTestKind();     // ë³µêµ¬í…ŒìŠ¤íŠ¸ íƒ€ì… ë°˜í™˜
 
-    // HIT ¿©ºÎ ¼³Á¤ ¹× ¹İÈ¯
+    // HIT ì—¬ë¶€ ì„¤ì • ë° ë°˜í™˜
     void                       setHit( idBool aHit ) { mIsHit = aHit; };
     idBool                     getHit() { return mIsHit; };
 
-     // CRASH ¿©ºÎ ¼³Á¤ ¹× ¹İÈ¯
+     // CRASH ì—¬ë¶€ ì„¤ì • ë° ë°˜í™˜
     void                       setCrash( idBool aCrash ) { mIsCrash = aCrash; };
     idBool                     getCrash() { return mIsCrash; };
 
-     // ¼­¹öÀç±¸µ¿ ¿©ºÎ ¼³Á¤ ¹× ¹İÈ¯
+     // ì„œë²„ì¬êµ¬ë™ ì—¬ë¶€ ì„¤ì • ë° ë°˜í™˜
     void                       setArtRestart( idBool aRestart ) { mIsArtRestart = aRestart; };
     idBool                     getArtRestart() { return mIsArtRestart; };
 
-    // º¹±¸Å×½ºÆ® CRASH ¹ß»ı½Ã $ALTIBASE_HOME¿¡ ´ëÇÑ ¾ĞÃàÆÄÀÏ °æ·Î
+    // ë³µêµ¬í…ŒìŠ¤íŠ¸ CRASH ë°œìƒì‹œ $ALTIBASE_HOMEì— ëŒ€í•œ ì••ì¶•íŒŒì¼ ê²½ë¡œ
     STAFString                 getTGZpath() { return mTgz; };
 
     // ISQL_READ_TIMEOUT for valgrind
@@ -220,21 +220,21 @@ private:
     idBool                     mIsFatal;
     UInt                       mTdxTime;
 
-    /*  PRJ-1552  ART º¹±¸Å×½ºÆ®±â´É °ü·Ã ¸â¹öº¯¼ö */
+    /*  PRJ-1552  ART ë³µêµ¬í…ŒìŠ¤íŠ¸ê¸°ëŠ¥ ê´€ë ¨ ë©¤ë²„ë³€ìˆ˜ */
 
-    RecPointer                 mRecPointer;     // º¹±¸ÁöÁ¡°ü¸®ÀÚ 
-    recPointCache              mRecPointCache;  // º¹±¸ÁöÁ¡¸ñ·Ï STL map ÀúÀå
+    RecPointer                 mRecPointer;     // ë³µêµ¬ì§€ì ê´€ë¦¬ì 
+    recPointCache              mRecPointCache;  // ë³µêµ¬ì§€ì ëª©ë¡ STL map ì €ì¥
 
-    STAFString                 mRECDATAFILE;    // º¹±¸Å×½ºÆ® ¿É¼ÇÁß º¹±¸ÁöÁ¡ÆÄÀÏ°æ·Î
-    STAFString                 mTESTTYPE;       // ATS Å×½ºÆ®Å¸ÀÔ
+    STAFString                 mRECDATAFILE;    // ë³µêµ¬í…ŒìŠ¤íŠ¸ ì˜µì…˜ì¤‘ ë³µêµ¬ì§€ì íŒŒì¼ê²½ë¡œ
+    STAFString                 mTESTTYPE;       // ATS í…ŒìŠ¤íŠ¸íƒ€ì…
     
-    /* Sequential Test¿¡¼­ Å×½ºÆ®ÇÒ º¹±¸ÁöÁ¡ ID */    
+    /* Sequential Testì—ì„œ í…ŒìŠ¤íŠ¸í•  ë³µêµ¬ì§€ì  ID */    
     STAFString                 mRECPOINTID;    
 
-    idBool                     mIsHit;          // º¹±¸ÁöÁ¡ ºñÁ¤»óÁ¾·á¿©ºÎ
-    idBool                     mIsCrash;        // Àç±¸µ¿ÀÌÈÄ º¹±¸½ÇÆĞ¿©ºÎ
+    idBool                     mIsHit;          // ë³µêµ¬ì§€ì  ë¹„ì •ìƒì¢…ë£Œì—¬ë¶€
+    idBool                     mIsCrash;        // ì¬êµ¬ë™ì´í›„ ë³µêµ¬ì‹¤íŒ¨ì—¬ë¶€
 
-    /* º¹±¸ÁöÁ¡ ºñÁ¤»óÁ¾·áÀÌÈÄ Àç±¸µ¿¼öÇà¿©ºÎ */
+    /* ë³µêµ¬ì§€ì  ë¹„ì •ìƒì¢…ë£Œì´í›„ ì¬êµ¬ë™ìˆ˜í–‰ì—¬ë¶€ */
     idBool                     mIsArtRestart;   
     
 };

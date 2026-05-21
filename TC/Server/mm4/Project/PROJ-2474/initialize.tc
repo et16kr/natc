@@ -32,7 +32,7 @@ DEF MAIN()
 
     CP $BOOTLOGFILE_ORG $BOOTLOGFILE;
                                                                 
-    # OpenSSL version¿Ã ¡¶¥Î∑Œ √‚∑¬µ«∏È PASS.
+    # OpenSSL versionÏù¥ Ï†úÎåÄÎ°ú Ï∂úÎ†•ÎêòÎ©¥ PASS.
     GETROW -f "${BOOTLOGFILE}" "SSL_version_str  : " $BOOTLOGFILE_RES;
     PRINT $BOOTLOGFILE_RES;
     GETROW -f "${BOOTLOGFILE}" "SSLeay_version() : " $BOOTLOGFILE_RES;

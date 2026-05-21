@@ -1,4 +1,4 @@
-//CE¿¡¼­´Â UNDER_CE¶ó´Â ¸ÅÅ©·Î°¡ Á¤ÀÇµÈ´Ù.
+//CEì—ì„œëŠ” UNDER_CEë¼ëŠ” ë§¤í¬ë¡œê°€ ì •ì˜ëœë‹¤.
 #if defined(UNDER_CE)
 #include <windows.h>
 #include <winsock.h>
@@ -20,7 +20,7 @@
 #include <string.h>
 #include <time.h>
 
-//natc/src/target_agent/include¿¡ Á¸ÀçÇÑ´Ù.
+//natc/src/target_agent/includeì— ì¡´ì¬í•œë‹¤.
 #include <target.h>
 
 #define DEBUG_MODE 0
@@ -29,16 +29,16 @@ int    handleFile(int aFd, int aOpt);
 int    copyFile(int aFd);
 int    putFile(int aFd);
 int    getFile(int aFd);
-//server ¸í·É¾î´Â execute ¸í·É¾î·Î ´ëÄ¡ÇÑ´Ù.
+//server ëª…ë ¹ì–´ëŠ” execute ëª…ë ¹ì–´ë¡œ ëŒ€ì¹˜í•œë‹¤.
 //int  serverOpt(int aFd);
-//execute ¸í·É¾î´Â CE¿¡¼­ ±¸ÇöÀ» ´Ù½ÃÇØ¾ß ÇÑ´Ù.
+//execute ëª…ë ¹ì–´ëŠ” CEì—ì„œ êµ¬í˜„ì„ ë‹¤ì‹œí•´ì•¼ í•œë‹¤.
 int    executeOpt(int aFd);
 int    recv_nn(int aFd, char *aBuffer, int aSize);
-//¸ğµç Ãâ·ÂÀº stdout.txt ÆÄÀÏ¿¡ ±â·ÏµÈ´Ù.
+//ëª¨ë“  ì¶œë ¥ì€ stdout.txt íŒŒì¼ì— ê¸°ë¡ëœë‹¤.
 void   _printf(const char * format, ...);
 
-//target agent´Â pd(platform dependent) ¶óÀÌºê·¯¸®¸¦ ¸µÅ©ÇÏÁö ¾Ê´Â´Ù.
-//µû¶ó¼­ CE¿¡¼­´Â ¾Æ·¡ ÇÔ¼ö¸¦ »õ·Î ±¸ÇöÇØ¾ß ÇÑ´Ù.
+//target agentëŠ” pd(platform dependent) ë¼ì´ë¸ŒëŸ¬ë¦¬ë¥¼ ë§í¬í•˜ì§€ ì•ŠëŠ”ë‹¤.
+//ë”°ë¼ì„œ CEì—ì„œëŠ” ì•„ë˜ í•¨ìˆ˜ë¥¼ ìƒˆë¡œ êµ¬í˜„í•´ì•¼ í•œë‹¤.
 #if defined(UNDER_CE)
 typedef int socklen_t;
 
@@ -1152,7 +1152,7 @@ void _printf( const char * format, ... )
     fclose(sFd);
 }
 
-//CE¿¡¼­´Â main ÇÔ¼öÀÇ ÀÌ¸§ÀÌ ´Ù¸£´Ù.
+//CEì—ì„œëŠ” main í•¨ìˆ˜ì˜ ì´ë¦„ì´ ë‹¤ë¥´ë‹¤.
 #if defined(UNDER_CE)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {

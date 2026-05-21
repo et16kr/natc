@@ -73,7 +73,7 @@ iSQLProgOption::ParsingCommandLine( SInt     argc,
         
         if (idlOS::strcasecmp(argv[i], "-u") == 0)
         {
-            // userid°¡ ¾ø´Â °æ¿ì
+            // useridê°€ ì—†ëŠ” ê²½ìš°
             IDE_TEST_RAISE(argc <= i+1, print_help_screen);
             IDE_TEST_RAISE(idlOS::strncmp(argv[i+1], "-", 1) == 0,
                            print_help_screen);
@@ -88,7 +88,7 @@ iSQLProgOption::ParsingCommandLine( SInt     argc,
         }
         else if (idlOS::strcasecmp(argv[i], "-p") == 0)
         {
-            // passwd°¡ ¾ø´Â °æ¿ì
+            // passwdê°€ ì—†ëŠ” ê²½ìš°
             IDE_TEST_RAISE(argc <= i+1, print_help_screen);
             IDE_TEST_RAISE(idlOS::strncmp(argv[i+1], "-", 1) == 0,
                            print_help_screen);
@@ -100,7 +100,7 @@ iSQLProgOption::ParsingCommandLine( SInt     argc,
         }
         else if (idlOS::strcasecmp(argv[i], "-s") == 0)
         {
-            // servernameÀÌ ¾ø´Â °æ¿ì
+            // servernameì´ ì—†ëŠ” ê²½ìš°
             IDE_TEST_RAISE(argc <= i+1, print_help_screen);
             IDE_TEST_RAISE(idlOS::strncmp(argv[i+1], "-", 1) == 0,
                            print_help_screen);
@@ -110,7 +110,7 @@ iSQLProgOption::ParsingCommandLine( SInt     argc,
         }
         else if (idlOS::strcasecmp(argv[i], "-port") == 0)
         {
-            // portno°¡ ¾ø´Â °æ¿ì
+            // portnoê°€ ì—†ëŠ” ê²½ìš°
             IDE_TEST_RAISE(argc <= i+1, print_help_screen);
             IDE_TEST_RAISE(idlOS::strncmp(argv[i+1], "-", 1) == 0,
                            print_help_screen);
@@ -120,7 +120,7 @@ iSQLProgOption::ParsingCommandLine( SInt     argc,
         }
         else if (idlOS::strcasecmp(argv[i], "-f") == 0)
         {
-            // scriptfileÀÌ ¾ø´Â °æ¿ì
+            // scriptfileì´ ì—†ëŠ” ê²½ìš°
             IDE_TEST_RAISE(argc <= i+1, print_help_screen);
             IDE_TEST_RAISE(idlOS::strncmp(argv[i+1], "-", 1) == 0,
                            print_help_screen);
@@ -130,7 +130,7 @@ iSQLProgOption::ParsingCommandLine( SInt     argc,
         }
         else if (idlOS::strcasecmp(argv[i], "-o") == 0)
         {
-            // outfileÀÌ ¾ø´Â °æ¿ì
+            // outfileì´ ì—†ëŠ” ê²½ìš°
             IDE_TEST_RAISE(argc <= i+1, print_help_screen);
             IDE_TEST_RAISE(idlOS::strncmp(argv[i+1], "-", 1) == 0,
                            print_help_screen);

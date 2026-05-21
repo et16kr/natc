@@ -52,7 +52,7 @@ public:
     SInt                 *m_Scale;  
     union ColumnValue    *m_Value;
     SQLINTEGER           *m_Len;
-    SInt                 *m_DisplayPos; // ÀÎ¼âÇÒ À§Ä¡, ÀÎ¼â°¡ ¿Ï·áµÇ¸é -1
+    SInt                 *m_DisplayPos; // ì¸ì‡„í•  ìœ„ì¹˜, ì¸ì‡„ê°€ ì™„ë£Œë˜ë©´ -1
 
 private: 
     SInt            m_nCol;

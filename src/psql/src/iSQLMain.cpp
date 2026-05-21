@@ -249,7 +249,7 @@ main( int     argc,
     g_inLoad = ID_FALSE;
     g_inEdit = ID_FALSE;
     inChange = ID_FALSE;
-    g_glogin = ID_FALSE; // SetScriptFile¿¡¼­ ÀÌ°ª Ã¼Å© 
+    g_glogin = ID_FALSE; // SetScriptFileì—ì„œ ì´ê°’ ì²´í¬ 
     g_login  = ID_FALSE;
     empty    = NULL;
     gTmpBuf  = NULL;
@@ -385,7 +385,7 @@ main( int     argc,
     {
         /* ============================================
          * Case of -f option
-         * SetFileRead   : ÆÄÀÏ ½ÇÇàÀÌ ³¡³ª¸é isql Á¾·áÇÏ±â À§ÇØ 
+         * SetFileRead   : íŒŒì¼ ì‹¤í–‰ì´ ëë‚˜ë©´ isql ì¢…ë£Œí•˜ê¸° ìœ„í•´ 
          * SetScriptFile : input file setting
          * ============================================ */
         gSQLCompiler->SetFileRead(ID_TRUE); 
@@ -396,7 +396,7 @@ main( int     argc,
     else
     {
         /* ============================================
-         * -f optionÀÌ ¾Æ´Ñ °æ¿ì
+         * -f optionì´ ì•„ë‹Œ ê²½ìš°
          * RegStdin : input file setting with stdin
          * ============================================ */
         gSQLCompiler->RegStdin();
@@ -451,8 +451,8 @@ main( int     argc,
         g_memmgr->freeAll();
         gBufMgr->Reset();
         gCommand->reset();
-                // ISQL_COMMENT2ÀÌ¸é iSQL>¿¡¼­ ÁÖ¼®À¸·Î ½ÃÀÛÇÏ¿© ÁÖ¼®Àº ³¡³µÀ¸³ª ¶óÀÎº¯°æÇÏÁö ¾Ê°í ¸í·É¾î¸¦ ÀÌ¾î¼­ »ç¿ëÇÑ °æ¿ì.
-                // ÀÌ °æ¿ì ÇÁ·ÒÇÁÆ®¸¦ Ãâ·ÂÇÏÁö ¾Ê°í ¶óÀÎ³Ñ¹ö¤Ñ¸¦ Ãâ·ÂÇØ¾ß ÇÔ.
+                // ISQL_COMMENT2ì´ë©´ iSQL>ì—ì„œ ì£¼ì„ìœ¼ë¡œ ì‹œìž‘í•˜ì—¬ ì£¼ì„ì€ ëë‚¬ìœ¼ë‚˜ ë¼ì¸ë³€ê²½í•˜ì§€ ì•Šê³  ëª…ë ¹ì–´ë¥¼ ì´ì–´ì„œ ì‚¬ìš©í•œ ê²½ìš°.
+                // ì´ ê²½ìš° í”„ë¡¬í”„íŠ¸ë¥¼ ì¶œë ¥í•˜ì§€ ì•Šê³  ë¼ì¸ë„˜ë²„ã…¡ë¥¼ ì¶œë ¥í•´ì•¼ í•¨.
         if ( ret != ISQL_COMMENT2 && g_inEdit != ID_TRUE && !g_glogin && !g_login )
         {
             gSQLCompiler->PrintPrompt();
@@ -496,11 +496,11 @@ main( int     argc,
         {
             idlOS::sprintf(gSpool->m_Buf, "[Error] Unterminated command.\n");
             gSpool->Print();
-            if (gProgOption.IsInFile() ) /* ¸í·É¾î°¡ ³¡³ªÁö ¾Ê°í ÆÄÀÏÀÌ Á¾·áÇÑ °æ¿ì with @ */
+            if (gProgOption.IsInFile() ) /* ëª…ë ¹ì–´ê°€ ëë‚˜ì§€ ì•Šê³  íŒŒì¼ì´ ì¢…ë£Œí•œ ê²½ìš° with @ */
             {
                 IDE_RAISE(exit_pos);
             }
-            else /* ¸í·É¾î°¡ ³¡³ªÁö ¾Ê°í ÆÄÀÏÀÌ Á¾·áÇÑ °æ¿ì with @ */
+            else /* ëª…ë ¹ì–´ê°€ ëë‚˜ì§€ ì•Šê³  íŒŒì¼ì´ ì¢…ë£Œí•œ ê²½ìš° with @ */
             {
                 continue;
             }

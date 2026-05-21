@@ -161,12 +161,12 @@ my $test_result_path = $ENV{ATAF_TEST_RESULT};
     my $final_result_path;
 
     ###################################################
-    # atc/TC¿¡¼­ viewdiff.plÀ» ½ÇÇà½ÃÅ² °æ¿ì,
-    # test_result¸¦ Ã£¾Æ¼­ lst¿Í outÀ» ºñ±³ÇØ¾ß ÇÑ´Ù.
+    # atc/TCì—ì„œ viewdiff.plì„ ì‹¤í–‰ì‹œí‚¨ ê²½ìš°,
+    # test_resultë¥¼ ì°¾ì•„ì„œ lstì™€ outì„ ë¹„êµí•´ì•¼ í•œë‹¤.
     ###################################################
     if ( $have_tc == 1 && $have_atc == 1 )
     {
-        # out fileÀÇ °æ·Î¸¦ test_resultÀÇ °æ·Î¿¡ ¸Â°Ô Ä¡È¯ÇÏ´Â ÀÛ¾÷
+        # out fileì˜ ê²½ë¡œë¥¼ test_resultì˜ ê²½ë¡œì— ë§ê²Œ ì¹˜í™˜í•˜ëŠ” ì‘ì—…
         @now_path = split( /\//, $pwd );
 
         my $i = 0;
@@ -180,7 +180,7 @@ my $test_result_path = $ENV{ATAF_TEST_RESULT};
 
             if ( $token eq "TC" || $is_add_path == 1 )
             {
-                # TCºÎÅÍ ±× ÀÌÈÄ¿¡ ³ª¿À´Â path
+                # TCë¶€í„° ê·¸ ì´í›„ì— ë‚˜ì˜¤ëŠ” path
                 $token2 = $token2 . "/" . $token;
                 $is_add_path = 1;
             }

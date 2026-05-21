@@ -982,7 +982,7 @@ iSQLExecuteCommand::ShowColumns( SChar * a_UserName,
                 idlOS::sprintf(tmp, "FLOAT");    
             }
             break;
-        case SQL_REAL : // ½ÇÁ¦ FLOAT
+        case SQL_REAL : // ì‹¤ì œ FLOAT
             idlOS::strcpy(tmp, "REAL");    
             break;
         case SQL_DOUBLE :
@@ -2126,8 +2126,8 @@ iSQLExecuteCommand::ExecutePSMStmt( SChar * a_CommandStr,
             break;
         }
 
-        // para_order´Â ÇÔ¼ö³ª ÇÁ·Î½ÃÀúÀÇ create ½Ã ÆÄ¶ó¹ÌÅÍ ¼ø¼­
-        // order´Â bindpara ½Ã ¼ø¼­
+        // para_orderëŠ” í•¨ìˆ˜ë‚˜ í”„ë¡œì‹œì €ì˜ create ì‹œ íŒŒë¼ë¯¸í„° ìˆœì„œ
+        // orderëŠ” bindpara ì‹œ ìˆœì„œ
         if (t_node->element.para_order == para_order)   // exec proc1(:a, :b, :c), exec proc1(:a, 'a', :b)
         {
             if (t_node->element.assigned)
@@ -2232,7 +2232,7 @@ no_bind_para:
     
     if (r_node != NULL)
     {
-        gHostVarMgr.setHostVar(r_node); // BUGBUG : r_node ´Â ºÒÇÊ¿äÇÑ parameter
+        gHostVarMgr.setHostVar(r_node); // BUGBUG : r_node ëŠ” ë¶ˆí•„ìš”í•œ parameter
     }
 
     idlOS::sprintf(m_Spool.m_Buf, "Execute success.\n");

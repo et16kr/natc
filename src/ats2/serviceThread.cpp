@@ -18,7 +18,7 @@
 std::map<STAFString, ServerMap> gServerCache;
 
 /* PRJ-1552
-   º¹±¸ÁöÁ¡¸ñ·Ï¿¡ ´ëÇÑ STL map ÀÚ·á±¸Á¶ */
+   ë³µêµ¬ì§€ì ëª©ë¡ì— ëŒ€í•œ STL map ìë£Œêµ¬ì¡° */
 std::map<STAFString, recPointCache> gRecPointCache;
 
 
@@ -74,7 +74,7 @@ Servicer::initialize( STAFServiceRequestLevel30 *aService,
 
     if ( getAtsTestKind() != ATS_TEST_NORMAL )
     {
-        // PRJ-1552 º¹±¸Å×½ºÆ®½Ã º¹±¸ÁöÁ¡°ü¸®ÀÚ ÃÊ±âÈ­
+        // PRJ-1552 ë³µêµ¬í…ŒìŠ¤íŠ¸ì‹œ ë³µêµ¬ì§€ì ê´€ë¦¬ì ì´ˆê¸°í™”
         IDE_TEST( mRecPointer.initialize(mEnvHOME) != IDE_SUCCESS );
     }
     
@@ -92,7 +92,7 @@ Servicer::destroy()
 {
     if ( getAtsTestKind() != ATS_TEST_NORMAL )
     {
-        // PRJ-1552 º¹±¸Å×½ºÆ®½Ã º¹±¸ÁöÁ¡°ü¸®ÀÚ ÇØÁ¦
+        // PRJ-1552 ë³µêµ¬í…ŒìŠ¤íŠ¸ì‹œ ë³µêµ¬ì§€ì ê´€ë¦¬ì í•´ì œ
         IDE_TEST( mRecPointer.destroy() != IDE_SUCCESS );
     }
     
@@ -132,7 +132,7 @@ Servicer::load()
   
     IDE_TEST( mServer.initialize() != IDE_SUCCESS );
     
-    // server.conf ÆÄÀÏÀ» ·ÎµåÇÑ´Ù.
+    // server.conf íŒŒì¼ì„ ë¡œë“œí•œë‹¤.
     copyData( sData1, 
               mIn.buffer(),
               mIn.length() );
@@ -162,19 +162,19 @@ Servicer::load()
         mServerMap = gServerCache[sData2];
     }
 
-    /* PRJ-1552 º¹±¸Å×½ºÆ® Áß
-       Regression TEST ¿Í Sequential TESTÀÇ °æ¿ì º¹±¸ÁöÁ¡¸ñ·Ï¿¡
-       ´ëÇÑ STL mapÀ» ÇÊ¿ä·Î ÇÔ */
+    /* PRJ-1552 ë³µêµ¬í…ŒìŠ¤íŠ¸ ì¤‘
+       Regression TEST ì™€ Sequential TESTì˜ ê²½ìš° ë³µêµ¬ì§€ì ëª©ë¡ì—
+       ëŒ€í•œ STL mapì„ í•„ìš”ë¡œ í•¨ */
     
     if ( ( getAtsTestKind() == ATS_TEST_REGRESSIVE ) ||
          ( getAtsTestKind() == ATS_TEST_SEQUENTIAL ) )
     {
-        // recovery.dat ÆÄÀÏÀ» ·ÎµåÇÑ´Ù.
+        // recovery.dat íŒŒì¼ì„ ë¡œë“œí•œë‹¤.
         copyData( sData1, mRECDATAFILE.buffer(), mRECDATAFILE.length() );
 
-       /* PRJ-1552 º¹±¸ÁöÁ¡¸ñ·ÏÀÇ STL mapÀ» ·ÎµùÇÏ´Â ÇÔ¼ö
-          ÃÖÃÊ¿¡´Â º¹±¸ÁöÁ¡ÆÄÀÏÀ» ÆÇµ¶ÇØ¼­ ·ÎµùÇÏ°í,
-          ±× ÀÌÈÄ¿¡´Â ÃÖÃÊ ·ÎµùµÈ STL mapÀ» »ç¿ëÇÏ°Ô µÊ */        
+       /* PRJ-1552 ë³µêµ¬ì§€ì ëª©ë¡ì˜ STL mapì„ ë¡œë”©í•˜ëŠ” í•¨ìˆ˜
+          ìµœì´ˆì—ëŠ” ë³µêµ¬ì§€ì íŒŒì¼ì„ íŒë…í•´ì„œ ë¡œë”©í•˜ê³ ,
+          ê·¸ ì´í›„ì—ëŠ” ìµœì´ˆ ë¡œë”©ëœ STL mapì„ ì‚¬ìš©í•˜ê²Œ ë¨ */        
         if( (gRecPointCache.find( sData1 ) == gRecPointCache.end()) ||
             (mBEGIN.asUInt() == 1) )
         {
@@ -198,7 +198,7 @@ Servicer::load()
     sLevel = 0;
     IDE_TEST( ServiceManager::unlock() != 0 );
 
-    // °¢ ¼­¹ö´Â DEFAULT ¼­¹öÀÇ È¯°æÀ» »ó¼Ó¹Ş´Â´Ù.
+    // ê° ì„œë²„ëŠ” DEFAULT ì„œë²„ì˜ í™˜ê²½ì„ ìƒì†ë°›ëŠ”ë‹¤.
     (mServerMap)["DEFAULT"]["ALTIBASE_HOME"] = mEnvHOME;
     (mServerMap)["DEFAULT"]["PATH"] = mEnvPATH;
     (mServerMap)["DEFAULT"]["LANG"] = mEnvLANG;
@@ -415,7 +415,7 @@ Servicer::runLaborer( STAFString aProcess )
 IDE_RC
 Servicer::parseOption()
 {
-    // »ç¿ëÀÚ°¡ ÁöÁ¤ÇÑ ¿É¼ÇÀ» ¾ò¾î¿Â´Ù.
+    // ì‚¬ìš©ìê°€ ì§€ì •í•œ ì˜µì…˜ì„ ì–»ì–´ì˜¨ë‹¤.
     // staf local ats run a.sql ts a.ts comment test logname orc hostname v880
     STAFResultPtr             sResult;
     STAFCommandParseResultPtr sParsedResult;
@@ -512,10 +512,10 @@ Servicer::parseOption()
     IDE_TEST( sResult->rc != 0 );
     mPROGRESS = sResult->result;
 
-    /* PRJ-1552 º¹±¸Å×½ºÆ® °ü·Ã Ãß°¡µÈ ¿É¼Ç
-       RECDATAFILE : º¹±¸ÁöÁ¡¸ñ·ÏÆÄÀÏ°æ·Î
-       TESTTYPE    : Å×½ºÆ®Å¸ÀÔ
-       RECPOINTID  : º¹±¸ÁöÁ¡ID */
+    /* PRJ-1552 ë³µêµ¬í…ŒìŠ¤íŠ¸ ê´€ë ¨ ì¶”ê°€ëœ ì˜µì…˜
+       RECDATAFILE : ë³µêµ¬ì§€ì ëª©ë¡íŒŒì¼ê²½ë¡œ
+       TESTTYPE    : í…ŒìŠ¤íŠ¸íƒ€ì…
+       RECPOINTID  : ë³µêµ¬ì§€ì ID */
     sResult = ServiceManager::resolveOption( mService,
                                              mServiceData,
                                              sParsedResult,
@@ -536,8 +536,8 @@ Servicer::parseOption()
                                              "RECPOINTID");
     IDE_TEST( sResult->rc != 0 );
 
-    /* º¹±¸ÁöÁ¡IDÀÇ °æ¿ì´Â string ±Ô¾àÀ¸·Î
-       ÀÎÇØ¼­ ¾à°£ÀÇ º¯È¯ÀÌ ÇÊ¿äÇÏ´Ù */
+    /* ë³µêµ¬ì§€ì IDì˜ ê²½ìš°ëŠ” string ê·œì•½ìœ¼ë¡œ
+       ì¸í•´ì„œ ì•½ê°„ì˜ ë³€í™˜ì´ í•„ìš”í•˜ë‹¤ */
     mRECPOINTID = sResult->result.replace("^", ":");
 
     return IDE_SUCCESS;
@@ -617,8 +617,8 @@ Servicer::runReal( STAFString  aIn )
         mTdx = aIn.replace( ".sql", 
                             mEnvSUFFIX_RE + ".tdx" ); 
 
-        /* º¹±¸Å×½ºÆ® CRASH°¡ ¹ß»ıÇÑ °æ¿ì $ALTIBASE_HOME¿¡ ´ëÇÑ
-           ¾ĞÃàÇÒ ÆÄÀÏ °æ·Î */
+        /* ë³µêµ¬í…ŒìŠ¤íŠ¸ CRASHê°€ ë°œìƒí•œ ê²½ìš° $ALTIBASE_HOMEì— ëŒ€í•œ
+           ì••ì¶•í•  íŒŒì¼ ê²½ë¡œ */
         mTgz = aIn.replace( ".sql", 
                             mEnvSUFFIX_RE + ".tgz" ); 
 
@@ -662,8 +662,8 @@ Servicer::runReal( STAFString  aIn )
         mTdx = mTdx.replace( ".sql", 
                             mEnvSUFFIX_RE + ".tdx" ); 
 
-        /* º¹±¸Å×½ºÆ® CRASH°¡ ¹ß»ıÇÑ °æ¿ì $ALTIBASE_HOME¿¡ ´ëÇÑ
-           ¾ĞÃàÇÒ ÆÄÀÏ °æ·Î */
+        /* ë³µêµ¬í…ŒìŠ¤íŠ¸ CRASHê°€ ë°œìƒí•œ ê²½ìš° $ALTIBASE_HOMEì— ëŒ€í•œ
+           ì••ì¶•í•  íŒŒì¼ ê²½ë¡œ */
         mTgz = mEnvRESULT + mTgz; 
         mTgz = mTgz.replace( ".sql", 
                             mEnvSUFFIX_RE + ".tgz" ); 
@@ -697,12 +697,12 @@ Servicer::runReal( STAFString  aIn )
               aIn.buffer(),  
               aIn.length() );
 
-    // Å×½ºÆ® ÄÉÀÌ½º¸¦ ·ÎµåÇÑ´Ù.
-    // LOAD_SQL Ã³¸®¸¦ À§ÇØ¼­ Àç±ÍÀûÀ¸·Î È£ÃâµÈ´Ù.
+    // í…ŒìŠ¤íŠ¸ ì¼€ì´ìŠ¤ë¥¼ ë¡œë“œí•œë‹¤.
+    // LOAD_SQL ì²˜ë¦¬ë¥¼ ìœ„í•´ì„œ ì¬ê·€ì ìœ¼ë¡œ í˜¸ì¶œëœë‹¤.
     IDE_TEST_RAISE( loadCASE( basename(sLine), 
                               mInData ) != IDE_SUCCESS, error_load_sql );
  
-    // Å×½ºÆ® ¿À¶óÅ¬À» ·ÎµåÇÑ´Ù. 
+    // í…ŒìŠ¤íŠ¸ ì˜¤ë¼í´ì„ ë¡œë“œí•œë‹¤. 
     IDE_TEST_RAISE( loadORACLE( mLs, 
                                 mLsData ) != IDE_SUCCESS, error_load_oracle );
 
@@ -724,10 +724,10 @@ Servicer::runReal( STAFString  aIn )
     sInput.parseTable->nodeCursor = -1;
     sInput.parseTable->text = sData;
 
-    /* PRJ-1552¿¡¼­ º¹±¸ÁöÁ¡¸ñ·ÏÀÇ STL mapÀ» Parse Table¿¡¼­
-       Á¢±ÙÇÒ ¼ö ÀÖµµ·Ï ¼³Á¤ÇÔ.
-       ±¸¹®ÆÄ½Ì½Ã º¹±¸ÁöÁ¡ ID¸¦ ÇØ´ç filename°ú linenumÀ¸·Î
-       ¸ÅÇÎ½ÃÄÑÁÖ±â À§ÇÔ */
+    /* PRJ-1552ì—ì„œ ë³µêµ¬ì§€ì ëª©ë¡ì˜ STL mapì„ Parse Tableì—ì„œ
+       ì ‘ê·¼í•  ìˆ˜ ìˆë„ë¡ ì„¤ì •í•¨.
+       êµ¬ë¬¸íŒŒì‹±ì‹œ ë³µêµ¬ì§€ì  IDë¥¼ í•´ë‹¹ filenameê³¼ linenumìœ¼ë¡œ
+       ë§¤í•‘ì‹œì¼œì£¼ê¸° ìœ„í•¨ */
     sInput.parseTable->recpointCache = &mRecPointCache; 
 
     (void)addNode( &sInput, 
@@ -900,11 +900,11 @@ Servicer::runParseTable( psTable    *aPsTable,
             sLaborer = mLaborer[sNode.process];
 
             /* PRJ-1552
-               ART º¹±¸Å×½ºÆ® Áß¿¡
+               ART ë³µêµ¬í…ŒìŠ¤íŠ¸ ì¤‘ì—
                1) Sequential Test
                2) Full Test
-               ¿¡¼­´Â ¾Æ·¡¿Í °°ÀÌ °­Á¦·Î º¹±¸ÁöÁ¡(µé)À» È°¼ºÈ­½ÃÅ³¼ö
-               ÀÖ°Ô Command¸¦ Ãß°¡ÇØÁÖ¾î¾ß ÇÔ */
+               ì—ì„œëŠ” ì•„ë˜ì™€ ê°™ì´ ê°•ì œë¡œ ë³µêµ¬ì§€ì (ë“¤)ì„ í™œì„±í™”ì‹œí‚¬ìˆ˜
+               ìˆê²Œ Commandë¥¼ ì¶”ê°€í•´ì£¼ì–´ì•¼ í•¨ */
             
             if ( sIsEnableRecPtr == ID_FALSE )
             {  
@@ -1126,9 +1126,9 @@ Servicer::runParseTable( psTable    *aPsTable,
                     }
                     case TYPE_TEST_RECPTR:
                     {
-                        /* PRJ-1552 ART º¹±¸Å×½ºÆ® ±â´É¿¡¼­
-                           º¹±¸ÁöÁ¡ °ü·ÃÇÏ¿©  ´ÙÀ½°ú °°ÀÌ
-                           QueryData »ı¼ºÈÄ Laborer¿¡ Àü´Ş */
+                        /* PRJ-1552 ART ë³µêµ¬í…ŒìŠ¤íŠ¸ ê¸°ëŠ¥ì—ì„œ
+                           ë³µêµ¬ì§€ì  ê´€ë ¨í•˜ì—¬  ë‹¤ìŒê³¼ ê°™ì´
+                           QueryData ìƒì„±í›„ Laborerì— ì „ë‹¬ */
                         
                         sData.type      = RECPOINT_COM;
                         sData.query     = sElement.keyMap["key1"];
@@ -1713,9 +1713,9 @@ Servicer::runParseTable( psTable    *aPsTable,
     if( mIgnore == ID_TRUE )
     {
         /* PRJ-1552
-           Å×½ºÆ®ÄÉÀÌ½º°¡ IGNRÀÌ¸é
-           1) NORMAL Å×½ºÆ®°ú regression testÀÇ °æ¿ì -> PASS
-           2) ±×¹Û¿¡ °æ¿ì -> IGNR */
+           í…ŒìŠ¤íŠ¸ì¼€ì´ìŠ¤ê°€ IGNRì´ë©´
+           1) NORMAL í…ŒìŠ¤íŠ¸ê³¼ regression testì˜ ê²½ìš° -> PASS
+           2) ê·¸ë°–ì— ê²½ìš° -> IGNR */
         if ( ( getAtsTestKind() == ATS_TEST_SEQUENTIAL ) || 
              ( getAtsTestKind() == ATS_TEST_FULL ) )
         {
@@ -1732,15 +1732,15 @@ Servicer::runParseTable( psTable    *aPsTable,
     {
         /* PRJ-1552
            
-           Å×½ºÆ®½ÇÇà°á°ú ±¸ºĞ
+           í…ŒìŠ¤íŠ¸ì‹¤í–‰ê²°ê³¼ êµ¬ë¶„
            
-           1) NORMAL Å×½ºÆ®°ú regression test´Â °ÅÀÇ µ¿ÀÏ
+           1) NORMAL í…ŒìŠ¤íŠ¸ê³¼ regression testëŠ” ê±°ì˜ ë™ì¼
               - PASS
               - FAIL
               - FATAL
-              - CRASH (regression testÀÇ °æ¿ì)
+              - CRASH (regression testì˜ ê²½ìš°)
               
-           2) ±×¹Û¿¡ °æ¿ì
+           2) ê·¸ë°–ì— ê²½ìš°
               - HIT
               - MISS
               - FATA
@@ -1750,7 +1750,7 @@ Servicer::runParseTable( psTable    *aPsTable,
         if ( ( getAtsTestKind() == ATS_TEST_NORMAL ) ||
              ( getAtsTestKind() == ATS_TEST_REGRESSIVE ) )
         {
-            // FAIL ¶Ç´Â ERRORÀÇ °æ¿ì¿¡¸¸ out ÆÄÀÏ¿¡ ±â·ÏÇÑ´Ù.
+            // FAIL ë˜ëŠ” ERRORì˜ ê²½ìš°ì—ë§Œ out íŒŒì¼ì— ê¸°ë¡í•œë‹¤.
             saveRESULT( &sPass );
 
             if( sPass == ID_TRUE )
@@ -2024,8 +2024,8 @@ Servicer::saveArtRESULT()
 
     if( (getHit() == ID_TRUE) || (getFatal() == ID_TRUE) )
     {
-        // process°¡ 2°³ ÀÌ»óÀÌ°í, 
-        // test °á°ú°¡ FAILÀÏ °æ¿ì¿¡¸¸ tdx ÆÄÀÏÀ» »ı¼ºÇÑ´Ù.
+        // processê°€ 2ê°œ ì´ìƒì´ê³ , 
+        // test ê²°ê³¼ê°€ FAILì¼ ê²½ìš°ì—ë§Œ tdx íŒŒì¼ì„ ìƒì„±í•œë‹¤.
         if( mLaborer.size() > 1 )
         {
             saveTDX();
@@ -2102,8 +2102,8 @@ Servicer::saveRESULT( idBool *aPass )
             *aPass = ID_FALSE;
         }
         
-        // process°¡ 2°³ ÀÌ»óÀÌ°í, 
-        // test °á°ú°¡ FAILÀÏ °æ¿ì¿¡¸¸ tdx ÆÄÀÏÀ» »ı¼ºÇÑ´Ù.
+        // processê°€ 2ê°œ ì´ìƒì´ê³ , 
+        // test ê²°ê³¼ê°€ FAILì¼ ê²½ìš°ì—ë§Œ tdx íŒŒì¼ì„ ìƒì„±í•œë‹¤.
         if( mLaborer.size() > 1 )
         {
             saveTDX();
@@ -2173,7 +2173,7 @@ Servicer::saveTDX()
 
     fprintf( sTdx, "%s", sData );
 
-    // ÆÄÀÏÀÇ ³¡¿¡ start mark¸¦ ºÙ¿©Áà¾ß ÇÔ.
+    // íŒŒì¼ì˜ ëì— start markë¥¼ ë¶™ì—¬ì¤˜ì•¼ í•¨.
     fprintf( sTdx, "\n<@!START!@>" );
 
     IDE_TEST( fclose( sTdx ) != 0 );
@@ -3558,7 +3558,7 @@ Servicer::status()
     return sData;
 }
 
-/* PRJ-1552 ART º¹±¸Å×½ºÆ® Å¸ÀÔ ¹İÈ¯ */
+/* PRJ-1552 ART ë³µêµ¬í…ŒìŠ¤íŠ¸ íƒ€ì… ë°˜í™˜ */
 
 ATSTestKind
 Servicer::getAtsTestKind()
