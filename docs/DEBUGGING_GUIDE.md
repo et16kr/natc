@@ -35,6 +35,8 @@
 
 - 실패한 `.tc` path.
 - 대응하는 expected `.lst`와 generated `.out` path.
+- expected `.lst`가 없는지 여부. 이 경우 `work/log/lstout.log`에 보통
+  expected path와 generated `.out` path가 같이 남는다.
 - `diff -u <lst> <out>`의 핵심 차이.
 - 차이가 공백, 프롬프트, trailing blank line, SQL formatting transcript
   같은 oracle-only 변화인지 여부.
@@ -45,8 +47,15 @@
 
 - 공백이나 transcript formatting만 다르고 SQL 결과가 정상이라면 `.out`으로
   `.lst`를 갱신한 뒤 같은 명령으로 재실행한다.
+- 새 TC에서 expected `.lst`가 없어 FAIL인 경우는 runner/SQL 실패가 아니라
+  oracle artifact 미완성으로 본다. 단, generated `.out`에 SQL error,
+  crash, hang, 의도하지 않은 row/result 차이가 있으면 `.lst`로 승격하지
+  않는다.
 - 결과값, row 수, 에러 코드, crash, hang이 다르면 `.lst`를 덮어쓰지 않고
   서버/SQL 문제로 본다.
+- 한 runner wrapper가 환경 문제로 실행 전 실패하면 사용자가 지정한 runner
+  path로 재현한다. 예를 들어 `bin/atc`가 Perl 모듈 로딩 문제로 실패해도
+  `atsclnt` 실행 결과는 별도로 확인한다.
 - 서버 문제로 보이면 서버 소스와 빌드 위치는 `$HOME/work/altidev4`를 우선
   사용한다. 이때 TC 입력 SQL, schema/data setup, 서버 로그, core 여부,
   `altibase -v`, 관련 properties를 같이 기록한다.

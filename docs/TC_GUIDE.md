@@ -409,6 +409,9 @@ Rules:
 - Use `SKIP BEGIN` / `SKIP END` around best-effort cleanup.
 - Avoid current timestamps, random values, unordered scans, and environment
   specific output unless hidden or normalized.
+- If a displayed expression has an oversized type width, such as `LISTAGG`,
+  `CLOB`, or a long `VARCHAR`, normalize the visible output with `CAST(... AS
+  VARCHAR(n))` after any needed `SUBSTR` so the oracle stays reviewable.
 - When substituting string values into SQL, include SQL quotes explicitly:
   `VALUES ( '${sValue}' )`.
 
@@ -480,6 +483,10 @@ Rules:
   `caseName.tc`.
 - Generate `.lst` from a real target-tool run when possible.
 - Do not guess complex database error text or nondeterministic output.
+- A newly generated `.tc` is not complete until the matching tagged `.lst` is
+  present. Run the exact target command, inspect the generated `.out`, copy it
+  to the tagged `.lst` only when the SQL result is intentional, then rerun the
+  same command and confirm PASS.
 - Stabilize result ordering with `ORDER BY`.
 - Hide setup/cleanup noise instead of recording unstable cleanup failures.
 - Use `SKIP` only for expected errors or cleanup attempts whose output should
