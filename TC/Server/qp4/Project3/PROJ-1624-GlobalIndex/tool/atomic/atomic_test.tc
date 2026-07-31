@@ -1,0 +1,77 @@
+###########################################################################
+# Merge Query Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+MAKE "clean";
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create table t1 (i1 integer, i2 integer, i3 varchar(10))
+partition by hash(i1)
+(
+  partition p1,
+  partition p2
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i2) local;
+create index idx2 on t1(i3);
+
+desc t1;
+}
+
+DEF SELECT()
+{
+alter session set explain plan = on;
+alter system set trclog_detail_predicate = 1;
+
+select i1,i2,i3 from t1;
+
+select * from t1 where i2 = 3;
+select * from t1 where i3 = 'abc';
+
+alter session set explain plan = off;
+alter system set trclog_detail_predicate = 0;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+MAKE "all";
+
+##################################
+# SECTOR; ATOMIC ARRAY INSERT
+##################################
+
+EXEC P1 "./atomic_insert";
+P_WAIT P1;
+
+PRINT $Ret_;
+
+desc t1;
+
+##################################
+# SECTOR; SELECT
+##################################
+
+CALL SELECT();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

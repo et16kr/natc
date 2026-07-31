@@ -1,0 +1,247 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop view v1;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 4 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 5 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 6 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 7 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 8 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3) local;
+Create success.
+
+$T0> create view v1 as select * from t1;
+Create success.
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 values ( 3, 3, 3 );
+1 row inserted.
+$T0> insert into t2 values ( 4, 4, 4 );
+1 row inserted.
+$T0> insert into t2 values ( 5, 5, 5 );
+1 row inserted.
+
+$T0> create index t2_idx2 on t2(i2);
+Create success.
+$T0> create index t2_idx3 on t2(i3) local;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC
+T1 has no primary key
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_IDX2                                  BTREE                  I2 ASC
+T2_IDX3                                  BTREE                  I3 ASC
+T2 has no primary key
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; VIEW PUSH PREDICATE
+$T0> ##################################
+
+$T0> select /*+ no_merge(v1) */ * from v1, t2 where v1.i2 = t2.i2;
+V1.I1       V1.I2       V1.I3       T2.I1       T2.I2       T2.I3       
+-------------------------------------------------------------------------------
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  VIEW ( SYS.V1, ACCESS: 8, COST: BLOCKED )
+   PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
+   [ FILTER ]
+   V1.I2 = T2.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 2/2, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select /*+ no_merge(v1) */ * from t2, v1 where v1.i2 = t2.i2;
+T2.I1       T2.I2       T2.I3       V1.I1       V1.I2       V1.I3       
+-------------------------------------------------------------------------------
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 2/2, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
+   [ FILTER ]
+   V1.I2 = T2.I2
+   VIEW ( SYS.V1, ACCESS: 8, COST: BLOCKED )
+    PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+     PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select /*+ no_merge(v1) push_pred(v1) */ * from v1, t2 where v1.i2 = t2.i2;
+V1.I1       V1.I2       V1.I3       T2.I1       T2.I2       T2.I3       
+-------------------------------------------------------------------------------
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 2/2, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  VIEW ( SYS.V1, ACCESS: 3, COST: BLOCKED )
+   PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 3, COST: BLOCKED )
+     [ VARIABLE KEY ]
+     OR
+      AND
+       T1.I2 = T2.I2
+     SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     SCAN ( PARTITION: P1, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select /*+ no_merge(v1) push_pred(v1) */ * from t2, v1 where v1.i2 = t2.i2;
+T2.I1       T2.I2       T2.I3       V1.I1       V1.I2       V1.I3       
+-------------------------------------------------------------------------------
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 2/2, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  VIEW ( SYS.V1, ACCESS: 3, COST: BLOCKED )
+   PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 3, COST: BLOCKED )
+     [ VARIABLE KEY ]
+     OR
+      AND
+       T1.I2 = T2.I2
+     SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     SCAN ( PARTITION: P1, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop view v1;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

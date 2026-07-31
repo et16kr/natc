@@ -1,0 +1,123 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+set linesize 200;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1(i1 integer, i2 integer, i3 integer)
+partition by range(i1)
+(
+  partition p1 values less than (3),
+  partition p2 values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values (1, 1, 1);
+insert into t1 values (2, 2, 1);
+insert into t1 values (3, 3, 3);
+insert into t1 values (4, 4, 3);
+
+create index idx1 on t1(i2);
+create index idx2 on t1(i3) local;
+
+create table t2(i1 integer, i2 integer, i3 integer)
+tablespace sys_tbs_disk_data;
+
+insert into t2 values (1, 1, 1);
+insert into t2 values (2, 2, 1);
+insert into t2 values (3, 3, 3);
+insert into t2 values (4, 4, 3);
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+##################################
+# SECTOR; ORDER BY
+##################################
+
+select * from t1 where i3=1 order by i3;
+select * from t1 where i3=1 order by i3 desc;
+
+select * from t1 where i2=1 order by i2;
+select * from t1 where i2=1 order by i2 desc;
+
+##################################
+# SECTOR; DISTINCT
+##################################
+
+select distinct i2 from t1;
+select distinct i2 from t1 where i2>0;
+
+select distinct i3 from t1;
+select distinct i3 from t1 where i3>0;
+
+##################################
+# SECTOR; DISTINCT + ORDER BY
+##################################
+
+select distinct i2 from t1 order by i2;
+select distinct i2 from t1 order by i2 desc;
+select distinct i2 from t1 where i2>0 order by i2;
+select distinct i2 from t1 where i2>0 order by i2 desc;
+
+select distinct i3 from t1 order by i3;
+select distinct i3 from t1 order by i3 desc;
+select distinct i3 from t1 where i3>0 order by i3;
+select distinct i3 from t1 where i3>0 order by i3 desc;
+
+##################################
+# SECTOR; JOIN
+##################################
+
+select t1.i2, t2.i2 from t1, t2 where t1.i2=t2.i2;
+
+select t1.i3, t2.i3 from t1, t2 where t1.i3=t2.i3;
+
+select t1.i1, t2.i1 from t1, t2 where t1.i1=t2.i1;
+
+##################################
+# SECTOR; MIN,MAX
+##################################
+
+select min(i2) from t1;
+select max(i2) from t1;
+
+select min(i3) from t1;
+select max(i3) from t1;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

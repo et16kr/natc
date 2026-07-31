@@ -1,0 +1,1688 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ##########################################################################
+$T0> # PROJ-1624 Plan Compare
+$T0> ##########################################################################
+
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+
+$T0> create table t1
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition p5 values (5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index t1_idx1 on t1(i1);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3);
+Create success.
+$T0> create index t1_idx3 on t1(i2, i3, i4);
+Create success.
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> insert into t1 values ( 0, 0, 0, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 0, 1, null, null );
+1 row inserted.
+$T0> insert into t1 values ( 101, 0, null, null );
+1 row inserted.
+
+$T0> create table t2
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition p5 values (5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index t1_idx1 on t2(i1);
+[ERR-3104C : Duplicate index name]
+$T0> create index t1_idx2 on t2(i2, i3);
+[ERR-3104C : Duplicate index name]
+$T0> create index t1_idx3 on t2(i2, i3, i4);
+[ERR-3104C : Duplicate index name]
+$T0> insert into t2 select level, level/4, mod(level,4), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> insert into t2 values ( 0, 0, 0, 1 );
+1 row inserted.
+$T0> insert into t2 values ( 0, 1, null, null );
+1 row inserted.
+$T0> insert into t2 values ( 101, 0, null, null );
+1 row inserted.
+
+
+$T0> ########################################################
+$T0> #SECTOR; Compare Plan
+$T0> ########################################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select /*+ FULL SCAN(t1) */ * from t1 where i2 = 1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+0           1                                   
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, SELF_ID: 9, REF_ID: 2 )
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, ACCESS: 4, SELF_ID: 2 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+    [ FILTER ]
+    I2 = 1
+------------------------------------------------------------
+$T0> select /*+ INDEX(t1, t1_idx1) */ * from t1 where i2 = 1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+0           1                                   
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: T1_IDX1, ACCESS: 103, SELF_ID: 2 )
+  [ FILTER ]
+  I2 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+------------------------------------------------------------
+
+$T0> select /*+ RULE */ * from t1, t2 where t1.i1 = t2.i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T2.I1       T2.I2       
+-------------------------------------------------------------------------------
+T2.I3       T2.I4       
+---------------------------
+100         33          1           1           100         25          
+0           1           
+0           0           0           1           0           0           
+0           1           
+0           1                                   0           0           
+0           1           
+0           0           0           1           0           1           
+                        
+0           1                                   0           1           
+                        
+101         0                                   101         0           
+                        
+5           1           2           1           5           1           
+1           1           
+10          3           1           1           10          2           
+2           1           
+15          5           0           1           15          3           
+3           1           
+20          6           2           1           20          5           
+0           1           
+25          8           1           1           25          6           
+1           1           
+30          10          0           1           30          7           
+2           1           
+35          11          2           1           35          8           
+3           1           
+40          13          1           1           40          10          
+0           1           
+45          15          0           1           45          11          
+1           1           
+50          16          2           1           50          12          
+2           1           
+55          18          1           1           55          13          
+3           1           
+60          20          0           1           60          15          
+0           1           
+65          21          2           1           65          16          
+1           1           
+70          23          1           1           70          17          
+2           1           
+75          25          0           1           75          18          
+3           1           
+80          26          2           1           80          20          
+0           1           
+85          28          1           1           85          21          
+1           1           
+90          30          0           1           90          22          
+2           1           
+95          31          2           1           95          23          
+3           1           
+4           1           1           1           4           1           
+0           1           
+9           3           0           1           9           2           
+1           1           
+14          4           2           1           14          3           
+2           1           
+19          6           1           1           19          4           
+3           1           
+24          8           0           1           24          6           
+0           1           
+29          9           2           1           29          7           
+1           1           
+34          11          1           1           34          8           
+2           1           
+39          13          0           1           39          9           
+3           1           
+44          14          2           1           44          11          
+0           1           
+49          16          1           1           49          12          
+1           1           
+54          18          0           1           54          13          
+2           1           
+59          19          2           1           59          14          
+3           1           
+64          21          1           1           64          16          
+0           1           
+69          23          0           1           69          17          
+1           1           
+74          24          2           1           74          18          
+2           1           
+79          26          1           1           79          19          
+3           1           
+84          28          0           1           84          21          
+0           1           
+89          29          2           1           89          22          
+1           1           
+94          31          1           1           94          23          
+2           1           
+99          33          0           1           99          24          
+3           1           
+3           1           0           1           3           0           
+3           1           
+8           2           2           1           8           2           
+0           1           
+13          4           1           1           13          3           
+1           1           
+18          6           0           1           18          4           
+2           1           
+23          7           2           1           23          5           
+3           1           
+28          9           1           1           28          7           
+0           1           
+33          11          0           1           33          8           
+1           1           
+38          12          2           1           38          9           
+2           1           
+43          14          1           1           43          10          
+3           1           
+48          16          0           1           48          12          
+0           1           
+53          17          2           1           53          13          
+1           1           
+58          19          1           1           58          14          
+2           1           
+63          21          0           1           63          15          
+3           1           
+68          22          2           1           68          17          
+0           1           
+73          24          1           1           73          18          
+1           1           
+78          26          0           1           78          19          
+2           1           
+83          27          2           1           83          20          
+3           1           
+88          29          1           1           88          22          
+0           1           
+93          31          0           1           93          23          
+1           1           
+98          32          2           1           98          24          
+2           1           
+2           0           2           1           2           0           
+2           1           
+7           2           1           1           7           1           
+3           1           
+12          4           0           1           12          3           
+0           1           
+17          5           2           1           17          4           
+1           1           
+22          7           1           1           22          5           
+2           1           
+27          9           0           1           27          6           
+3           1           
+32          10          2           1           32          8           
+0           1           
+37          12          1           1           37          9           
+1           1           
+42          14          0           1           42          10          
+2           1           
+47          15          2           1           47          11          
+3           1           
+52          17          1           1           52          13          
+0           1           
+57          19          0           1           57          14          
+1           1           
+62          20          2           1           62          15          
+2           1           
+67          22          1           1           67          16          
+3           1           
+72          24          0           1           72          18          
+0           1           
+77          25          2           1           77          19          
+1           1           
+82          27          1           1           82          20          
+2           1           
+87          29          0           1           87          21          
+3           1           
+92          30          2           1           92          23          
+0           1           
+97          32          1           1           97          24          
+1           1           
+1           0           1           1           1           0           
+1           1           
+6           2           0           1           6           1           
+2           1           
+11          3           2           1           11          2           
+3           1           
+16          5           1           1           16          4           
+0           1           
+21          7           0           1           21          5           
+1           1           
+26          8           2           1           26          6           
+2           1           
+31          10          1           1           31          7           
+3           1           
+36          12          0           1           36          9           
+0           1           
+41          13          2           1           41          10          
+1           1           
+46          15          1           1           46          11          
+2           1           
+51          17          0           1           51          12          
+3           1           
+56          18          2           1           56          14          
+0           1           
+61          20          1           1           61          15          
+1           1           
+66          22          0           1           66          16          
+2           1           
+71          23          2           1           71          17          
+3           1           
+76          25          1           1           76          19          
+0           1           
+81          27          0           1           81          20          
+1           1           
+86          28          2           1           86          21          
+2           1           
+91          30          1           1           91          22          
+3           1           
+96          32          0           1           96          24          
+0           1           
+105 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 32 )
+ JOIN
+  PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, ACCESS: 103, SELF_ID: 2 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: T1_IDX1, ACCESS: 105, SELF_ID: 1 )
+   [ PARTITION FILTER ]
+   OR
+    AND
+     T1.I1 = T2.I1
+   [ VARIABLE KEY ]
+   OR
+    AND
+     T1.I1 = T2.I1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+------------------------------------------------------------
+$T0> select /*+ COST */ * from t1, t2 where t1.i1 = t2.i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T2.I1       T2.I2       
+-------------------------------------------------------------------------------
+T2.I3       T2.I4       
+---------------------------
+100         33          1           1           100         25          
+0           1           
+0           0           0           1           0           0           
+0           1           
+0           1                                   0           0           
+0           1           
+0           0           0           1           0           1           
+                        
+0           1                                   0           1           
+                        
+101         0                                   101         0           
+                        
+5           1           2           1           5           1           
+1           1           
+10          3           1           1           10          2           
+2           1           
+15          5           0           1           15          3           
+3           1           
+20          6           2           1           20          5           
+0           1           
+25          8           1           1           25          6           
+1           1           
+30          10          0           1           30          7           
+2           1           
+35          11          2           1           35          8           
+3           1           
+40          13          1           1           40          10          
+0           1           
+45          15          0           1           45          11          
+1           1           
+50          16          2           1           50          12          
+2           1           
+55          18          1           1           55          13          
+3           1           
+60          20          0           1           60          15          
+0           1           
+65          21          2           1           65          16          
+1           1           
+70          23          1           1           70          17          
+2           1           
+75          25          0           1           75          18          
+3           1           
+80          26          2           1           80          20          
+0           1           
+85          28          1           1           85          21          
+1           1           
+90          30          0           1           90          22          
+2           1           
+95          31          2           1           95          23          
+3           1           
+4           1           1           1           4           1           
+0           1           
+9           3           0           1           9           2           
+1           1           
+14          4           2           1           14          3           
+2           1           
+19          6           1           1           19          4           
+3           1           
+24          8           0           1           24          6           
+0           1           
+29          9           2           1           29          7           
+1           1           
+34          11          1           1           34          8           
+2           1           
+39          13          0           1           39          9           
+3           1           
+44          14          2           1           44          11          
+0           1           
+49          16          1           1           49          12          
+1           1           
+54          18          0           1           54          13          
+2           1           
+59          19          2           1           59          14          
+3           1           
+64          21          1           1           64          16          
+0           1           
+69          23          0           1           69          17          
+1           1           
+74          24          2           1           74          18          
+2           1           
+79          26          1           1           79          19          
+3           1           
+84          28          0           1           84          21          
+0           1           
+89          29          2           1           89          22          
+1           1           
+94          31          1           1           94          23          
+2           1           
+99          33          0           1           99          24          
+3           1           
+3           1           0           1           3           0           
+3           1           
+8           2           2           1           8           2           
+0           1           
+13          4           1           1           13          3           
+1           1           
+18          6           0           1           18          4           
+2           1           
+23          7           2           1           23          5           
+3           1           
+28          9           1           1           28          7           
+0           1           
+33          11          0           1           33          8           
+1           1           
+38          12          2           1           38          9           
+2           1           
+43          14          1           1           43          10          
+3           1           
+48          16          0           1           48          12          
+0           1           
+53          17          2           1           53          13          
+1           1           
+58          19          1           1           58          14          
+2           1           
+63          21          0           1           63          15          
+3           1           
+68          22          2           1           68          17          
+0           1           
+73          24          1           1           73          18          
+1           1           
+78          26          0           1           78          19          
+2           1           
+83          27          2           1           83          20          
+3           1           
+88          29          1           1           88          22          
+0           1           
+93          31          0           1           93          23          
+1           1           
+98          32          2           1           98          24          
+2           1           
+2           0           2           1           2           0           
+2           1           
+7           2           1           1           7           1           
+3           1           
+12          4           0           1           12          3           
+0           1           
+17          5           2           1           17          4           
+1           1           
+22          7           1           1           22          5           
+2           1           
+27          9           0           1           27          6           
+3           1           
+32          10          2           1           32          8           
+0           1           
+37          12          1           1           37          9           
+1           1           
+42          14          0           1           42          10          
+2           1           
+47          15          2           1           47          11          
+3           1           
+52          17          1           1           52          13          
+0           1           
+57          19          0           1           57          14          
+1           1           
+62          20          2           1           62          15          
+2           1           
+67          22          1           1           67          16          
+3           1           
+72          24          0           1           72          18          
+0           1           
+77          25          2           1           77          19          
+1           1           
+82          27          1           1           82          20          
+2           1           
+87          29          0           1           87          21          
+3           1           
+92          30          2           1           92          23          
+0           1           
+97          32          1           1           97          24          
+1           1           
+1           0           1           1           1           0           
+1           1           
+6           2           0           1           6           1           
+2           1           
+11          3           2           1           11          2           
+3           1           
+16          5           1           1           16          4           
+0           1           
+21          7           0           1           21          5           
+1           1           
+26          8           2           1           26          6           
+2           1           
+31          10          1           1           31          7           
+3           1           
+36          12          0           1           36          9           
+0           1           
+41          13          2           1           41          10          
+1           1           
+46          15          1           1           46          11          
+2           1           
+51          17          0           1           51          12          
+3           1           
+56          18          2           1           56          14          
+0           1           
+61          20          1           1           61          15          
+1           1           
+66          22          0           1           66          16          
+2           1           
+71          23          2           1           71          17          
+3           1           
+76          25          1           1           76          19          
+0           1           
+81          27          0           1           81          20          
+1           1           
+86          28          2           1           86          21          
+2           1           
+91          30          1           1           91          22          
+3           1           
+96          32          0           1           96          24          
+0           1           
+105 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 32 )
+ JOIN
+  PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, ACCESS: 103, SELF_ID: 2 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: T1_IDX1, ACCESS: 105, SELF_ID: 1 )
+   [ PARTITION FILTER ]
+   OR
+    AND
+     T1.I1 = T2.I1
+   [ VARIABLE KEY ]
+   OR
+    AND
+     T1.I1 = T2.I1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+------------------------------------------------------------
+
+$T0> select /*+ CNF */ * from t1 where i1 = 1 or i1 = 2;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 2/6, INDEX: T1_IDX1, ACCESS: 2, SELF_ID: 2 )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+    I1 = 2
+  [ FIXED KEY ]
+  AND
+   OR
+    I1 = 1
+    I1 = 2
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+------------------------------------------------------------
+$T0> select /*+ DNF */ * from t1 where i1 = 1 or i1 = 2;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ CONCATENATION 
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: T1_IDX1, ACCESS: 2, SELF_ID: 2 )
+   [ PARTITION KEY ]
+   AND
+    I1 = 1
+   [ FIXED KEY ]
+   AND
+    I1 = 1
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  FILTER
+   [ FILTER ]
+   LNNVL(I1 = 1)
+   PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: T1_IDX1, ACCESS: 2, SELF_ID: 2 )
+    [ PARTITION KEY ]
+    AND
+     I1 = 2
+    [ FIXED KEY ]
+    AND
+     I1 = 2
+    SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+------------------------------------------------------------
+
+$T0> select /*+ USE_NL(t1,t2) */ * from t1, t2 where t1.i1 = t2.i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T2.I1       T2.I2       
+-------------------------------------------------------------------------------
+T2.I3       T2.I4       
+---------------------------
+100         33          1           1           100         25          
+0           1           
+0           0           0           1           0           0           
+0           1           
+0           0           0           1           0           1           
+                        
+0           1                                   0           0           
+0           1           
+0           1                                   0           1           
+                        
+101         0                                   101         0           
+                        
+5           1           2           1           5           1           
+1           1           
+10          3           1           1           10          2           
+2           1           
+15          5           0           1           15          3           
+3           1           
+20          6           2           1           20          5           
+0           1           
+25          8           1           1           25          6           
+1           1           
+30          10          0           1           30          7           
+2           1           
+35          11          2           1           35          8           
+3           1           
+40          13          1           1           40          10          
+0           1           
+45          15          0           1           45          11          
+1           1           
+50          16          2           1           50          12          
+2           1           
+55          18          1           1           55          13          
+3           1           
+60          20          0           1           60          15          
+0           1           
+65          21          2           1           65          16          
+1           1           
+70          23          1           1           70          17          
+2           1           
+75          25          0           1           75          18          
+3           1           
+80          26          2           1           80          20          
+0           1           
+85          28          1           1           85          21          
+1           1           
+90          30          0           1           90          22          
+2           1           
+95          31          2           1           95          23          
+3           1           
+4           1           1           1           4           1           
+0           1           
+9           3           0           1           9           2           
+1           1           
+14          4           2           1           14          3           
+2           1           
+19          6           1           1           19          4           
+3           1           
+24          8           0           1           24          6           
+0           1           
+29          9           2           1           29          7           
+1           1           
+34          11          1           1           34          8           
+2           1           
+39          13          0           1           39          9           
+3           1           
+44          14          2           1           44          11          
+0           1           
+49          16          1           1           49          12          
+1           1           
+54          18          0           1           54          13          
+2           1           
+59          19          2           1           59          14          
+3           1           
+64          21          1           1           64          16          
+0           1           
+69          23          0           1           69          17          
+1           1           
+74          24          2           1           74          18          
+2           1           
+79          26          1           1           79          19          
+3           1           
+84          28          0           1           84          21          
+0           1           
+89          29          2           1           89          22          
+1           1           
+94          31          1           1           94          23          
+2           1           
+99          33          0           1           99          24          
+3           1           
+3           1           0           1           3           0           
+3           1           
+8           2           2           1           8           2           
+0           1           
+13          4           1           1           13          3           
+1           1           
+18          6           0           1           18          4           
+2           1           
+23          7           2           1           23          5           
+3           1           
+28          9           1           1           28          7           
+0           1           
+33          11          0           1           33          8           
+1           1           
+38          12          2           1           38          9           
+2           1           
+43          14          1           1           43          10          
+3           1           
+48          16          0           1           48          12          
+0           1           
+53          17          2           1           53          13          
+1           1           
+58          19          1           1           58          14          
+2           1           
+63          21          0           1           63          15          
+3           1           
+68          22          2           1           68          17          
+0           1           
+73          24          1           1           73          18          
+1           1           
+78          26          0           1           78          19          
+2           1           
+83          27          2           1           83          20          
+3           1           
+88          29          1           1           88          22          
+0           1           
+93          31          0           1           93          23          
+1           1           
+98          32          2           1           98          24          
+2           1           
+2           0           2           1           2           0           
+2           1           
+7           2           1           1           7           1           
+3           1           
+12          4           0           1           12          3           
+0           1           
+17          5           2           1           17          4           
+1           1           
+22          7           1           1           22          5           
+2           1           
+27          9           0           1           27          6           
+3           1           
+32          10          2           1           32          8           
+0           1           
+37          12          1           1           37          9           
+1           1           
+42          14          0           1           42          10          
+2           1           
+47          15          2           1           47          11          
+3           1           
+52          17          1           1           52          13          
+0           1           
+57          19          0           1           57          14          
+1           1           
+62          20          2           1           62          15          
+2           1           
+67          22          1           1           67          16          
+3           1           
+72          24          0           1           72          18          
+0           1           
+77          25          2           1           77          19          
+1           1           
+82          27          1           1           82          20          
+2           1           
+87          29          0           1           87          21          
+3           1           
+92          30          2           1           92          23          
+0           1           
+97          32          1           1           97          24          
+1           1           
+1           0           1           1           1           0           
+1           1           
+6           2           0           1           6           1           
+2           1           
+11          3           2           1           11          2           
+3           1           
+16          5           1           1           16          4           
+0           1           
+21          7           0           1           21          5           
+1           1           
+26          8           2           1           26          6           
+2           1           
+31          10          1           1           31          7           
+3           1           
+36          12          0           1           36          9           
+0           1           
+41          13          2           1           41          10          
+1           1           
+46          15          1           1           46          11          
+2           1           
+51          17          0           1           51          12          
+3           1           
+56          18          2           1           56          14          
+0           1           
+61          20          1           1           61          15          
+1           1           
+66          22          0           1           66          16          
+2           1           
+71          23          2           1           71          17          
+3           1           
+76          25          1           1           76          19          
+0           1           
+81          27          0           1           81          20          
+1           1           
+86          28          2           1           86          21          
+2           1           
+91          30          1           1           91          22          
+3           1           
+96          32          0           1           96          24          
+0           1           
+105 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 32 )
+ JOIN
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, ACCESS: 103, SELF_ID: 1 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+  PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, ACCESS: 105, SELF_ID: 2 )
+   [ PARTITION FILTER ]
+   OR
+    AND
+     T1.I1 = T2.I1
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 16, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+    [ FILTER ]
+    T1.I1 = T2.I1
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 361, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+    [ FILTER ]
+    T1.I1 = T2.I1
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 400, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+    [ FILTER ]
+    T1.I1 = T2.I1
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 400, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+    [ FILTER ]
+    T1.I1 = T2.I1
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 400, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+    [ FILTER ]
+    T1.I1 = T2.I1
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 400, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+    [ FILTER ]
+    T1.I1 = T2.I1
+------------------------------------------------------------
+$T0> select /*+ USE_HASH(t1,t2) */ * from t1, t2 where t1.i1 = t2.i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T2.I1       T2.I2       
+-------------------------------------------------------------------------------
+T2.I3       T2.I4       
+---------------------------
+100         33          1           1           100         25          
+0           1           
+0           0           0           1           0           1           
+                        
+0           0           0           1           0           0           
+0           1           
+0           1                                   0           1           
+                        
+0           1                                   0           0           
+0           1           
+101         0                                   101         0           
+                        
+5           1           2           1           5           1           
+1           1           
+10          3           1           1           10          2           
+2           1           
+15          5           0           1           15          3           
+3           1           
+20          6           2           1           20          5           
+0           1           
+25          8           1           1           25          6           
+1           1           
+30          10          0           1           30          7           
+2           1           
+35          11          2           1           35          8           
+3           1           
+40          13          1           1           40          10          
+0           1           
+45          15          0           1           45          11          
+1           1           
+50          16          2           1           50          12          
+2           1           
+55          18          1           1           55          13          
+3           1           
+60          20          0           1           60          15          
+0           1           
+65          21          2           1           65          16          
+1           1           
+70          23          1           1           70          17          
+2           1           
+75          25          0           1           75          18          
+3           1           
+80          26          2           1           80          20          
+0           1           
+85          28          1           1           85          21          
+1           1           
+90          30          0           1           90          22          
+2           1           
+95          31          2           1           95          23          
+3           1           
+4           1           1           1           4           1           
+0           1           
+9           3           0           1           9           2           
+1           1           
+14          4           2           1           14          3           
+2           1           
+19          6           1           1           19          4           
+3           1           
+24          8           0           1           24          6           
+0           1           
+29          9           2           1           29          7           
+1           1           
+34          11          1           1           34          8           
+2           1           
+39          13          0           1           39          9           
+3           1           
+44          14          2           1           44          11          
+0           1           
+49          16          1           1           49          12          
+1           1           
+54          18          0           1           54          13          
+2           1           
+59          19          2           1           59          14          
+3           1           
+64          21          1           1           64          16          
+0           1           
+69          23          0           1           69          17          
+1           1           
+74          24          2           1           74          18          
+2           1           
+79          26          1           1           79          19          
+3           1           
+84          28          0           1           84          21          
+0           1           
+89          29          2           1           89          22          
+1           1           
+94          31          1           1           94          23          
+2           1           
+99          33          0           1           99          24          
+3           1           
+3           1           0           1           3           0           
+3           1           
+8           2           2           1           8           2           
+0           1           
+13          4           1           1           13          3           
+1           1           
+18          6           0           1           18          4           
+2           1           
+23          7           2           1           23          5           
+3           1           
+28          9           1           1           28          7           
+0           1           
+33          11          0           1           33          8           
+1           1           
+38          12          2           1           38          9           
+2           1           
+43          14          1           1           43          10          
+3           1           
+48          16          0           1           48          12          
+0           1           
+53          17          2           1           53          13          
+1           1           
+58          19          1           1           58          14          
+2           1           
+63          21          0           1           63          15          
+3           1           
+68          22          2           1           68          17          
+0           1           
+73          24          1           1           73          18          
+1           1           
+78          26          0           1           78          19          
+2           1           
+83          27          2           1           83          20          
+3           1           
+88          29          1           1           88          22          
+0           1           
+93          31          0           1           93          23          
+1           1           
+98          32          2           1           98          24          
+2           1           
+2           0           2           1           2           0           
+2           1           
+7           2           1           1           7           1           
+3           1           
+12          4           0           1           12          3           
+0           1           
+17          5           2           1           17          4           
+1           1           
+22          7           1           1           22          5           
+2           1           
+27          9           0           1           27          6           
+3           1           
+32          10          2           1           32          8           
+0           1           
+37          12          1           1           37          9           
+1           1           
+42          14          0           1           42          10          
+2           1           
+47          15          2           1           47          11          
+3           1           
+52          17          1           1           52          13          
+0           1           
+57          19          0           1           57          14          
+1           1           
+62          20          2           1           62          15          
+2           1           
+67          22          1           1           67          16          
+3           1           
+72          24          0           1           72          18          
+0           1           
+77          25          2           1           77          19          
+1           1           
+82          27          1           1           82          20          
+2           1           
+87          29          0           1           87          21          
+3           1           
+92          30          2           1           92          23          
+0           1           
+97          32          1           1           97          24          
+1           1           
+1           0           1           1           1           0           
+1           1           
+6           2           0           1           6           1           
+2           1           
+11          3           2           1           11          2           
+3           1           
+16          5           1           1           16          4           
+0           1           
+21          7           0           1           21          5           
+1           1           
+26          8           2           1           26          6           
+2           1           
+31          10          1           1           31          7           
+3           1           
+36          12          0           1           36          9           
+0           1           
+41          13          2           1           41          10          
+1           1           
+46          15          1           1           46          11          
+2           1           
+51          17          0           1           51          12          
+3           1           
+56          18          2           1           56          14          
+0           1           
+61          20          1           1           61          15          
+1           1           
+66          22          0           1           66          16          
+2           1           
+71          23          2           1           71          17          
+3           1           
+76          25          1           1           76          19          
+0           1           
+81          27          0           1           81          20          
+1           1           
+86          28          2           1           86          21          
+2           1           
+91          30          1           1           91          22          
+3           1           
+96          32          0           1           96          24          
+0           1           
+105 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 32 )
+ JOIN
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, ACCESS: 103, SELF_ID: 1 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 103, DISK_PAGE_COUNT: BLOCKED, ACCESS: 105, SELF_ID: 16, REF_ID: 2 )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, ACCESS: 103, SELF_ID: 2 )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+    SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+    SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+    SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+    SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+------------------------------------------------------------
+$T0> select /*+ USE_SORT(t1,t2) */ * from t1, t2 where t1.i1 = t2.i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T2.I1       T2.I2       
+-------------------------------------------------------------------------------
+T2.I3       T2.I4       
+---------------------------
+100         33          1           1           100         25          
+0           1           
+0           0           0           1           0           0           
+0           1           
+0           0           0           1           0           1           
+                        
+0           1                                   0           0           
+0           1           
+0           1                                   0           1           
+                        
+101         0                                   101         0           
+                        
+5           1           2           1           5           1           
+1           1           
+10          3           1           1           10          2           
+2           1           
+15          5           0           1           15          3           
+3           1           
+20          6           2           1           20          5           
+0           1           
+25          8           1           1           25          6           
+1           1           
+30          10          0           1           30          7           
+2           1           
+35          11          2           1           35          8           
+3           1           
+40          13          1           1           40          10          
+0           1           
+45          15          0           1           45          11          
+1           1           
+50          16          2           1           50          12          
+2           1           
+55          18          1           1           55          13          
+3           1           
+60          20          0           1           60          15          
+0           1           
+65          21          2           1           65          16          
+1           1           
+70          23          1           1           70          17          
+2           1           
+75          25          0           1           75          18          
+3           1           
+80          26          2           1           80          20          
+0           1           
+85          28          1           1           85          21          
+1           1           
+90          30          0           1           90          22          
+2           1           
+95          31          2           1           95          23          
+3           1           
+4           1           1           1           4           1           
+0           1           
+9           3           0           1           9           2           
+1           1           
+14          4           2           1           14          3           
+2           1           
+19          6           1           1           19          4           
+3           1           
+24          8           0           1           24          6           
+0           1           
+29          9           2           1           29          7           
+1           1           
+34          11          1           1           34          8           
+2           1           
+39          13          0           1           39          9           
+3           1           
+44          14          2           1           44          11          
+0           1           
+49          16          1           1           49          12          
+1           1           
+54          18          0           1           54          13          
+2           1           
+59          19          2           1           59          14          
+3           1           
+64          21          1           1           64          16          
+0           1           
+69          23          0           1           69          17          
+1           1           
+74          24          2           1           74          18          
+2           1           
+79          26          1           1           79          19          
+3           1           
+84          28          0           1           84          21          
+0           1           
+89          29          2           1           89          22          
+1           1           
+94          31          1           1           94          23          
+2           1           
+99          33          0           1           99          24          
+3           1           
+3           1           0           1           3           0           
+3           1           
+8           2           2           1           8           2           
+0           1           
+13          4           1           1           13          3           
+1           1           
+18          6           0           1           18          4           
+2           1           
+23          7           2           1           23          5           
+3           1           
+28          9           1           1           28          7           
+0           1           
+33          11          0           1           33          8           
+1           1           
+38          12          2           1           38          9           
+2           1           
+43          14          1           1           43          10          
+3           1           
+48          16          0           1           48          12          
+0           1           
+53          17          2           1           53          13          
+1           1           
+58          19          1           1           58          14          
+2           1           
+63          21          0           1           63          15          
+3           1           
+68          22          2           1           68          17          
+0           1           
+73          24          1           1           73          18          
+1           1           
+78          26          0           1           78          19          
+2           1           
+83          27          2           1           83          20          
+3           1           
+88          29          1           1           88          22          
+0           1           
+93          31          0           1           93          23          
+1           1           
+98          32          2           1           98          24          
+2           1           
+2           0           2           1           2           0           
+2           1           
+7           2           1           1           7           1           
+3           1           
+12          4           0           1           12          3           
+0           1           
+17          5           2           1           17          4           
+1           1           
+22          7           1           1           22          5           
+2           1           
+27          9           0           1           27          6           
+3           1           
+32          10          2           1           32          8           
+0           1           
+37          12          1           1           37          9           
+1           1           
+42          14          0           1           42          10          
+2           1           
+47          15          2           1           47          11          
+3           1           
+52          17          1           1           52          13          
+0           1           
+57          19          0           1           57          14          
+1           1           
+62          20          2           1           62          15          
+2           1           
+67          22          1           1           67          16          
+3           1           
+72          24          0           1           72          18          
+0           1           
+77          25          2           1           77          19          
+1           1           
+82          27          1           1           82          20          
+2           1           
+87          29          0           1           87          21          
+3           1           
+92          30          2           1           92          23          
+0           1           
+97          32          1           1           97          24          
+1           1           
+1           0           1           1           1           0           
+1           1           
+6           2           0           1           6           1           
+2           1           
+11          3           2           1           11          2           
+3           1           
+16          5           1           1           16          4           
+0           1           
+21          7           0           1           21          5           
+1           1           
+26          8           2           1           26          6           
+2           1           
+31          10          1           1           31          7           
+3           1           
+36          12          0           1           36          9           
+0           1           
+41          13          2           1           41          10          
+1           1           
+46          15          1           1           46          11          
+2           1           
+51          17          0           1           51          12          
+3           1           
+56          18          2           1           56          14          
+0           1           
+61          20          1           1           61          15          
+1           1           
+66          22          0           1           66          16          
+2           1           
+71          23          2           1           71          17          
+3           1           
+76          25          1           1           76          19          
+0           1           
+81          27          0           1           81          20          
+1           1           
+86          28          2           1           86          21          
+2           1           
+91          30          1           1           91          22          
+3           1           
+96          32          0           1           96          24          
+0           1           
+105 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 32 )
+ JOIN
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, ACCESS: 103, SELF_ID: 1 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 103, DISK_PAGE_COUNT: BLOCKED, ACCESS: 105, SELF_ID: 16, REF_ID: 2 )
+   [ FILTER ]
+   OR
+    AND
+     T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, ACCESS: 103, SELF_ID: 2 )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+    SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+    SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+    SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+    SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+------------------------------------------------------------
+$T0> select /*+ USE_MERGE(t1,t2) */ * from t1, t2 where t1.i1 = t2.i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T2.I1       T2.I2       
+-------------------------------------------------------------------------------
+T2.I3       T2.I4       
+---------------------------
+0           0           0           1           0           0           
+0           1           
+0           0           0           1           0           1           
+                        
+0           1                                   0           0           
+0           1           
+0           1                                   0           1           
+                        
+1           0           1           1           1           0           
+1           1           
+2           0           2           1           2           0           
+2           1           
+3           1           0           1           3           0           
+3           1           
+4           1           1           1           4           1           
+0           1           
+5           1           2           1           5           1           
+1           1           
+6           2           0           1           6           1           
+2           1           
+7           2           1           1           7           1           
+3           1           
+8           2           2           1           8           2           
+0           1           
+9           3           0           1           9           2           
+1           1           
+10          3           1           1           10          2           
+2           1           
+11          3           2           1           11          2           
+3           1           
+12          4           0           1           12          3           
+0           1           
+13          4           1           1           13          3           
+1           1           
+14          4           2           1           14          3           
+2           1           
+15          5           0           1           15          3           
+3           1           
+16          5           1           1           16          4           
+0           1           
+17          5           2           1           17          4           
+1           1           
+18          6           0           1           18          4           
+2           1           
+19          6           1           1           19          4           
+3           1           
+20          6           2           1           20          5           
+0           1           
+21          7           0           1           21          5           
+1           1           
+22          7           1           1           22          5           
+2           1           
+23          7           2           1           23          5           
+3           1           
+24          8           0           1           24          6           
+0           1           
+25          8           1           1           25          6           
+1           1           
+26          8           2           1           26          6           
+2           1           
+27          9           0           1           27          6           
+3           1           
+28          9           1           1           28          7           
+0           1           
+29          9           2           1           29          7           
+1           1           
+30          10          0           1           30          7           
+2           1           
+31          10          1           1           31          7           
+3           1           
+32          10          2           1           32          8           
+0           1           
+33          11          0           1           33          8           
+1           1           
+34          11          1           1           34          8           
+2           1           
+35          11          2           1           35          8           
+3           1           
+36          12          0           1           36          9           
+0           1           
+37          12          1           1           37          9           
+1           1           
+38          12          2           1           38          9           
+2           1           
+39          13          0           1           39          9           
+3           1           
+40          13          1           1           40          10          
+0           1           
+41          13          2           1           41          10          
+1           1           
+42          14          0           1           42          10          
+2           1           
+43          14          1           1           43          10          
+3           1           
+44          14          2           1           44          11          
+0           1           
+45          15          0           1           45          11          
+1           1           
+46          15          1           1           46          11          
+2           1           
+47          15          2           1           47          11          
+3           1           
+48          16          0           1           48          12          
+0           1           
+49          16          1           1           49          12          
+1           1           
+50          16          2           1           50          12          
+2           1           
+51          17          0           1           51          12          
+3           1           
+52          17          1           1           52          13          
+0           1           
+53          17          2           1           53          13          
+1           1           
+54          18          0           1           54          13          
+2           1           
+55          18          1           1           55          13          
+3           1           
+56          18          2           1           56          14          
+0           1           
+57          19          0           1           57          14          
+1           1           
+58          19          1           1           58          14          
+2           1           
+59          19          2           1           59          14          
+3           1           
+60          20          0           1           60          15          
+0           1           
+61          20          1           1           61          15          
+1           1           
+62          20          2           1           62          15          
+2           1           
+63          21          0           1           63          15          
+3           1           
+64          21          1           1           64          16          
+0           1           
+65          21          2           1           65          16          
+1           1           
+66          22          0           1           66          16          
+2           1           
+67          22          1           1           67          16          
+3           1           
+68          22          2           1           68          17          
+0           1           
+69          23          0           1           69          17          
+1           1           
+70          23          1           1           70          17          
+2           1           
+71          23          2           1           71          17          
+3           1           
+72          24          0           1           72          18          
+0           1           
+73          24          1           1           73          18          
+1           1           
+74          24          2           1           74          18          
+2           1           
+75          25          0           1           75          18          
+3           1           
+76          25          1           1           76          19          
+0           1           
+77          25          2           1           77          19          
+1           1           
+78          26          0           1           78          19          
+2           1           
+79          26          1           1           79          19          
+3           1           
+80          26          2           1           80          20          
+0           1           
+81          27          0           1           81          20          
+1           1           
+82          27          1           1           82          20          
+2           1           
+83          27          2           1           83          20          
+3           1           
+84          28          0           1           84          21          
+0           1           
+85          28          1           1           85          21          
+1           1           
+86          28          2           1           86          21          
+2           1           
+87          29          0           1           87          21          
+3           1           
+88          29          1           1           88          22          
+0           1           
+89          29          2           1           89          22          
+1           1           
+90          30          0           1           90          22          
+2           1           
+91          30          1           1           91          22          
+3           1           
+92          30          2           1           92          23          
+0           1           
+93          31          0           1           93          23          
+1           1           
+94          31          1           1           94          23          
+2           1           
+95          31          2           1           95          23          
+3           1           
+96          32          0           1           96          24          
+0           1           
+97          32          1           1           97          24          
+1           1           
+98          32          2           1           98          24          
+2           1           
+99          33          0           1           99          24          
+3           1           
+100         33          1           1           100         25          
+0           1           
+101         0                                   101         0           
+                        
+105 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 32 )
+ MERGE-JOIN
+  [ VARIABLE KEY ]
+  T1.I1 = T2.I1
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: T1_IDX1, ACCESS: 103, SELF_ID: 1 )
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 103, DISK_PAGE_COUNT: BLOCKED, ACCESS: 106, SELF_ID: 17, REF_ID: 2 )
+   PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, ACCESS: 103, SELF_ID: 2 )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+    SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+    SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+    SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+    SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+------------------------------------------------------------
+
+$T0> select * from t1 where i2 = 1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+0           1                                   
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, SELF_ID: 10, REF_ID: 2 )
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: T1_IDX2, ACCESS: 4, SELF_ID: 2 )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+------------------------------------------------------------
+
+$T0> ########################################################
+$T0> #SECTOR; FINALIZATION
+$T0> ########################################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+

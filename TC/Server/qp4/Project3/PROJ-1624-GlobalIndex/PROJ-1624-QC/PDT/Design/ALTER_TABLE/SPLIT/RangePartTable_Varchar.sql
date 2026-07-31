@@ -1,0 +1,1150 @@
+--###################################################################
+--# ALTER TABLE ... SPLIT PARTITION (PartKey: VARCHAR)
+--###################################################################
+
+--###################################################################
+--+SECTOR; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+DROP TABLE T3;
+--+SKIP END;
+
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+--###################################################################
+--+ SECTOR; 문법 체크
+--###################################################################
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 VALUES ( '100' ) INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2,
+    PARTITION P1_2 TABLESPACE PDT_TBS3
+);
+    
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ( '100' ) INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2,
+    PARTITION P1_2
+) TABLESPACE PDT_TBS4;
+
+
+--##############################
+--+SECTOR; 파티션드 테이블인지 체크
+--##############################
+DROP TABLE TEST;
+CREATE TABLE TEST( I1 VARCHAR(1000), I2 VARCHAR(10));
+
+-- should be fail
+ALTER TABLE TEST 
+SPLIT PARTITION P1 AT ('100') INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2,
+    PARTITION P1_2 TABLESPACE PDT_TBS3
+);
+
+DROP TABLE TEST;
+
+
+--##############################
+--+SECTOR; SrcPart 파티션 이름 체크
+--##############################
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P5 AT ( '100' ) INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2,
+    PARTITION P1_2
+);
+
+
+--##############################
+--+SECTOR; DstPart1, DstPart2의 TBS 체크
+--##############################
+--##############
+--# Left In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+-- BUGBUG
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ( '050' ) INTO
+(
+    PARTITION P1,
+    PARTITION P1_2 TABLESPACE PDT_TBS2
+);
+
+-- Result: PDT_TBS, PDT_TBS2, PDT_TBS, PDT_TBS, PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND 
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T1'
+ORDER BY A.PARTITION_NAME ASC;
+
+
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ( '250' ) INTO
+(
+    PARTITION P3,
+    PARTITION P3_2 TABLESPACE PDT_TBS2
+);
+
+-- Result: PDT_TBS2, PDT_TBS3, PDT_TBS, PDT_TBS2, PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND 
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T2'
+ORDER BY A.PARTITION_NAME ASC;
+
+
+--##############
+--# Right In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ( '050' ) INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2,
+    PARTITION P1
+);
+
+-- Result: PDT_TBS, PDT_TBS2, PDT_TBS, PDT_TBS, PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND 
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T1'
+ORDER BY A.PARTITION_NAME ASC;
+
+
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ( '250' ) INTO
+(
+    PARTITION P3_1 TABLESPACE PDT_TBS2,
+    PARTITION P3
+);
+
+-- Result: PDT_TBS2, PDT_TBS3, PDT_TBS, PDT_TBS2, PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND 
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T2'
+ORDER BY A.PARTITION_NAME ASC;
+
+
+--##############
+--# Out-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ( '050' ) INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2,
+    PARTITION P1_2 TABLESPACE PDT_TBS3
+);
+
+-- Result: PDT_TBS2, PDT_TBS3, PDT_TBS, PDT_TBS, PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND 
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T1'
+ORDER BY A.PARTITION_NAME ASC;
+
+
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ( '250' ) INTO
+(
+    PARTITION P3_1 TABLESPACE PDT_TBS2,
+    PARTITION P3_2 TABLESPACE PDT_TBS3
+);
+
+-- Result: PDT_TBS2, PDT_TBS3, PDT_TBS2, PDT_TBS3, PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND 
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T2'
+ORDER BY A.PARTITION_NAME ASC;
+
+
+--##############################
+--+SECTOR; DstPart1, DstPart2의 LOB 컬럼의 TBS 체크
+--##############################
+--##############
+--# Left In-place 
+--##############
+DROP TABLE T1;
+CREATE TABLE T1 ( I1 VARCHAR(10), I2 BLOB, I3 CLOB )
+PARTITION BY RANGE (I1) 
+( PARTITION P1 VALUES LESS THAN ('100') TABLESPACE PDT_TBS 
+                                    LOB(I2, I3) STORE AS ( TABLESPACE PDT_TBS2 ), 
+  PARTITION P2 VALUES LESS THAN ('200') TABLESPACE PDT_TBS3,
+  PARTITION P3 VALUES DEFAULT
+) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 );
+
+INSERT INTO T1 VALUES ( '000',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '001',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '050',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '051',   'ABC', 'DEF' );
+
+ALTER TABLE T1
+SPLIT PARTITION P1 AT ('050') INTO
+(
+    PARTITION P1,
+    PARTITION P1_1 LOB STORE AS ( TABLESPACE PDT_TBS4 )
+);
+
+-- result: {'000', '001'}
+SELECT I1 FROM T1 PARTITION(P1);
+
+-- result: {'050', '051'}
+SELECT I1 FROM T1 PARTITION(P1_1);
+
+-- result: PDT_TBS
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T1' AND
+      A.PARTITION_NAME='P1';
+
+-- Result: PDT_TBS2, PDT_TBS2
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+      PART.PARTITION_ID = LOBS.PARTITION_ID AND
+      LOBS.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1'
+ORDER BY LOBS.COLUMN_ID ASC;
+
+-- Result: PDT_TBS4
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      PART.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1_1';
+
+-- Result: PDT_TBS4, PDT_TBS4
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+      PART.PARTITION_ID = LOBS.PARTITION_ID AND
+      LOBS.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1_1'
+ORDER BY LOBS.COLUMN_ID ASC;
+
+
+--##############
+--# Right In-place 
+--##############
+DROP TABLE T1;
+CREATE TABLE T1 ( I1 VARCHAR(1000), I2 BLOB, I3 CLOB )
+PARTITION BY RANGE (I1) 
+( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS 
+                                    LOB(I2, I3) STORE AS ( TABLESPACE PDT_TBS2 ), 
+  PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+  PARTITION P3 VALUES DEFAULT
+) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 );
+
+INSERT INTO T1 VALUES ( '000',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '001',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '050',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '051',   'ABC', 'DEF' );
+
+ALTER TABLE T1
+SPLIT PARTITION P1 AT ('050') INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2 LOB(I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+    PARTITION P1
+);
+
+-- result: {'000', '001'}
+SELECT I1 FROM T1 PARTITION(P1_1);
+
+-- result: {'050', '051'}
+SELECT I1 FROM T1 PARTITION(P1);
+
+-- result: PDT_TBS2
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T1' AND
+      A.PARTITION_NAME='P1_1';
+
+-- BUGBUG
+-- Result: PDT_TBS2, PDT_TBS3
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+      PART.PARTITION_ID = LOBS.PARTITION_ID AND
+      LOBS.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1_1'
+ORDER BY LOBS.COLUMN_ID ASC;
+
+-- BUGBUG
+-- Result: PDT_TBS
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      PART.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1';
+
+-- BUGBUG
+-- Result: PDT_TBS2, PDT_TBS2
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+      PART.PARTITION_ID = LOBS.PARTITION_ID AND
+      LOBS.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1'
+ORDER BY LOBS.COLUMN_ID ASC;
+
+
+--##############
+--# Out-place 
+--##############
+DROP TABLE T1;
+CREATE TABLE T1 ( I1 VARCHAR(1000), I2 BLOB, I3 CLOB )
+PARTITION BY RANGE (I1) 
+( PARTITION P1 VALUES LESS THAN ('100') TABLESPACE PDT_TBS 
+                                    LOB(I2, I3) STORE AS ( TABLESPACE PDT_TBS2 ), 
+  PARTITION P2 VALUES LESS THAN ('200') TABLESPACE PDT_TBS3,
+  PARTITION P3 VALUES DEFAULT
+) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 );
+
+INSERT INTO T1 VALUES ( '000',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '001',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '050',   'ABC', 'DEF' );
+INSERT INTO T1 VALUES ( '051',   'ABC', 'DEF' );
+
+ALTER TABLE T1
+SPLIT PARTITION P1 AT ('050') INTO
+(
+    PARTITION P1_1 TABLESPACE PDT_TBS2 LOB(I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+    PARTITION P1_2 LOB STORE AS ( TABLESPACE PDT_TBS5 )
+);
+
+-- result: {'000', '001'}
+SELECT I1 FROM T1 PARTITION(P1_1);
+
+-- result: {'050', '051'}
+SELECT I1 FROM T1 PARTITION(P1_2);
+
+-- result: PDT_TBS2
+SELECT C.NAME
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+WHERE A.TABLE_ID = B.TABLE_ID AND
+      A.TBS_ID = C.ID AND
+      B.TABLE_NAME = 'T1' AND
+      A.PARTITION_NAME='P1_1';
+
+-- BUGBUG
+-- Result: PDT_TBS2, PDT_TBS3
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+      PART.PARTITION_ID = LOBS.PARTITION_ID AND
+      LOBS.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1_1'
+ORDER BY LOBS.COLUMN_ID ASC;
+
+-- Result: PDT_TBS4
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      PART.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1_2';
+
+-- BUGBUG
+-- Result: PDT_TBS5, PDT_TBS5
+SELECT TBS.NAME
+FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+      PART.PARTITION_ID = LOBS.PARTITION_ID AND
+      LOBS.TBS_ID = TBS.ID AND
+      TAB.TABLE_NAME = 'T1' AND
+      PART.PARTITION_NAME = 'P1_2'
+ORDER BY LOBS.COLUMN_ID ASC;
+
+
+
+--###################################################################
+--+ SECTOR; 파티션 분할 기준 값 체크
+--###################################################################
+
+--##############################
+--+SECTOR; 분할 개수 체크
+--##############################
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P3 AT ('250', '100') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3_2
+);
+
+-- should be fail
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ('250', '100', '000') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3_2
+);
+
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P3 AT ('250') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3_2
+);
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P3_1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P3_2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ('250', '100') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3_2
+);
+
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P1);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P2);
+-- result: 1
+SELECT COUNT(*) FROM T2 PARTITION (P3_1);
+-- result: 1
+SELECT COUNT(*) FROM T2 PARTITION (P3_2);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P4);
+
+
+--##############################
+--+SECTOR; 분할 값의 길이 체크
+--##############################
+-- PartKey: VARCHAR
+
+--##############################
+--+SECTOR; SrcPart에 속하는지 체크
+--##############################
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('100') INTO
+( 
+    PARTITION P1_1,
+    PARTITION P1_2
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P2 AT ('200') INTO
+( 
+    PARTITION P2_1,
+    PARTITION P2_2
+);
+
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P3 AT ('250') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3_2
+);
+
+
+-- should be fail
+ALTER TABLE T2 
+SPLIT PARTITION P1 AT ('100', '100') INTO
+( 
+    PARTITION P1_1,
+    PARTITION P1_2
+);
+
+-- should be fail
+ALTER TABLE T2 
+SPLIT PARTITION P2 AT ('200', '100') INTO
+( 
+    PARTITION P2_1,
+    PARTITION P2_2
+);
+
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ('250', '100') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3_2
+);
+
+
+
+--###################################################################
+--+ SECTOR; DstPart1, DstPart2 이름 체크
+--###################################################################
+--##############################
+--+SECTOR; Left In-place
+--##############################
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P1
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P1 TABLESPACE PDT_TBS2
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P3
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P3 TABLESPACE PDT_TBS2
+);
+
+
+--##############################
+--+SECTOR; Right In-place
+--##############################
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P1
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1 TABLESPACE PDT_TBS2,
+    PARTITION P1
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P3,
+    PARTITION P1
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P3 TABLESPACE PDT_TBS2,
+    PARTITION P1
+);
+
+
+--##############################
+--+SECTOR; Out-place
+--##############################
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1 TABLESPACE PDT_TBS2,
+    PARTITION P1 TABLESPACE PDT_TBS3
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P3,
+    PARTITION P1 TABLESPACE PDT_TBS2
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1 TABLESPACE PDT_TBS2,
+    PARTITION P3
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1 TABLESPACE PDT_TBS2,
+    PARTITION P3 TABLESPACE PDT_TBS3
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P3,
+    PARTITION P3
+);
+
+-- should be fail
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P3,
+    PARTITION P3 TABLESPACE PDT_TBS2
+);
+
+
+
+--###################################################################
+--+ SECTOR; SrcPart의 타입에 따른 분할
+--###################################################################
+
+--##############################
+--+SECTOR; 가장 작은 파티션
+--##############################
+--##############
+--# Left In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P1_1
+);
+
+-- Result: 
+-- (P1,   NULL, '050')
+-- (P1_1, '050',   '100')
+-- (P2,   '100',  '200')
+-- (P3,   '200',  '300')
+-- (P4,   '300',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1_1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+
+
+--##############
+--# Right In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1_1,
+    PARTITION P1
+);
+
+-- Result: 
+-- (P1,   '050',   '100')
+-- (P1_1, NULL, '050')
+-- (P2,   '100',  '200')
+-- (P3,   '200',  '300')
+-- (P4,   '300',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1_1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+
+--##############
+--# Out-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT (50) INTO
+( 
+    PARTITION P1_1,
+    PARTITION P1_2
+);
+
+-- Result: 
+-- (P1_1, NULL, '050')
+-- (P1_2, '050', '100')
+-- (P2,   '100', '200')
+-- (P3,   '200', '300')
+-- (P4,   '300',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1_1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1_2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+
+--##############################
+--+SECTOR; 중간 파티션
+--##############################
+--##############
+--# Left In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P2 AT (150) INTO
+( 
+    PARTITION P2,
+    PARTITION P2_1
+);
+
+-- Result: 
+-- (P1,   NULL, '100')
+-- (P2,   '100',  '150')
+-- (P2_1, '150',  '200')
+-- (P3,   '200',  '300')
+-- (P4,   '300',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2_1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+--##############
+--# Right In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P2 AT (150) INTO
+( 
+    PARTITION P2_1,
+    PARTITION P2
+);
+
+-- Result: 
+-- (P1,   NULL, '100')
+-- (P2,   '150',  '200')
+-- (P2_1, '100',  '150')
+-- (P3,   '200',  '300')
+-- (P4,   '300',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2_1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+--##############
+--# Out-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P2 AT (150) INTO
+( 
+    PARTITION P2_1,
+    PARTITION P2_2
+);
+
+-- Result: 
+-- (P1,   NULL, '100')
+-- (P2_1, '100',  '150')
+-- (P2_2, '150',  '200')
+-- (P3,   '200',  '300')
+-- (P4,   '300',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2_1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2_2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+
+
+--##############################
+--+SECTOR; 기본 파티션
+--##############################
+--##############
+--# Left In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P4 AT (350) INTO
+( 
+    PARTITION P4,
+    PARTITION P4_1
+);
+
+-- Result: 
+-- (P1,   NULL, '100')
+-- (P2,   '100',  '200')
+-- (P3,   '200',  '300')
+-- (P4,   '300',  '350')
+-- (P4_1, '350',  NULL)
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P4_1);
+
+--##############
+--# Right In-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P4 AT (350) INTO
+( 
+    PARTITION P4_1,
+    PARTITION P4
+);
+
+-- Result: 
+-- (P1,   NULL, '100')
+-- (P2,   '100',  '200')
+-- (P3,   '200',  '300')
+-- (P4,   '350',  NULL)
+-- (P4_1, '300',  '350')
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P4_1);
+
+--##############
+--# Out-place 
+--##############
+--+LOAD_SQL Schema_Range_Varchar.sql;
+ALTER TABLE T1 
+SPLIT PARTITION P4 AT (350) INTO
+( 
+    PARTITION P4_1,
+    PARTITION P4_2
+);
+
+-- Result: 
+-- (P1,   NULL, '100')
+-- (P2,   '100',  '200')
+-- (P3,   '200',  '300')
+-- (P4_1, '350',  NULL)
+-- (P4_2, '300',  '350')
+SELECT PART.PARTITION_NAME, PART.PARTITION_MIN_VALUE, PART.PARTITION_MAX_VALUE
+FROM SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+     SYSTEM_.SYS_TABLES_ TAB
+WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+      TAB.TABLE_NAME='T1'
+ORDER BY PART.PARTITION_NAME;
+
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P2);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P4_1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P4_2);
+
+--###################################################################
+--+ SECTOR; 계속 분할 테스트
+--###################################################################
+--+LOAD_SQL Schema_Range_Varchar.sql;
+
+--##############################
+--+SECTOR; Test for Table T1 (no index, single part key)
+--##############################
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P1_1
+);
+
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P2 AT ('150') INTO
+( 
+    PARTITION P2_1,
+    PARTITION P2_2
+);
+
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P3 AT ('250') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3
+);
+
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P1_1 AT ('075') INTO
+( 
+    PARTITION P1_1_1,
+    PARTITION P1_1_2
+);
+
+-- should be success
+ALTER TABLE T1 
+SPLIT PARTITION P3_1 AT ('225') INTO
+( 
+    PARTITION P3_1_1,
+    PARTITION P3_1
+);
+
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P1_1_1);
+-- result: 0
+SELECT COUNT(*) FROM T1 PARTITION (P1_1_2);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2_1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P2_2);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P3_1_1);
+-- result: 0
+SELECT COUNT(*) FROM T1 PARTITION (P3_1);
+-- result: 1
+SELECT COUNT(*) FROM T1 PARTITION (P3);
+-- result: 2
+SELECT COUNT(*) FROM T1 PARTITION (P4);
+
+
+--##############################
+--+SECTOR; Test for Table T2 (multi key index, multi part key)
+--##############################
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P1 AT ('050') INTO
+( 
+    PARTITION P1,
+    PARTITION P1_1
+);
+
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P2 AT ('150') INTO
+( 
+    PARTITION P2_1,
+    PARTITION P2_2
+);
+
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P3 AT ('250') INTO
+( 
+    PARTITION P3_1,
+    PARTITION P3
+);
+
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P1_1 AT ('075') INTO
+( 
+    PARTITION P1_1_1,
+    PARTITION P1_1_2
+);
+
+-- should be success
+ALTER TABLE T2 
+SPLIT PARTITION P3_1 AT ('225') INTO
+( 
+    PARTITION P3_1_1,
+    PARTITION P3_1
+);
+
+INSERT INTO T2 VALUES ('001', '100', 100);
+INSERT INTO T2 VALUES ('051', '100', 100);
+INSERT INTO T2 VALUES ('101', '100', 100);
+INSERT INTO T2 VALUES ('151', '100', 100);
+INSERT INTO T2 VALUES ('201', '100', 100);
+INSERT INTO T2 VALUES ('251', '100', 100);
+INSERT INTO T2 VALUES ('301', '100', 100);
+INSERT INTO T2 VALUES ('351', '100', 100);
+
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P1);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P1_1_1);
+-- result: 0
+SELECT COUNT(*) FROM T2 PARTITION (P1_1_2);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P2_1);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P2_2);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P3_1_1);
+-- result: 0
+SELECT COUNT(*) FROM T2 PARTITION (P3_1);
+-- result: 2
+SELECT COUNT(*) FROM T2 PARTITION (P3);
+-- result: 4
+SELECT COUNT(*) FROM T2 PARTITION (P4);
+
+-- result: '000'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P1) LIMIT 1;
+-- result: '050'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P1_1_1) LIMIT 1;
+-- result: x
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P1_1_2) LIMIT 1;
+-- result: '100'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P2_1) LIMIT 1;
+-- result: '150'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P2_2) LIMIT 1;
+-- result: '200'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P3_1_1) LIMIT 1;
+-- result: x
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P3_1) LIMIT 1;
+-- result: '250'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P3) LIMIT 1;
+-- result: '300'
+SELECT /* INDEX ASC ( T2, IDX1 ) */ I1
+FROM T2 PARTITION (P4) LIMIT 1;
+
+
+
+--##################################################################
+--+SECTOR; FINALIZATION
+--##################################################################
+--+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+DROP TABLE T3;
+--+SKIP END;

@@ -1,0 +1,214 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###############################################################
+--# PR-4365
+--###############################################################
+
+--+SKIP BEGIN; 
+$P0> drop table t1;
+$P0> drop table t2;
+$P0> drop table t3;
+$P0> drop table t4;
+--+SKIP END; 
+
+--#######################################
+--+SECTOR 1; PRIMARY KEY
+--#######################################
+$P0> create table t1 (i1 integer constraint t1_pk primary key, i2 integer) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I1 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I1
+$P0> create index t1_pk on t1 (i2);
+[ERR-3104C : Duplicate index name]
+
+$P0> create table t2 (i1 integer, i2 integer, constraint t2_pk primary key (i1,i2)) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_PK                                    BTREE    UNIQUE        I1 ASC,
+                                                                I2 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I1, I2
+$P0> alter table t2 add column (i3 integer constraint t2_pk not null);
+[ERR-31046 : Duplicate constraint name : 
+0001 : alter table T2 add column (I3 INTEGER constraint T2_PK not null)
+                                                       ^    ^
+]
+
+$P0> create table t3 (i1 integer, i2 integer) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> alter table t3 add column (i3 integer constraint t3_pk primary key);
+Alter success.
+$P0> desc t3;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T3_PK                                    BTREE    UNIQUE        I3 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+
+$P0> create table t4 (i1 integer, i2 integer) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> alter table t4 add constraint t4_pk primary key (i1,i2);
+Alter success.
+$P0> desc t4;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T4_PK                                    BTREE    UNIQUE        I1 ASC,
+                                                                I2 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I1, I2
+
+--#######################################
+--+SECTOR 2; UNIQUE KEY
+--#######################################
+
+--+SKIP BEGIN; 
+$P0> drop table t1;
+$P0> drop table t2;
+$P0> drop table t3;
+$P0> drop table t4;
+--+SKIP END; 
+
+$P0> create table t1 (i1 integer constraint t1_uk unique, i2 integer) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_UK                                    BTREE    UNIQUE        I1 ASC
+T1 has no primary key
+$P0> create index t1_uk on t1 (i2);
+[ERR-3104C : Duplicate index name]
+
+$P0> create table t2 (i1 integer, i2 integer, constraint t2_uk unique (i1,i2)) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_UK                                    BTREE    UNIQUE        I1 ASC,
+                                                                I2 ASC
+T2 has no primary key
+$P0> alter table t2 add column (i3 integer constraint t2_uk not null);
+[ERR-31046 : Duplicate constraint name : 
+0001 : alter table T2 add column (I3 INTEGER constraint T2_UK not null)
+                                                       ^    ^
+]
+
+$P0> create table t3 (i1 integer, i2 integer) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> alter table t3 add column (i3 integer constraint t3_uk unique );
+Alter success.
+$P0> desc t3;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T3_UK                                    BTREE    UNIQUE        I3 ASC
+T3 has no primary key
+
+$P0> create table t4 (i1 integer, i2 integer) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> alter table t4 add constraint t4_uk unique (i1,i2);
+Alter success.
+$P0> desc t4;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T4_UK                                    BTREE    UNIQUE        I1 ASC,
+                                                                I2 ASC
+T4 has no primary key
+
+--#######################################
+--+SECTOR 3; FINALIZATION
+--#######################################
+
+--+SKIP BEGIN; 
+$P0> drop table t1;
+$P0> drop table t2;
+$P0> drop table t3;
+$P0> drop table t4;
+--+SKIP END; 
+

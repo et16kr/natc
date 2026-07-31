@@ -1,0 +1,8 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+#Object: PROJ-1502를 위한 테스트 케이스
+#CheckList
+    - Design Test
+    - Stress Test
+    - Legacy Test
+    - Concurrency Test
+    - Bugs Test

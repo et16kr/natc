@@ -1,0 +1,340 @@
+#####################################################################
+### INSERT TEST
+#####################################################################
+
+#####################################################################
+##SECTOR; PREPARATION
+#####################################################################
+
+DEF MAIN()
+{
+SKIP BEGIN;
+DROP TABLE NPT_MEM;
+DROP TABLE NPT_DISK;
+DROP TABLE PT_RANGE;
+DROP TABLE PT_LIST;
+DROP TABLE PT_HASH;
+SKIP END;
+
+CREATE TABLE NPT_MEM ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+TABLESPACE SYS_TBS_MEM_DATA;
+INSERT INTO NPT_MEM VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_MEM VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_MEM VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_MEM VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-08-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_MEM VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-09-05', 'YYYY-MM-DD') );
+CREATE INDEX IDX1 ON NPT_MEM(I1, I2, I4, I5);
+
+
+CREATE TABLE NPT_DISK ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+TABLESPACE SYS_TBS_DISK_DATA;
+INSERT INTO NPT_DISK VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_DISK VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_DISK VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_DISK VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO NPT_DISK VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+CREATE INDEX IDX2 ON NPT_DISK(I1, I2, I4, I5);
+
+
+CREATE TABLE PT_RANGE ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+PARTITION BY RANGE (I1, I2, I4)
+( PARTITION P1 VALUES LESS THAN (100, 'ABC', 100.505 ) 
+                   TABLESPACE PDT_TBS2 LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+  PARTITION P2 VALUES LESS THAN (200, 'DEF', 200.505)
+                   TABLESPACE PDT_TBS3 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+  PARTITION P3 VALUES LESS THAN (300, 'GHI', 300.505)
+                   TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+  PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+) TABLESPACE PDT_TBS;
+INSERT INTO PT_RANGE VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_RANGE VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_RANGE VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_RANGE VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_RANGE VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+CREATE INDEX IDX3 ON PT_RANGE(I1, I2, I4);
+
+
+CREATE TABLE PT_LIST ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+PARTITION BY LIST(I1)
+( PARTITION P1 VALUES (100, 150)
+                   TABLESPACE PDT_TBS2 LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+  PARTITION P2 VALUES (200, 250)
+                   TABLESPACE PDT_TBS3 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+  PARTITION P3 VALUES (300, 350)
+                   TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+  PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+) TABLESPACE PDT_TBS;
+INSERT INTO PT_LIST VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_LIST VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_LIST VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_LIST VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_LIST VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+CREATE INDEX IDX4 ON PT_LIST(I1, I2, I4);
+
+
+CREATE TABLE PT_HASH ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+PARTITION BY HASH(I1, I2, I4)
+( PARTITION P1 TABLESPACE PDT_TBS2 LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+  PARTITION P2 TABLESPACE PDT_TBS3 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+  PARTITION P3 TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+  PARTITION P4 TABLESPACE PDT_TBS5
+) TABLESPACE PDT_TBS;
+INSERT INTO PT_HASH VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_HASH VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_HASH VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_HASH VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+INSERT INTO PT_HASH VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+CREATE INDEX IDX5 ON PT_HASH(I1, I2, I4);
+
+
+
+#####################################################################
+##SECTOR; INSERT TABLE(None-Partitioned Table(mem))
+#####################################################################
+
+################################
+##SECTOR; SELECT TABLE(Range-PT)
+################################
+
+INSERT INTO NPT_MEM SELECT * FROM PT_RANGE;
+SELECT COUNT(*) FROM NPT_MEM;
+
+INSERT INTO NPT_MEM SELECT * FROM PT_RANGE PARTITION(P2);
+SELECT COUNT(*) FROM NPT_MEM;
+
+
+################################
+##SECTOR; SELECT TABLE(List-PT)
+################################
+
+INSERT INTO NPT_MEM SELECT * FROM PT_LIST;
+SELECT COUNT(*) FROM NPT_MEM;
+
+INSERT INTO NPT_MEM SELECT * FROM PT_LIST PARTITION(P2);
+SELECT COUNT(*) FROM NPT_MEM;
+
+
+################################
+##SECTOR; SELECT TABLE(Hash-PT)
+################################
+
+INSERT INTO NPT_MEM SELECT * FROM PT_HASH;
+SELECT COUNT(*) FROM NPT_MEM;
+
+INSERT INTO NPT_MEM SELECT * FROM PT_HASH PARTITION(P2);
+SELECT COUNT(*) FROM NPT_MEM;
+
+
+
+#####################################################################
+##SECTOR; INSERT TABLE(None-Partitioned Table(disk))
+#####################################################################
+
+################################
+##SECTOR; SELECT TABLE(Range-PT)
+################################
+
+INSERT INTO NPT_DISK SELECT * FROM PT_RANGE;
+SELECT COUNT(*) FROM NPT_DISK;
+
+INSERT INTO NPT_DISK SELECT * FROM PT_RANGE PARTITION(P2);
+SELECT COUNT(*) FROM NPT_DISK;
+
+
+################################
+##SECTOR; SELECT TABLE(List-PT)
+################################
+
+INSERT INTO NPT_DISK SELECT * FROM PT_LIST;
+SELECT COUNT(*) FROM NPT_DISK;
+
+INSERT INTO NPT_DISK SELECT * FROM PT_LIST PARTITION(P2);
+SELECT COUNT(*) FROM NPT_DISK;
+
+
+################################
+##SECTOR; SELECT TABLE(Hash-PT)
+################################
+
+INSERT INTO NPT_DISK SELECT * FROM PT_HASH;
+SELECT COUNT(*) FROM NPT_DISK;
+
+INSERT INTO NPT_DISK SELECT * FROM PT_HASH PARTITION(P2);
+SELECT COUNT(*) FROM NPT_DISK;
+
+
+
+#####################################################################
+##SECTOR; INSERT TABLE(Range Partitioned Table)
+#####################################################################
+
+################################
+##SECTOR; SELECT TABLE(None-Partitioned Table(mem))
+################################
+
+INSERT INTO PT_RANGE SELECT * FROM NPT_MEM;
+SELECT COUNT(*) FROM PT_RANGE;
+
+
+################################
+##SECTOR; SELECT TABLE(None-Partitioned Table(disk))
+################################
+
+INSERT INTO PT_RANGE SELECT * FROM NPT_DISK;
+SELECT COUNT(*) FROM PT_RANGE;
+
+
+################################
+##SECTOR; SELECT TABLE(Range-PT)
+################################
+
+INSERT INTO PT_RANGE SELECT * FROM PT_RANGE;
+SELECT COUNT(*) FROM PT_RANGE;
+
+INSERT INTO PT_RANGE SELECT * FROM PT_RANGE PARTITION(P2);
+SELECT COUNT(*) FROM PT_RANGE;
+
+
+################################
+##SECTOR; SELECT TABLE(List-PT)
+################################
+
+INSERT INTO PT_RANGE SELECT * FROM PT_LIST;
+SELECT COUNT(*) FROM PT_RANGE;
+
+INSERT INTO PT_RANGE SELECT * FROM PT_LIST PARTITION(P2);
+SELECT COUNT(*) FROM PT_RANGE;
+
+
+################################
+##SECTOR; SELECT TABLE(Hash-PT)
+################################
+
+INSERT INTO PT_RANGE SELECT * FROM PT_HASH;
+SELECT COUNT(*) FROM PT_RANGE;
+
+INSERT INTO PT_RANGE SELECT * FROM PT_HASH PARTITION(P2);
+SELECT COUNT(*) FROM PT_RANGE;
+
+
+
+#####################################################################
+##SECTOR; INSERT TABLE(List Partitioned Table)
+#####################################################################
+
+################################
+##SECTOR; SELECT TABLE(None-Partitioned Table(mem))
+################################
+
+INSERT INTO PT_LIST SELECT * FROM NPT_MEM;
+SELECT COUNT(*) FROM PT_LIST;
+
+
+################################
+##SECTOR; SELECT TABLE(None-Partitioned Table(disk))
+################################
+
+INSERT INTO PT_LIST SELECT * FROM NPT_DISK;
+SELECT COUNT(*) FROM PT_LIST;
+
+
+################################
+##SECTOR; SELECT TABLE(Range-PT)
+################################
+
+INSERT INTO PT_LIST SELECT * FROM PT_RANGE;
+SELECT COUNT(*) FROM PT_LIST;
+
+INSERT INTO PT_LIST SELECT * FROM PT_RANGE PARTITION(P2);
+SELECT COUNT(*) FROM PT_LIST;
+
+
+################################
+##SECTOR; SELECT TABLE(List-PT)
+################################
+
+INSERT INTO PT_LIST SELECT * FROM PT_LIST;
+SELECT COUNT(*) FROM PT_LIST;
+
+INSERT INTO PT_LIST SELECT * FROM PT_LIST PARTITION(P2);
+SELECT COUNT(*) FROM PT_LIST;
+
+
+################################
+##SECTOR; SELECT TABLE(Hash-PT)
+################################
+
+INSERT INTO PT_LIST SELECT * FROM PT_HASH;
+SELECT COUNT(*) FROM PT_LIST;
+
+INSERT INTO PT_LIST SELECT * FROM PT_HASH PARTITION(P2);
+SELECT COUNT(*) FROM PT_LIST;
+
+
+
+
+#####################################################################
+##SECTOR; INSERT TABLE(Hash Partitioned Table)
+#####################################################################
+
+################################
+##SECTOR; SELECT TABLE(None-Partitioned Table(mem))
+################################
+
+INSERT INTO PT_HASH SELECT * FROM NPT_MEM;
+SELECT COUNT(*) FROM PT_HASH;
+
+
+################################
+##SECTOR; SELECT TABLE(None-Partitioned Table(disk))
+################################
+
+INSERT INTO PT_HASH SELECT * FROM NPT_DISK;
+SELECT COUNT(*) FROM PT_HASH;
+
+
+################################
+##SECTOR; SELECT TABLE(Range-PT)
+################################
+
+INSERT INTO PT_HASH SELECT * FROM PT_RANGE;
+SELECT COUNT(*) FROM PT_HASH;
+
+INSERT INTO PT_HASH SELECT * FROM PT_RANGE PARTITION(P2);
+SELECT COUNT(*) FROM PT_HASH;
+
+
+################################
+##SECTOR; SELECT TABLE(List-PT)
+################################
+
+INSERT INTO PT_HASH SELECT * FROM PT_LIST;
+SELECT COUNT(*) FROM PT_HASH;
+
+INSERT INTO PT_HASH SELECT * FROM PT_LIST PARTITION(P2);
+SELECT COUNT(*) FROM PT_HASH;
+
+
+################################
+##SECTOR; SELECT TABLE(Hash-PT)
+################################
+
+INSERT INTO PT_HASH SELECT * FROM PT_HASH;
+SELECT COUNT(*) FROM PT_HASH;
+
+INSERT INTO PT_HASH SELECT * FROM PT_HASH PARTITION(P2);
+SELECT COUNT(*) FROM PT_HASH;
+
+
+
+#####################################################################
+##SECTOR; FINALIZATION
+#####################################################################
+SKIP BEGIN;
+DROP TABLE NPT_MEM;
+DROP TABLE NPT_DISK;
+DROP TABLE PT_RANGE;
+DROP TABLE PT_LIST;
+DROP TABLE PT_HASH;
+SKIP END;
+}

@@ -1,0 +1,150 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop user user1 cascade;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t1;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+create user user1 identified by user1;
+
+grant all privileges to user1;
+
+##################################
+# SECTOR; CREATE INDEX
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create unique index idx1 on t1(i2, i3);
+
+connect user1/user1;
+
+create unique index idx2 on sys.t1(i3);
+
+create table t2
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create unique index idx3 on t2(i2, i3);
+
+connect sys/manager;
+
+desc t1;
+CALL DESC_INDEX( "IDX1" );
+CALL DESC_INDEX( "IDX2" );
+
+connect user1/user1;
+
+desc t2;
+CALL DESC_INDEX( "IDX2" );
+CALL DESC_INDEX( "IDX3" );
+
+connect sys/manager;
+
+##################################
+# SECTOR; DROP INDEX
+##################################
+
+connect sys/manager;
+
+insert into t1 values ( 1, 1, 1, 1 );
+insert into t1 values ( 11, 1, 2, 2 );
+# fail
+insert into t1 values ( 21, 1, 2, 2 );
+# fail 
+insert into t1 values ( 1, 1, 3, 2 );
+
+connect user1/user1;
+
+insert into t2 values ( 1, 1, 1, 1 );
+insert into t2 values ( 11, 1, 2, 2 );
+# fail
+insert into t2 values ( 21, 1, 2, 2 );
+
+connect sys/manager;
+
+drop index idx1;
+
+connect user1/user1;
+
+drop index idx2;
+drop index idx3;
+
+connect sys/manager;
+
+insert into t1 values ( 21, 1, 2, 2 );
+insert into t1 values ( 1, 1, 3, 2 );
+
+select * from t1;
+
+connect user1/user1;
+
+insert into t2 values ( 21, 1, 2, 2 );
+
+select * from t2;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

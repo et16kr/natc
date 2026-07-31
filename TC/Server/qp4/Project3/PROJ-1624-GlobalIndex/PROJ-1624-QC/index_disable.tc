@@ -1,0 +1,61 @@
+#######################################################################
+# INDEX DDL TEST
+#######################################################################
+
+#######################################################################
+# SIMPLE INDEX DDL TEST
+#######################################################################
+
+###################################
+#SECTOR; PREPARATION
+###################################
+INCLUDE select_meta.i;
+
+DEF MAIN()
+{
+SKIP BEGIN;
+DROP TABLE T1;
+SKIP END;
+
+CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+partition by range(i1)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE INDEX IDX1 On T1 (I1);
+
+INSERT INTO T1 VALUES (9,9,9);
+INSERT INTO T1 VALUES (2,2,2);
+INSERT INTO T1 VALUES (1,1,1);
+INSERT INTO T1 VALUES (3,3,3);
+INSERT INTO T1 VALUES (1,1,1);
+INSERT INTO T1 VALUES (2,2,2);
+INSERT INTO T1 VALUES (7,7,7);
+
+###################################
+#SECTOR; WITHOUT DATA
+###################################
+
+alter table t1 all index disable;
+select * from t1 where i1 > 0;
+CALL SELECT_META();
+
+alter table t1 all index enable;
+select * from t1 where i1 > 0;
+CALL SELECT_META();
+
+alter index idx1 disable;
+select * from t1 where i1 > 0;
+CALL SELECT_META();
+ 
+###################################
+#SECTOR; FINALIZATION
+###################################
+
+SKIP BEGIN;
+DROP TABLE T1;
+SKIP END;
+}

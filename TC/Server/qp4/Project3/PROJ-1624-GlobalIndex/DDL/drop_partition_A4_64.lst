@@ -1,0 +1,3513 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+Create success.
+$T0> create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+Create success.
+$T0> SKIP BEGIN;
+$T0> drop function get_oid;
+$T0> SKIP END;
+
+$T0> create function get_oid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; RANGE PARTITION
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (80),
+  partition p4 values less than (90),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level, level, level from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> create index t1_idx1 on t1(i1);
+Create success.
+$T0> create index t1_idx2 on t1(i2) local;
+Create success.
+$T0> create index t1_idx3 on t1(i2,i3,i4);
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i3);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i4);
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+90          0                    0                    
+91          0                    0                    
+92          0                    0                    
+93          0                    0                    
+94          0                    0                    
+95          0                    0                    
+96          0                    0                    
+97          0                    0                    
+98          0                    0                    
+99          0                    0                    
+100         0                    0                    
+80          0                    0                    
+81          0                    0                    
+82          0                    0                    
+83          0                    0                    
+84          0                    0                    
+85          0                    0                    
+86          0                    0                    
+87          0                    0                    
+88          0                    0                    
+89          0                    0                    
+40          0                    0                    
+41          0                    0                    
+42          0                    0                    
+43          0                    0                    
+44          0                    0                    
+45          0                    0                    
+46          0                    0                    
+47          0                    0                    
+48          0                    0                    
+49          0                    0                    
+50          0                    0                    
+51          0                    0                    
+52          0                    0                    
+53          0                    0                    
+54          0                    0                    
+55          0                    0                    
+56          0                    0                    
+57          0                    0                    
+58          0                    0                    
+59          0                    0                    
+60          0                    0                    
+61          0                    0                    
+62          0                    0                    
+63          0                    0                    
+64          0                    0                    
+65          0                    0                    
+66          0                    0                    
+67          0                    0                    
+68          0                    0                    
+69          0                    0                    
+70          0                    0                    
+71          0                    0                    
+72          0                    0                    
+73          0                    0                    
+74          0                    0                    
+75          0                    0                    
+76          0                    0                    
+77          0                    0                    
+78          0                    0                    
+79          0                    0                    
+20          0                    0                    
+21          0                    0                    
+22          0                    0                    
+23          0                    0                    
+24          0                    0                    
+25          0                    0                    
+26          0                    0                    
+27          0                    0                    
+28          0                    0                    
+29          0                    0                    
+30          0                    0                    
+31          0                    0                    
+32          0                    0                    
+33          0                    0                    
+34          0                    0                    
+35          0                    0                    
+36          0                    0                    
+37          0                    0                    
+38          0                    0                    
+39          0                    0                    
+1           0                    0                    
+2           0                    0                    
+3           0                    0                    
+4           0                    0                    
+5           0                    0                    
+6           0                    0                    
+7           0                    0                    
+8           0                    0                    
+9           0                    0                    
+10          0                    0                    
+11          0                    0                    
+12          0                    0                    
+13          0                    0                    
+14          0                    0                    
+15          0                    0                    
+16          0                    0                    
+17          0                    0                    
+18          0                    0                    
+19          0                    0                    
+100 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+90          0                    0                    
+91          0                    0                    
+92          0                    0                    
+93          0                    0                    
+94          0                    0                    
+95          0                    0                    
+96          0                    0                    
+97          0                    0                    
+98          0                    0                    
+99          0                    0                    
+100         0                    0                    
+80          0                    0                    
+81          0                    0                    
+82          0                    0                    
+83          0                    0                    
+84          0                    0                    
+85          0                    0                    
+86          0                    0                    
+87          0                    0                    
+88          0                    0                    
+89          0                    0                    
+40          0                    0                    
+41          0                    0                    
+42          0                    0                    
+43          0                    0                    
+44          0                    0                    
+45          0                    0                    
+46          0                    0                    
+47          0                    0                    
+48          0                    0                    
+49          0                    0                    
+50          0                    0                    
+51          0                    0                    
+52          0                    0                    
+53          0                    0                    
+54          0                    0                    
+55          0                    0                    
+56          0                    0                    
+57          0                    0                    
+58          0                    0                    
+59          0                    0                    
+60          0                    0                    
+61          0                    0                    
+62          0                    0                    
+63          0                    0                    
+64          0                    0                    
+65          0                    0                    
+66          0                    0                    
+67          0                    0                    
+68          0                    0                    
+69          0                    0                    
+70          0                    0                    
+71          0                    0                    
+72          0                    0                    
+73          0                    0                    
+74          0                    0                    
+75          0                    0                    
+76          0                    0                    
+77          0                    0                    
+78          0                    0                    
+79          0                    0                    
+20          0                    0                    
+21          0                    0                    
+22          0                    0                    
+23          0                    0                    
+24          0                    0                    
+25          0                    0                    
+26          0                    0                    
+27          0                    0                    
+28          0                    0                    
+29          0                    0                    
+30          0                    0                    
+31          0                    0                    
+32          0                    0                    
+33          0                    0                    
+34          0                    0                    
+35          0                    0                    
+36          0                    0                    
+37          0                    0                    
+38          0                    0                    
+39          0                    0                    
+1           0                    0                    
+2           0                    0                    
+3           0                    0                    
+4           0                    0                    
+5           0                    0                    
+6           0                    0                    
+7           0                    0                    
+8           0                    0                    
+9           0                    0                    
+10          0                    0                    
+11          0                    0                    
+12          0                    0                    
+13          0                    0                    
+14          0                    0                    
+15          0                    0                    
+16          0                    0                    
+17          0                    0                    
+18          0                    0                    
+19          0                    0                    
+100 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           1           1           
+2           2           2           2           
+3           3           3           3           
+4           4           4           4           
+5           5           5           5           
+6           6           6           6           
+7           7           7           7           
+8           8           8           8           
+9           9           9           9           
+10          10          10          10          
+11          11          11          11          
+12          12          12          12          
+13          13          13          13          
+14          14          14          14          
+15          15          15          15          
+16          16          16          16          
+17          17          17          17          
+18          18          18          18          
+19          19          19          19          
+20          20          20          20          
+21          21          21          21          
+22          22          22          22          
+23          23          23          23          
+24          24          24          24          
+25          25          25          25          
+26          26          26          26          
+27          27          27          27          
+28          28          28          28          
+29          29          29          29          
+30          30          30          30          
+31          31          31          31          
+32          32          32          32          
+33          33          33          33          
+34          34          34          34          
+35          35          35          35          
+36          36          36          36          
+37          37          37          37          
+38          38          38          38          
+39          39          39          39          
+40          40          40          40          
+41          41          41          41          
+42          42          42          42          
+43          43          43          43          
+44          44          44          44          
+45          45          45          45          
+46          46          46          46          
+47          47          47          47          
+48          48          48          48          
+49          49          49          49          
+50          50          50          50          
+51          51          51          51          
+52          52          52          52          
+53          53          53          53          
+54          54          54          54          
+55          55          55          55          
+56          56          56          56          
+57          57          57          57          
+58          58          58          58          
+59          59          59          59          
+60          60          60          60          
+61          61          61          61          
+62          62          62          62          
+63          63          63          63          
+64          64          64          64          
+65          65          65          65          
+66          66          66          66          
+67          67          67          67          
+68          68          68          68          
+69          69          69          69          
+70          70          70          70          
+71          71          71          71          
+72          72          72          72          
+73          73          73          73          
+74          74          74          74          
+75          75          75          75          
+76          76          76          76          
+77          77          77          77          
+78          78          78          78          
+79          79          79          79          
+80          80          80          80          
+81          81          81          81          
+82          82          82          82          
+83          83          83          83          
+84          84          84          84          
+85          85          85          85          
+86          86          86          86          
+87          87          87          87          
+88          88          88          88          
+89          89          89          89          
+90          90          90          90          
+91          91          91          91          
+92          92          92          92          
+93          93          93          93          
+94          94          94          94          
+95          95          95          95          
+96          96          96          96          
+97          97          97          97          
+98          98          98          98          
+99          99          99          99          
+100         100         100         100         
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> alter table t1 drop partition p4;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+90          0                    0                    
+91          0                    0                    
+92          0                    0                    
+93          0                    0                    
+94          0                    0                    
+95          0                    0                    
+96          0                    0                    
+97          0                    0                    
+98          0                    0                    
+99          0                    0                    
+100         0                    0                    
+40          0                    0                    
+41          0                    0                    
+42          0                    0                    
+43          0                    0                    
+44          0                    0                    
+45          0                    0                    
+46          0                    0                    
+47          0                    0                    
+48          0                    0                    
+49          0                    0                    
+50          0                    0                    
+51          0                    0                    
+52          0                    0                    
+53          0                    0                    
+54          0                    0                    
+55          0                    0                    
+56          0                    0                    
+57          0                    0                    
+58          0                    0                    
+59          0                    0                    
+60          0                    0                    
+61          0                    0                    
+62          0                    0                    
+63          0                    0                    
+64          0                    0                    
+65          0                    0                    
+66          0                    0                    
+67          0                    0                    
+68          0                    0                    
+69          0                    0                    
+70          0                    0                    
+71          0                    0                    
+72          0                    0                    
+73          0                    0                    
+74          0                    0                    
+75          0                    0                    
+76          0                    0                    
+77          0                    0                    
+78          0                    0                    
+79          0                    0                    
+20          0                    0                    
+21          0                    0                    
+22          0                    0                    
+23          0                    0                    
+24          0                    0                    
+25          0                    0                    
+26          0                    0                    
+27          0                    0                    
+28          0                    0                    
+29          0                    0                    
+30          0                    0                    
+31          0                    0                    
+32          0                    0                    
+33          0                    0                    
+34          0                    0                    
+35          0                    0                    
+36          0                    0                    
+37          0                    0                    
+38          0                    0                    
+39          0                    0                    
+1           0                    0                    
+2           0                    0                    
+3           0                    0                    
+4           0                    0                    
+5           0                    0                    
+6           0                    0                    
+7           0                    0                    
+8           0                    0                    
+9           0                    0                    
+10          0                    0                    
+11          0                    0                    
+12          0                    0                    
+13          0                    0                    
+14          0                    0                    
+15          0                    0                    
+16          0                    0                    
+17          0                    0                    
+18          0                    0                    
+19          0                    0                    
+90 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+90          0                    0                    
+91          0                    0                    
+92          0                    0                    
+93          0                    0                    
+94          0                    0                    
+95          0                    0                    
+96          0                    0                    
+97          0                    0                    
+98          0                    0                    
+99          0                    0                    
+100         0                    0                    
+40          0                    0                    
+41          0                    0                    
+42          0                    0                    
+43          0                    0                    
+44          0                    0                    
+45          0                    0                    
+46          0                    0                    
+47          0                    0                    
+48          0                    0                    
+49          0                    0                    
+50          0                    0                    
+51          0                    0                    
+52          0                    0                    
+53          0                    0                    
+54          0                    0                    
+55          0                    0                    
+56          0                    0                    
+57          0                    0                    
+58          0                    0                    
+59          0                    0                    
+60          0                    0                    
+61          0                    0                    
+62          0                    0                    
+63          0                    0                    
+64          0                    0                    
+65          0                    0                    
+66          0                    0                    
+67          0                    0                    
+68          0                    0                    
+69          0                    0                    
+70          0                    0                    
+71          0                    0                    
+72          0                    0                    
+73          0                    0                    
+74          0                    0                    
+75          0                    0                    
+76          0                    0                    
+77          0                    0                    
+78          0                    0                    
+79          0                    0                    
+20          0                    0                    
+21          0                    0                    
+22          0                    0                    
+23          0                    0                    
+24          0                    0                    
+25          0                    0                    
+26          0                    0                    
+27          0                    0                    
+28          0                    0                    
+29          0                    0                    
+30          0                    0                    
+31          0                    0                    
+32          0                    0                    
+33          0                    0                    
+34          0                    0                    
+35          0                    0                    
+36          0                    0                    
+37          0                    0                    
+38          0                    0                    
+39          0                    0                    
+1           0                    0                    
+2           0                    0                    
+3           0                    0                    
+4           0                    0                    
+5           0                    0                    
+6           0                    0                    
+7           0                    0                    
+8           0                    0                    
+9           0                    0                    
+10          0                    0                    
+11          0                    0                    
+12          0                    0                    
+13          0                    0                    
+14          0                    0                    
+15          0                    0                    
+16          0                    0                    
+17          0                    0                    
+18          0                    0                    
+19          0                    0                    
+90 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           1           1           
+2           2           2           2           
+3           3           3           3           
+4           4           4           4           
+5           5           5           5           
+6           6           6           6           
+7           7           7           7           
+8           8           8           8           
+9           9           9           9           
+10          10          10          10          
+11          11          11          11          
+12          12          12          12          
+13          13          13          13          
+14          14          14          14          
+15          15          15          15          
+16          16          16          16          
+17          17          17          17          
+18          18          18          18          
+19          19          19          19          
+20          20          20          20          
+21          21          21          21          
+22          22          22          22          
+23          23          23          23          
+24          24          24          24          
+25          25          25          25          
+26          26          26          26          
+27          27          27          27          
+28          28          28          28          
+29          29          29          29          
+30          30          30          30          
+31          31          31          31          
+32          32          32          32          
+33          33          33          33          
+34          34          34          34          
+35          35          35          35          
+36          36          36          36          
+37          37          37          37          
+38          38          38          38          
+39          39          39          39          
+40          40          40          40          
+41          41          41          41          
+42          42          42          42          
+43          43          43          43          
+44          44          44          44          
+45          45          45          45          
+46          46          46          46          
+47          47          47          47          
+48          48          48          48          
+49          49          49          49          
+50          50          50          50          
+51          51          51          51          
+52          52          52          52          
+53          53          53          53          
+54          54          54          54          
+55          55          55          55          
+56          56          56          56          
+57          57          57          57          
+58          58          58          58          
+59          59          59          59          
+60          60          60          60          
+61          61          61          61          
+62          62          62          62          
+63          63          63          63          
+64          64          64          64          
+65          65          65          65          
+66          66          66          66          
+67          67          67          67          
+68          68          68          68          
+69          69          69          69          
+70          70          70          70          
+71          71          71          71          
+72          72          72          72          
+73          73          73          73          
+74          74          74          74          
+75          75          75          75          
+76          76          76          76          
+77          77          77          77          
+78          78          78          78          
+79          79          79          79          
+90          90          90          90          
+91          91          91          91          
+92          92          92          92          
+93          93          93          93          
+94          94          94          94          
+95          95          95          95          
+96          96          96          96          
+97          97          97          97          
+98          98          98          98          
+99          99          99          99          
+100         100         100         100         
+90 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 4/4, INDEX: SYS.T1_IDX1, ACCESS: 90, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i5 = b.i5 and a.i6 = b.i6 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31058 : Column not found 
+0004 :   select NVL(I6,-1000) I6, NVL(I5,-1000) I5, GET_OID('T1','P1') OID, CAST(_PROWID as BIGINT) RID from T1 partition (P1)
+                   ^ ^
+]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i1);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX1" b 
+on a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX3" b 
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+
+$T0> alter table t1 drop partition p1;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+90          0                    0                    
+91          0                    0                    
+92          0                    0                    
+93          0                    0                    
+94          0                    0                    
+95          0                    0                    
+96          0                    0                    
+97          0                    0                    
+98          0                    0                    
+99          0                    0                    
+100         0                    0                    
+40          0                    0                    
+41          0                    0                    
+42          0                    0                    
+43          0                    0                    
+44          0                    0                    
+45          0                    0                    
+46          0                    0                    
+47          0                    0                    
+48          0                    0                    
+49          0                    0                    
+50          0                    0                    
+51          0                    0                    
+52          0                    0                    
+53          0                    0                    
+54          0                    0                    
+55          0                    0                    
+56          0                    0                    
+57          0                    0                    
+58          0                    0                    
+59          0                    0                    
+60          0                    0                    
+61          0                    0                    
+62          0                    0                    
+63          0                    0                    
+64          0                    0                    
+65          0                    0                    
+66          0                    0                    
+67          0                    0                    
+68          0                    0                    
+69          0                    0                    
+70          0                    0                    
+71          0                    0                    
+72          0                    0                    
+73          0                    0                    
+74          0                    0                    
+75          0                    0                    
+76          0                    0                    
+77          0                    0                    
+78          0                    0                    
+79          0                    0                    
+20          0                    0                    
+21          0                    0                    
+22          0                    0                    
+23          0                    0                    
+24          0                    0                    
+25          0                    0                    
+26          0                    0                    
+27          0                    0                    
+28          0                    0                    
+29          0                    0                    
+30          0                    0                    
+31          0                    0                    
+32          0                    0                    
+33          0                    0                    
+34          0                    0                    
+35          0                    0                    
+36          0                    0                    
+37          0                    0                    
+38          0                    0                    
+39          0                    0                    
+71 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+90          0                    0                    
+91          0                    0                    
+92          0                    0                    
+93          0                    0                    
+94          0                    0                    
+95          0                    0                    
+96          0                    0                    
+97          0                    0                    
+98          0                    0                    
+99          0                    0                    
+100         0                    0                    
+40          0                    0                    
+41          0                    0                    
+42          0                    0                    
+43          0                    0                    
+44          0                    0                    
+45          0                    0                    
+46          0                    0                    
+47          0                    0                    
+48          0                    0                    
+49          0                    0                    
+50          0                    0                    
+51          0                    0                    
+52          0                    0                    
+53          0                    0                    
+54          0                    0                    
+55          0                    0                    
+56          0                    0                    
+57          0                    0                    
+58          0                    0                    
+59          0                    0                    
+60          0                    0                    
+61          0                    0                    
+62          0                    0                    
+63          0                    0                    
+64          0                    0                    
+65          0                    0                    
+66          0                    0                    
+67          0                    0                    
+68          0                    0                    
+69          0                    0                    
+70          0                    0                    
+71          0                    0                    
+72          0                    0                    
+73          0                    0                    
+74          0                    0                    
+75          0                    0                    
+76          0                    0                    
+77          0                    0                    
+78          0                    0                    
+79          0                    0                    
+20          0                    0                    
+21          0                    0                    
+22          0                    0                    
+23          0                    0                    
+24          0                    0                    
+25          0                    0                    
+26          0                    0                    
+27          0                    0                    
+28          0                    0                    
+29          0                    0                    
+30          0                    0                    
+31          0                    0                    
+32          0                    0                    
+33          0                    0                    
+34          0                    0                    
+35          0                    0                    
+36          0                    0                    
+37          0                    0                    
+38          0                    0                    
+39          0                    0                    
+71 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+20          20          20          20          
+21          21          21          21          
+22          22          22          22          
+23          23          23          23          
+24          24          24          24          
+25          25          25          25          
+26          26          26          26          
+27          27          27          27          
+28          28          28          28          
+29          29          29          29          
+30          30          30          30          
+31          31          31          31          
+32          32          32          32          
+33          33          33          33          
+34          34          34          34          
+35          35          35          35          
+36          36          36          36          
+37          37          37          37          
+38          38          38          38          
+39          39          39          39          
+40          40          40          40          
+41          41          41          41          
+42          42          42          42          
+43          43          43          43          
+44          44          44          44          
+45          45          45          45          
+46          46          46          46          
+47          47          47          47          
+48          48          48          48          
+49          49          49          49          
+50          50          50          50          
+51          51          51          51          
+52          52          52          52          
+53          53          53          53          
+54          54          54          54          
+55          55          55          55          
+56          56          56          56          
+57          57          57          57          
+58          58          58          58          
+59          59          59          59          
+60          60          60          60          
+61          61          61          61          
+62          62          62          62          
+63          63          63          63          
+64          64          64          64          
+65          65          65          65          
+66          66          66          66          
+67          67          67          67          
+68          68          68          68          
+69          69          69          69          
+70          70          70          70          
+71          71          71          71          
+72          72          72          72          
+73          73          73          73          
+74          74          74          74          
+75          75          75          75          
+76          76          76          76          
+77          77          77          77          
+78          78          78          78          
+79          79          79          79          
+90          90          90          90          
+91          91          91          91          
+92          92          92          92          
+93          93          93          93          
+94          94          94          94          
+95          95          95          95          
+96          96          96          96          
+97          97          97          97          
+98          98          98          98          
+99          99          99          99          
+100         100         100         100         
+71 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.T1_IDX1, ACCESS: 71, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; RANGE PARTITION
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  i5 integer,
+  i6 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (80),
+  partition p4 values less than (90),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level, level, level, level, level from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> create index t1_idx1 on t1(i1);
+Create success.
+$T0> create index t1_idx2 on t1(i2) local;
+Create success.
+$T0> create index t1_idx3 on t1(i2,i3,i4);
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i3, i4);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i5, i6);
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     NOT NULL
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+T1_UK                                    BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3, I4
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+90          90          0                    0                    
+91          91          0                    0                    
+92          92          0                    0                    
+93          93          0                    0                    
+94          94          0                    0                    
+95          95          0                    0                    
+96          96          0                    0                    
+97          97          0                    0                    
+98          98          0                    0                    
+99          99          0                    0                    
+100         100         0                    0                    
+80          80          0                    0                    
+81          81          0                    0                    
+82          82          0                    0                    
+83          83          0                    0                    
+84          84          0                    0                    
+85          85          0                    0                    
+86          86          0                    0                    
+87          87          0                    0                    
+88          88          0                    0                    
+89          89          0                    0                    
+40          40          0                    0                    
+41          41          0                    0                    
+42          42          0                    0                    
+43          43          0                    0                    
+44          44          0                    0                    
+45          45          0                    0                    
+46          46          0                    0                    
+47          47          0                    0                    
+48          48          0                    0                    
+49          49          0                    0                    
+50          50          0                    0                    
+51          51          0                    0                    
+52          52          0                    0                    
+53          53          0                    0                    
+54          54          0                    0                    
+55          55          0                    0                    
+56          56          0                    0                    
+57          57          0                    0                    
+58          58          0                    0                    
+59          59          0                    0                    
+60          60          0                    0                    
+61          61          0                    0                    
+62          62          0                    0                    
+63          63          0                    0                    
+64          64          0                    0                    
+65          65          0                    0                    
+66          66          0                    0                    
+67          67          0                    0                    
+68          68          0                    0                    
+69          69          0                    0                    
+70          70          0                    0                    
+71          71          0                    0                    
+72          72          0                    0                    
+73          73          0                    0                    
+74          74          0                    0                    
+75          75          0                    0                    
+76          76          0                    0                    
+77          77          0                    0                    
+78          78          0                    0                    
+79          79          0                    0                    
+20          20          0                    0                    
+21          21          0                    0                    
+22          22          0                    0                    
+23          23          0                    0                    
+24          24          0                    0                    
+25          25          0                    0                    
+26          26          0                    0                    
+27          27          0                    0                    
+28          28          0                    0                    
+29          29          0                    0                    
+30          30          0                    0                    
+31          31          0                    0                    
+32          32          0                    0                    
+33          33          0                    0                    
+34          34          0                    0                    
+35          35          0                    0                    
+36          36          0                    0                    
+37          37          0                    0                    
+38          38          0                    0                    
+39          39          0                    0                    
+1           1           0                    0                    
+2           2           0                    0                    
+3           3           0                    0                    
+4           4           0                    0                    
+5           5           0                    0                    
+6           6           0                    0                    
+7           7           0                    0                    
+8           8           0                    0                    
+9           9           0                    0                    
+10          10          0                    0                    
+11          11          0                    0                    
+12          12          0                    0                    
+13          13          0                    0                    
+14          14          0                    0                    
+15          15          0                    0                    
+16          16          0                    0                    
+17          17          0                    0                    
+18          18          0                    0                    
+19          19          0                    0                    
+100 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I5   $_TEMP.I6   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+90          90          0                    0                    
+91          91          0                    0                    
+92          92          0                    0                    
+93          93          0                    0                    
+94          94          0                    0                    
+95          95          0                    0                    
+96          96          0                    0                    
+97          97          0                    0                    
+98          98          0                    0                    
+99          99          0                    0                    
+100         100         0                    0                    
+80          80          0                    0                    
+81          81          0                    0                    
+82          82          0                    0                    
+83          83          0                    0                    
+84          84          0                    0                    
+85          85          0                    0                    
+86          86          0                    0                    
+87          87          0                    0                    
+88          88          0                    0                    
+89          89          0                    0                    
+40          40          0                    0                    
+41          41          0                    0                    
+42          42          0                    0                    
+43          43          0                    0                    
+44          44          0                    0                    
+45          45          0                    0                    
+46          46          0                    0                    
+47          47          0                    0                    
+48          48          0                    0                    
+49          49          0                    0                    
+50          50          0                    0                    
+51          51          0                    0                    
+52          52          0                    0                    
+53          53          0                    0                    
+54          54          0                    0                    
+55          55          0                    0                    
+56          56          0                    0                    
+57          57          0                    0                    
+58          58          0                    0                    
+59          59          0                    0                    
+60          60          0                    0                    
+61          61          0                    0                    
+62          62          0                    0                    
+63          63          0                    0                    
+64          64          0                    0                    
+65          65          0                    0                    
+66          66          0                    0                    
+67          67          0                    0                    
+68          68          0                    0                    
+69          69          0                    0                    
+70          70          0                    0                    
+71          71          0                    0                    
+72          72          0                    0                    
+73          73          0                    0                    
+74          74          0                    0                    
+75          75          0                    0                    
+76          76          0                    0                    
+77          77          0                    0                    
+78          78          0                    0                    
+79          79          0                    0                    
+20          20          0                    0                    
+21          21          0                    0                    
+22          22          0                    0                    
+23          23          0                    0                    
+24          24          0                    0                    
+25          25          0                    0                    
+26          26          0                    0                    
+27          27          0                    0                    
+28          28          0                    0                    
+29          29          0                    0                    
+30          30          0                    0                    
+31          31          0                    0                    
+32          32          0                    0                    
+33          33          0                    0                    
+34          34          0                    0                    
+35          35          0                    0                    
+36          36          0                    0                    
+37          37          0                    0                    
+38          38          0                    0                    
+39          39          0                    0                    
+1           1           0                    0                    
+2           2           0                    0                    
+3           3           0                    0                    
+4           4           0                    0                    
+5           5           0                    0                    
+6           6           0                    0                    
+7           7           0                    0                    
+8           8           0                    0                    
+9           9           0                    0                    
+10          10          0                    0                    
+11          11          0                    0                    
+12          12          0                    0                    
+13          13          0                    0                    
+14          14          0                    0                    
+15          15          0                    0                    
+16          16          0                    0                    
+17          17          0                    0                    
+18          18          0                    0                    
+19          19          0                    0                    
+100 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       T1.I6       
+-------------------------------------------------------------------------------
+1           1           1           1           1           1           
+2           2           2           2           2           2           
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+6           6           6           6           6           6           
+7           7           7           7           7           7           
+8           8           8           8           8           8           
+9           9           9           9           9           9           
+10          10          10          10          10          10          
+11          11          11          11          11          11          
+12          12          12          12          12          12          
+13          13          13          13          13          13          
+14          14          14          14          14          14          
+15          15          15          15          15          15          
+16          16          16          16          16          16          
+17          17          17          17          17          17          
+18          18          18          18          18          18          
+19          19          19          19          19          19          
+20          20          20          20          20          20          
+21          21          21          21          21          21          
+22          22          22          22          22          22          
+23          23          23          23          23          23          
+24          24          24          24          24          24          
+25          25          25          25          25          25          
+26          26          26          26          26          26          
+27          27          27          27          27          27          
+28          28          28          28          28          28          
+29          29          29          29          29          29          
+30          30          30          30          30          30          
+31          31          31          31          31          31          
+32          32          32          32          32          32          
+33          33          33          33          33          33          
+34          34          34          34          34          34          
+35          35          35          35          35          35          
+36          36          36          36          36          36          
+37          37          37          37          37          37          
+38          38          38          38          38          38          
+39          39          39          39          39          39          
+40          40          40          40          40          40          
+41          41          41          41          41          41          
+42          42          42          42          42          42          
+43          43          43          43          43          43          
+44          44          44          44          44          44          
+45          45          45          45          45          45          
+46          46          46          46          46          46          
+47          47          47          47          47          47          
+48          48          48          48          48          48          
+49          49          49          49          49          49          
+50          50          50          50          50          50          
+51          51          51          51          51          51          
+52          52          52          52          52          52          
+53          53          53          53          53          53          
+54          54          54          54          54          54          
+55          55          55          55          55          55          
+56          56          56          56          56          56          
+57          57          57          57          57          57          
+58          58          58          58          58          58          
+59          59          59          59          59          59          
+60          60          60          60          60          60          
+61          61          61          61          61          61          
+62          62          62          62          62          62          
+63          63          63          63          63          63          
+64          64          64          64          64          64          
+65          65          65          65          65          65          
+66          66          66          66          66          66          
+67          67          67          67          67          67          
+68          68          68          68          68          68          
+69          69          69          69          69          69          
+70          70          70          70          70          70          
+71          71          71          71          71          71          
+72          72          72          72          72          72          
+73          73          73          73          73          73          
+74          74          74          74          74          74          
+75          75          75          75          75          75          
+76          76          76          76          76          76          
+77          77          77          77          77          77          
+78          78          78          78          78          78          
+79          79          79          79          79          79          
+80          80          80          80          80          80          
+81          81          81          81          81          81          
+82          82          82          82          82          82          
+83          83          83          83          83          83          
+84          84          84          84          84          84          
+85          85          85          85          85          85          
+86          86          86          86          86          86          
+87          87          87          87          87          87          
+88          88          88          88          88          88          
+89          89          89          89          89          89          
+90          90          90          90          90          90          
+91          91          91          91          91          91          
+92          92          92          92          92          92          
+93          93          93          93          93          93          
+94          94          94          94          94          94          
+95          95          95          95          95          95          
+96          96          96          96          96          96          
+97          97          97          97          97          97          
+98          98          98          98          98          98          
+99          99          99          99          99          99          
+100         100         100         100         100         100         
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> alter table t1 drop partition p4;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     NOT NULL
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+T1_UK                                    BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3, I4
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+90          90          0                    0                    
+91          91          0                    0                    
+92          92          0                    0                    
+93          93          0                    0                    
+94          94          0                    0                    
+95          95          0                    0                    
+96          96          0                    0                    
+97          97          0                    0                    
+98          98          0                    0                    
+99          99          0                    0                    
+100         100         0                    0                    
+40          40          0                    0                    
+41          41          0                    0                    
+42          42          0                    0                    
+43          43          0                    0                    
+44          44          0                    0                    
+45          45          0                    0                    
+46          46          0                    0                    
+47          47          0                    0                    
+48          48          0                    0                    
+49          49          0                    0                    
+50          50          0                    0                    
+51          51          0                    0                    
+52          52          0                    0                    
+53          53          0                    0                    
+54          54          0                    0                    
+55          55          0                    0                    
+56          56          0                    0                    
+57          57          0                    0                    
+58          58          0                    0                    
+59          59          0                    0                    
+60          60          0                    0                    
+61          61          0                    0                    
+62          62          0                    0                    
+63          63          0                    0                    
+64          64          0                    0                    
+65          65          0                    0                    
+66          66          0                    0                    
+67          67          0                    0                    
+68          68          0                    0                    
+69          69          0                    0                    
+70          70          0                    0                    
+71          71          0                    0                    
+72          72          0                    0                    
+73          73          0                    0                    
+74          74          0                    0                    
+75          75          0                    0                    
+76          76          0                    0                    
+77          77          0                    0                    
+78          78          0                    0                    
+79          79          0                    0                    
+20          20          0                    0                    
+21          21          0                    0                    
+22          22          0                    0                    
+23          23          0                    0                    
+24          24          0                    0                    
+25          25          0                    0                    
+26          26          0                    0                    
+27          27          0                    0                    
+28          28          0                    0                    
+29          29          0                    0                    
+30          30          0                    0                    
+31          31          0                    0                    
+32          32          0                    0                    
+33          33          0                    0                    
+34          34          0                    0                    
+35          35          0                    0                    
+36          36          0                    0                    
+37          37          0                    0                    
+38          38          0                    0                    
+39          39          0                    0                    
+1           1           0                    0                    
+2           2           0                    0                    
+3           3           0                    0                    
+4           4           0                    0                    
+5           5           0                    0                    
+6           6           0                    0                    
+7           7           0                    0                    
+8           8           0                    0                    
+9           9           0                    0                    
+10          10          0                    0                    
+11          11          0                    0                    
+12          12          0                    0                    
+13          13          0                    0                    
+14          14          0                    0                    
+15          15          0                    0                    
+16          16          0                    0                    
+17          17          0                    0                    
+18          18          0                    0                    
+19          19          0                    0                    
+90 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I5   $_TEMP.I6   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+90          90          0                    0                    
+91          91          0                    0                    
+92          92          0                    0                    
+93          93          0                    0                    
+94          94          0                    0                    
+95          95          0                    0                    
+96          96          0                    0                    
+97          97          0                    0                    
+98          98          0                    0                    
+99          99          0                    0                    
+100         100         0                    0                    
+40          40          0                    0                    
+41          41          0                    0                    
+42          42          0                    0                    
+43          43          0                    0                    
+44          44          0                    0                    
+45          45          0                    0                    
+46          46          0                    0                    
+47          47          0                    0                    
+48          48          0                    0                    
+49          49          0                    0                    
+50          50          0                    0                    
+51          51          0                    0                    
+52          52          0                    0                    
+53          53          0                    0                    
+54          54          0                    0                    
+55          55          0                    0                    
+56          56          0                    0                    
+57          57          0                    0                    
+58          58          0                    0                    
+59          59          0                    0                    
+60          60          0                    0                    
+61          61          0                    0                    
+62          62          0                    0                    
+63          63          0                    0                    
+64          64          0                    0                    
+65          65          0                    0                    
+66          66          0                    0                    
+67          67          0                    0                    
+68          68          0                    0                    
+69          69          0                    0                    
+70          70          0                    0                    
+71          71          0                    0                    
+72          72          0                    0                    
+73          73          0                    0                    
+74          74          0                    0                    
+75          75          0                    0                    
+76          76          0                    0                    
+77          77          0                    0                    
+78          78          0                    0                    
+79          79          0                    0                    
+20          20          0                    0                    
+21          21          0                    0                    
+22          22          0                    0                    
+23          23          0                    0                    
+24          24          0                    0                    
+25          25          0                    0                    
+26          26          0                    0                    
+27          27          0                    0                    
+28          28          0                    0                    
+29          29          0                    0                    
+30          30          0                    0                    
+31          31          0                    0                    
+32          32          0                    0                    
+33          33          0                    0                    
+34          34          0                    0                    
+35          35          0                    0                    
+36          36          0                    0                    
+37          37          0                    0                    
+38          38          0                    0                    
+39          39          0                    0                    
+1           1           0                    0                    
+2           2           0                    0                    
+3           3           0                    0                    
+4           4           0                    0                    
+5           5           0                    0                    
+6           6           0                    0                    
+7           7           0                    0                    
+8           8           0                    0                    
+9           9           0                    0                    
+10          10          0                    0                    
+11          11          0                    0                    
+12          12          0                    0                    
+13          13          0                    0                    
+14          14          0                    0                    
+15          15          0                    0                    
+16          16          0                    0                    
+17          17          0                    0                    
+18          18          0                    0                    
+19          19          0                    0                    
+90 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       T1.I6       
+-------------------------------------------------------------------------------
+1           1           1           1           1           1           
+2           2           2           2           2           2           
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+6           6           6           6           6           6           
+7           7           7           7           7           7           
+8           8           8           8           8           8           
+9           9           9           9           9           9           
+10          10          10          10          10          10          
+11          11          11          11          11          11          
+12          12          12          12          12          12          
+13          13          13          13          13          13          
+14          14          14          14          14          14          
+15          15          15          15          15          15          
+16          16          16          16          16          16          
+17          17          17          17          17          17          
+18          18          18          18          18          18          
+19          19          19          19          19          19          
+20          20          20          20          20          20          
+21          21          21          21          21          21          
+22          22          22          22          22          22          
+23          23          23          23          23          23          
+24          24          24          24          24          24          
+25          25          25          25          25          25          
+26          26          26          26          26          26          
+27          27          27          27          27          27          
+28          28          28          28          28          28          
+29          29          29          29          29          29          
+30          30          30          30          30          30          
+31          31          31          31          31          31          
+32          32          32          32          32          32          
+33          33          33          33          33          33          
+34          34          34          34          34          34          
+35          35          35          35          35          35          
+36          36          36          36          36          36          
+37          37          37          37          37          37          
+38          38          38          38          38          38          
+39          39          39          39          39          39          
+40          40          40          40          40          40          
+41          41          41          41          41          41          
+42          42          42          42          42          42          
+43          43          43          43          43          43          
+44          44          44          44          44          44          
+45          45          45          45          45          45          
+46          46          46          46          46          46          
+47          47          47          47          47          47          
+48          48          48          48          48          48          
+49          49          49          49          49          49          
+50          50          50          50          50          50          
+51          51          51          51          51          51          
+52          52          52          52          52          52          
+53          53          53          53          53          53          
+54          54          54          54          54          54          
+55          55          55          55          55          55          
+56          56          56          56          56          56          
+57          57          57          57          57          57          
+58          58          58          58          58          58          
+59          59          59          59          59          59          
+60          60          60          60          60          60          
+61          61          61          61          61          61          
+62          62          62          62          62          62          
+63          63          63          63          63          63          
+64          64          64          64          64          64          
+65          65          65          65          65          65          
+66          66          66          66          66          66          
+67          67          67          67          67          67          
+68          68          68          68          68          68          
+69          69          69          69          69          69          
+70          70          70          70          70          70          
+71          71          71          71          71          71          
+72          72          72          72          72          72          
+73          73          73          73          73          73          
+74          74          74          74          74          74          
+75          75          75          75          75          75          
+76          76          76          76          76          76          
+77          77          77          77          77          77          
+78          78          78          78          78          78          
+79          79          79          79          79          79          
+90          90          90          90          90          90          
+91          91          91          91          91          91          
+92          92          92          92          92          92          
+93          93          93          93          93          93          
+94          94          94          94          94          94          
+95          95          95          95          95          95          
+96          96          96          96          96          96          
+97          97          97          97          97          97          
+98          98          98          98          98          98          
+99          99          99          99          99          99          
+100         100         100         100         100         100         
+90 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 4/4, INDEX: SYS.T1_IDX1, ACCESS: 90, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i5 = b.i5 and a.i6 = b.i6 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i1);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX1" b 
+on a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX3" b 
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+
+$T0> alter table t1 drop partition p1;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     NOT NULL
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+T1_UK                                    BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3, I4
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+90          90          0                    0                    
+91          91          0                    0                    
+92          92          0                    0                    
+93          93          0                    0                    
+94          94          0                    0                    
+95          95          0                    0                    
+96          96          0                    0                    
+97          97          0                    0                    
+98          98          0                    0                    
+99          99          0                    0                    
+100         100         0                    0                    
+40          40          0                    0                    
+41          41          0                    0                    
+42          42          0                    0                    
+43          43          0                    0                    
+44          44          0                    0                    
+45          45          0                    0                    
+46          46          0                    0                    
+47          47          0                    0                    
+48          48          0                    0                    
+49          49          0                    0                    
+50          50          0                    0                    
+51          51          0                    0                    
+52          52          0                    0                    
+53          53          0                    0                    
+54          54          0                    0                    
+55          55          0                    0                    
+56          56          0                    0                    
+57          57          0                    0                    
+58          58          0                    0                    
+59          59          0                    0                    
+60          60          0                    0                    
+61          61          0                    0                    
+62          62          0                    0                    
+63          63          0                    0                    
+64          64          0                    0                    
+65          65          0                    0                    
+66          66          0                    0                    
+67          67          0                    0                    
+68          68          0                    0                    
+69          69          0                    0                    
+70          70          0                    0                    
+71          71          0                    0                    
+72          72          0                    0                    
+73          73          0                    0                    
+74          74          0                    0                    
+75          75          0                    0                    
+76          76          0                    0                    
+77          77          0                    0                    
+78          78          0                    0                    
+79          79          0                    0                    
+20          20          0                    0                    
+21          21          0                    0                    
+22          22          0                    0                    
+23          23          0                    0                    
+24          24          0                    0                    
+25          25          0                    0                    
+26          26          0                    0                    
+27          27          0                    0                    
+28          28          0                    0                    
+29          29          0                    0                    
+30          30          0                    0                    
+31          31          0                    0                    
+32          32          0                    0                    
+33          33          0                    0                    
+34          34          0                    0                    
+35          35          0                    0                    
+36          36          0                    0                    
+37          37          0                    0                    
+38          38          0                    0                    
+39          39          0                    0                    
+71 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I5   $_TEMP.I6   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+90          90          0                    0                    
+91          91          0                    0                    
+92          92          0                    0                    
+93          93          0                    0                    
+94          94          0                    0                    
+95          95          0                    0                    
+96          96          0                    0                    
+97          97          0                    0                    
+98          98          0                    0                    
+99          99          0                    0                    
+100         100         0                    0                    
+40          40          0                    0                    
+41          41          0                    0                    
+42          42          0                    0                    
+43          43          0                    0                    
+44          44          0                    0                    
+45          45          0                    0                    
+46          46          0                    0                    
+47          47          0                    0                    
+48          48          0                    0                    
+49          49          0                    0                    
+50          50          0                    0                    
+51          51          0                    0                    
+52          52          0                    0                    
+53          53          0                    0                    
+54          54          0                    0                    
+55          55          0                    0                    
+56          56          0                    0                    
+57          57          0                    0                    
+58          58          0                    0                    
+59          59          0                    0                    
+60          60          0                    0                    
+61          61          0                    0                    
+62          62          0                    0                    
+63          63          0                    0                    
+64          64          0                    0                    
+65          65          0                    0                    
+66          66          0                    0                    
+67          67          0                    0                    
+68          68          0                    0                    
+69          69          0                    0                    
+70          70          0                    0                    
+71          71          0                    0                    
+72          72          0                    0                    
+73          73          0                    0                    
+74          74          0                    0                    
+75          75          0                    0                    
+76          76          0                    0                    
+77          77          0                    0                    
+78          78          0                    0                    
+79          79          0                    0                    
+20          20          0                    0                    
+21          21          0                    0                    
+22          22          0                    0                    
+23          23          0                    0                    
+24          24          0                    0                    
+25          25          0                    0                    
+26          26          0                    0                    
+27          27          0                    0                    
+28          28          0                    0                    
+29          29          0                    0                    
+30          30          0                    0                    
+31          31          0                    0                    
+32          32          0                    0                    
+33          33          0                    0                    
+34          34          0                    0                    
+35          35          0                    0                    
+36          36          0                    0                    
+37          37          0                    0                    
+38          38          0                    0                    
+39          39          0                    0                    
+71 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       T1.I6       
+-------------------------------------------------------------------------------
+20          20          20          20          20          20          
+21          21          21          21          21          21          
+22          22          22          22          22          22          
+23          23          23          23          23          23          
+24          24          24          24          24          24          
+25          25          25          25          25          25          
+26          26          26          26          26          26          
+27          27          27          27          27          27          
+28          28          28          28          28          28          
+29          29          29          29          29          29          
+30          30          30          30          30          30          
+31          31          31          31          31          31          
+32          32          32          32          32          32          
+33          33          33          33          33          33          
+34          34          34          34          34          34          
+35          35          35          35          35          35          
+36          36          36          36          36          36          
+37          37          37          37          37          37          
+38          38          38          38          38          38          
+39          39          39          39          39          39          
+40          40          40          40          40          40          
+41          41          41          41          41          41          
+42          42          42          42          42          42          
+43          43          43          43          43          43          
+44          44          44          44          44          44          
+45          45          45          45          45          45          
+46          46          46          46          46          46          
+47          47          47          47          47          47          
+48          48          48          48          48          48          
+49          49          49          49          49          49          
+50          50          50          50          50          50          
+51          51          51          51          51          51          
+52          52          52          52          52          52          
+53          53          53          53          53          53          
+54          54          54          54          54          54          
+55          55          55          55          55          55          
+56          56          56          56          56          56          
+57          57          57          57          57          57          
+58          58          58          58          58          58          
+59          59          59          59          59          59          
+60          60          60          60          60          60          
+61          61          61          61          61          61          
+62          62          62          62          62          62          
+63          63          63          63          63          63          
+64          64          64          64          64          64          
+65          65          65          65          65          65          
+66          66          66          66          66          66          
+67          67          67          67          67          67          
+68          68          68          68          68          68          
+69          69          69          69          69          69          
+70          70          70          70          70          70          
+71          71          71          71          71          71          
+72          72          72          72          72          72          
+73          73          73          73          73          73          
+74          74          74          74          74          74          
+75          75          75          75          75          75          
+76          76          76          76          76          76          
+77          77          77          77          77          77          
+78          78          78          78          78          78          
+79          79          79          79          79          79          
+90          90          90          90          90          90          
+91          91          91          91          91          91          
+92          92          92          92          92          92          
+93          93          93          93          93          93          
+94          94          94          94          94          94          
+95          95          95          95          95          95          
+96          96          96          96          96          96          
+97          97          97          97          97          97          
+98          98          98          98          98          98          
+99          99          99          99          99          99          
+100         100         100         100         100         100         
+71 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.T1_IDX1, ACCESS: 71, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; LIST PARTITION
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,4,7),
+  partition p2 values (2,5,8),
+  partition p3 values (3,6),
+  partition p4 values (9),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level, level, level from dual connect by level <= 10;
+10 rows inserted.
+
+$T0> create index t1_idx1 on t1(i1);
+Create success.
+$T0> create index t1_idx2 on t1(i2) local;
+Create success.
+$T0> create index t1_idx3 on t1(i2,i3,i4);
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i3);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i4);
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+9           0                    0                    
+3           0                    0                    
+6           0                    0                    
+2           0                    0                    
+5           0                    0                    
+8           0                    0                    
+1           0                    0                    
+4           0                    0                    
+7           0                    0                    
+10 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+9           0                    0                    
+3           0                    0                    
+6           0                    0                    
+2           0                    0                    
+5           0                    0                    
+8           0                    0                    
+1           0                    0                    
+4           0                    0                    
+7           0                    0                    
+10 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           1           1           
+2           2           2           2           
+3           3           3           3           
+4           4           4           4           
+5           5           5           5           
+6           6           6           6           
+7           7           7           7           
+8           8           8           8           
+9           9           9           9           
+10          10          10          10          
+10 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 10, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> alter table t1 drop partition p4;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+3           0                    0                    
+6           0                    0                    
+2           0                    0                    
+5           0                    0                    
+8           0                    0                    
+1           0                    0                    
+4           0                    0                    
+7           0                    0                    
+9 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+3           0                    0                    
+6           0                    0                    
+2           0                    0                    
+5           0                    0                    
+8           0                    0                    
+1           0                    0                    
+4           0                    0                    
+7           0                    0                    
+9 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           1           1           
+2           2           2           2           
+3           3           3           3           
+4           4           4           4           
+5           5           5           5           
+6           6           6           6           
+7           7           7           7           
+8           8           8           8           
+10          10          10          10          
+9 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 4/4, INDEX: SYS.T1_IDX1, ACCESS: 9, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i5 = b.i5 and a.i6 = b.i6 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31058 : Column not found 
+0004 :   select NVL(I6,-1000) I6, NVL(I5,-1000) I5, GET_OID('T1','P1') OID, CAST(_PROWID as BIGINT) RID from T1 partition (P1)
+                   ^ ^
+]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i1);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX1" b 
+on a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX3" b 
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+
+$T0> alter table t1 drop partition p1;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+3           0                    0                    
+6           0                    0                    
+2           0                    0                    
+5           0                    0                    
+8           0                    0                    
+6 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+3           0                    0                    
+6           0                    0                    
+2           0                    0                    
+5           0                    0                    
+8           0                    0                    
+6 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+2           2           2           2           
+3           3           3           3           
+5           5           5           5           
+6           6           6           6           
+8           8           8           8           
+10          10          10          10          
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.T1_IDX1, ACCESS: 6, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; LIST PARTITION
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  i5 integer,
+  i6 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,4,7),
+  partition p2 values (2,5,8),
+  partition p3 values (3,6),
+  partition p4 values (9),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level, level, level, level, level from dual connect by level <= 10;
+10 rows inserted.
+
+$T0> create index t1_idx1 on t1(i1);
+Create success.
+$T0> create index t1_idx2 on t1(i2) local;
+Create success.
+$T0> create index t1_idx3 on t1(i2,i3,i4);
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i3, i4);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i5, i6);
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     NOT NULL
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+T1_UK                                    BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3, I4
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+9           9           0                    0                    
+3           3           0                    0                    
+6           6           0                    0                    
+2           2           0                    0                    
+5           5           0                    0                    
+8           8           0                    0                    
+1           1           0                    0                    
+4           4           0                    0                    
+7           7           0                    0                    
+10 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I5   $_TEMP.I6   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+9           9           0                    0                    
+3           3           0                    0                    
+6           6           0                    0                    
+2           2           0                    0                    
+5           5           0                    0                    
+8           8           0                    0                    
+1           1           0                    0                    
+4           4           0                    0                    
+7           7           0                    0                    
+10 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       T1.I6       
+-------------------------------------------------------------------------------
+1           1           1           1           1           1           
+2           2           2           2           2           2           
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+6           6           6           6           6           6           
+7           7           7           7           7           7           
+8           8           8           8           8           8           
+9           9           9           9           9           9           
+10          10          10          10          10          10          
+10 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 10, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> alter table t1 drop partition p4;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     NOT NULL
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+T1_UK                                    BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3, I4
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+3           3           0                    0                    
+6           6           0                    0                    
+2           2           0                    0                    
+5           5           0                    0                    
+8           8           0                    0                    
+1           1           0                    0                    
+4           4           0                    0                    
+7           7           0                    0                    
+9 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I5   $_TEMP.I6   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+3           3           0                    0                    
+6           6           0                    0                    
+2           2           0                    0                    
+5           5           0                    0                    
+8           8           0                    0                    
+1           1           0                    0                    
+4           4           0                    0                    
+7           7           0                    0                    
+9 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       T1.I6       
+-------------------------------------------------------------------------------
+1           1           1           1           1           1           
+2           2           2           2           2           2           
+3           3           3           3           3           3           
+4           4           4           4           4           4           
+5           5           5           5           5           5           
+6           6           6           6           6           6           
+7           7           7           7           7           7           
+8           8           8           8           8           8           
+10          10          10          10          10          10          
+9 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 4/4, INDEX: SYS.T1_IDX1, ACCESS: 9, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_PK" b 
+on a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i6,-1000) i6, nvl(i5,-1000) i5, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_UK" b 
+on a.i5 = b.i5 and a.i6 = b.i6 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i1);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX1" b 
+on a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join "$GIT_T1_IDX3" b 
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+
+$T0> alter table t1 drop partition p1;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     NOT NULL
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+T1_UK                                    BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+T1_IDX1                                  BTREE                  I1 ASC
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3, I4
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+3           3           0                    0                    
+6           6           0                    0                    
+2           2           0                    0                    
+5           5           0                    0                    
+8           8           0                    0                    
+6 rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I5                                       INTEGER                     
+I6                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I5 ASC,
+                                                                I6 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I5   $_TEMP.I6   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+3           3           0                    0                    
+6           6           0                    0                    
+2           2           0                    0                    
+5           5           0                    0                    
+8           8           0                    0                    
+6 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       T1.I6       
+-------------------------------------------------------------------------------
+2           2           2           2           2           2           
+3           3           3           3           3           3           
+5           5           5           5           5           5           
+6           6           6           6           6           6           
+8           8           8           8           8           8           
+10          10          10          10          10          10          
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.T1_IDX1, ACCESS: 6, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+$T0> SKIP BEGIN;
+$T0> drop function get_oid;
+$T0> SKIP END;
+

@@ -1,0 +1,229 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> alter system set security_module_name = 'altibase';
+Alter success.
+$T0> alter system set security_ecc_policy_name = 'double';
+Alter success.
+$T0> alter system start security;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; SECURITY COLUMN
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 varchar(5), 
+  i2 varchar(5) encrypt using 'shift',
+  i3 varchar(5) encrypt using 'reverse'
+)
+partition by range(i1)
+(
+  partition p1 values less than ('b'),
+  partition p2 values less than ('e'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ('a', 'abc', 'bcd');
+1 row inserted.
+$T0> insert into t1 values ('d', 'abcd', 'bcde');
+1 row inserted.
+$T0> insert into t1 values ('g', 'abcde', 'bcdef');
+1 row inserted.
+
+$T0> create index idx1 on t1(i2);
+Create success.
+$T0> create index idx2 on t1(i3 desc);
+Create success.
+$T0> create unique index idx3 on t1(i3 desc, i2 asc);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       VARCHAR(5)                  
+I2                                       VARCHAR(5) ENCRYPT             
+I3                                       VARCHAR(5) ENCRYPT             
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+IDX3                                     BTREE    UNIQUE        I3 DESC,
+                                                                I2 ASC
+IDX1                                     BTREE                  I2 ASC
+IDX2                                     BTREE                  I3 DESC
+T1 has no primary key
+$T0> desc "$GIT_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       VARCHAR(5) ENCRYPT             
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_IDX1                                BTREE    UNIQUE        $GIT_RID ASC
+$GIK_IDX1                                BTREE                  I2 ASC
+"$GIT_IDX1" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2  $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+---------------------------------------------------------
+abcde  0                    0                    
+abcd   0                    0                    
+abc    0                    0                    
+3 rows selected.
+$T0> desc "$GIT_IDX2";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       VARCHAR(5) ENCRYPT             
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_IDX2                                BTREE    UNIQUE        $GIT_RID ASC
+$GIK_IDX2                                BTREE                  I3 DESC
+"$GIT_IDX2" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3  $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+---------------------------------------------------------
+bcdef  0                    0                    
+bcde   0                    0                    
+bcd    0                    0                    
+3 rows selected.
+$T0> desc "$GIT_IDX3";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       VARCHAR(5) ENCRYPT             
+I2                                       VARCHAR(5) ENCRYPT             
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_IDX3                                BTREE    UNIQUE        I3 DESC,
+                                                                I2 ASC
+$GIR_IDX3                                BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_IDX3" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3  $_TEMP.I2  $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+---------------------------------------------------------------------
+bcdef  abcde  0                    0                    
+bcde   abcd   0                    0                    
+bcd    abc    0                    0                    
+3 rows selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1;
+T1.I1  T1.I2  T1.I3  
+-------------------------
+a      abc    bcd    
+d      abcd   bcde   
+g      abcde  bcdef  
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 23, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+index(t1, idx1)*/ * from t1;
+T1.I1  T1.I2  T1.I3  
+-------------------------
+a      abc    bcd    
+d      abcd   bcde   
+g      abcde  bcdef  
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 23, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.IDX1, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+index(t1, idx2)*/ * from t1;
+T1.I1  T1.I2  T1.I3  
+-------------------------
+g      abcde  bcdef  
+d      abcd   bcde   
+a      abc    bcd    
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 23, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.IDX2, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+index(t1, idx3)*/ * from t1;
+T1.I1  T1.I2  T1.I3  
+-------------------------
+g      abcde  bcdef  
+d      abcd   bcde   
+a      abc    bcd    
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 23, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, INDEX: SYS.IDX3, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> SKIP END;
+
+$T0> alter system stop security;
+Alter success.
+

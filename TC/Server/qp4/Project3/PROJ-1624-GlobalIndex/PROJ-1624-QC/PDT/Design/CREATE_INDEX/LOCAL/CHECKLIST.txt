@@ -1,0 +1,50 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for CREATE INDEX
+
+#Description: PROJ-1502에서 추가된 구문에 대해서만 테스트한다.
+#             기존 구문과의 호환 테스트는 Legacy 테스트에서 한다.
+
+#CheckList
+    - 파티션드 테이블인지 체크
+
+    - 유니크 인덱스 생성
+        - 파티션 키 개수 = 인덱스 키 개수
+        - 파티션 키 개수 > 인덱스 키 개수
+        - 파티션 키 개수 < 인덱스 키 개수
+        - 유니크 제약 체크
+
+    - 인덱스의 데이터 타입 체크
+        - INTEGER
+        - DATE
+        - VARCHAR
+
+    - 파티션드 인덱스의 TBS 지정 여부 체크
+
+    - 인덱스 파티션 검사
+        - 인덱스 파티션 이름 중복 검사
+        - 테이블 파티션 존재 여부 검사
+        - 테이블 파티션 이름 중복 검사
+        - 테이블 스페이스 검사
+            - TBS 명시한 경우
+                - SYSTEM, USER_TEMP, UNDO에 생성 시, 에러
+                - 존재하는 TBS인지 체크
+                - 디스크 TBS인지 체크
+            - TBS를 명시하지 않은 경우
+                - 테이블 파티션의 TBS를 따르는지 체크
+        - 명시한 인덱스 파티션의 개수 체크
+
+    - 명시한 인덱스 파티션 개수
+        - 0
+            - 인덱스 파티션 이름 체크
+            - TBS 체크
+        - ~ (테이블 파티션 개수 - 1)
+            - 인덱스 파티션 이름 체크
+            - TBS 체크
+        - 테이블 파티션 개수
+
+    - 메타 테이블 체크
+        - SYS_INDICES_
+        - SYS_PART_INDICES_
+        - SYS_INDEX_PARTITIONS_
+        - SYS_PART_KEY_COLUMNS_

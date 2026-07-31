@@ -1,0 +1,174 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop tablespace data1 including contents and datafiles;
+drop tablespace data2 including contents and datafiles;
+
+alter session set explain plan = off;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+}
+
+DEF CREATE_TABLE( @aPartType, @aColType1, @aColType2 )
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+if ( @aPartType == 'range' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by range(i1)
+(
+  partition p1 values less than ('100'),
+  partition p2 values less than ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+}
+elsif ( @aPartType == 'hash' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+
+}
+elsif ( @aPartType == 'list' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by list(i1)
+(
+  partition p1 values ('100'),
+  partition p2 values ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+}
+else
+{
+  print "error";
+}
+
+create index idx1 on t1(i1);
+create index idx2 on t1(i1, i2);
+create index idx3 on t1(i1, i2, i3);
+
+create index idx4 on t1(i2) tablespace data1;
+create index idx5 on t1(i2, i3) tablespace data1;
+
+create index idx6 on t1(i3) tablespace data2;
+create index idx7 on t1(i3, i1) tablespace data2;
+create index idx8 on t1(i3, i2, i1) tablespace data2;
+
+insert into t1 values ( '1', '1', '1' );
+insert into t1 values ( '2', '2', '2' );
+insert into t1 values ( '100', '100', '100' );
+insert into t1 values ( '101', '101', '101' );
+insert into t1 values ( '200', '200', '200' );
+insert into t1 values ( '202', '202', '202' );
+
+}
+
+DEF SELECT_TABLE()
+{
+alter session set explain plan = on;
+
+select /*+index(t1,idx1)*/ * from t1;
+select /*+index(t1,idx2)*/ * from t1;
+select /*+index(t1,idx3)*/ * from t1;
+select /*+index(t1,idx4)*/ * from t1;
+select /*+index(t1,idx5)*/ * from t1;
+select /*+index(t1,idx6)*/ * from t1;
+select /*+index(t1,idx7)*/ * from t1;
+select /*+index(t1,idx8)*/ * from t1;
+
+alter session set explain plan = off;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; REBUILD
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  for $sPartColType in "integer" "varchar(10)"
+  {
+    for $sColType in "integer" "numeric(5,1)" "char(10)" "varchar(10)"
+    {
+      CALL CREATE_TABLE( $sPartType, $sPartColType, $sColType );
+
+      alter index idx1 rebuild;
+      alter index idx2 rebuild;
+      alter index idx3 rebuild;
+      alter index idx4 rebuild;
+      alter index idx5 rebuild;
+      alter index idx6 rebuild;
+      alter index idx7 rebuild;
+      alter index idx8 rebuild;
+ 
+      CALL SELECT_TABLE();
+    }
+  }
+}
+
+##################################
+# SECTOR; STORAGE OPTION
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  alter index idx1 storage ( nextextents 10 );
+  alter index idx2 storage ( minextents 3 maxextents 40 );
+}
+
+##################################
+# SECTOR; ALLOCATE EXTENT OPTION
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  alter index idx1 allocate extent ( size 10K );
+}
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

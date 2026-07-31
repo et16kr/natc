@@ -1,0 +1,626 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 varchar(10),
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 'abc', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 'abc', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 'abc', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 'bcd', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 'bcd', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 9, 9, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 10, 10, 'def', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 11, 11, 'def', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 12, 12, 'def', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 13, 13, 'def', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 14, 14, 'def', 5 );
+1 row inserted.
+$T0> insert into t1 values ( 15, 15, 'ghi', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 16, 16, 'jkl', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 17, 17, 'jkl', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 18, 18, 'lmn', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 19, 19, 'lmn', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 20, null, 'lmn', 3 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i4 desc);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T1 has no primary key
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 clob, 
+  i3 geometry
+)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 values ( 1, 'a', geometry'polygon((0 0, 1 0, 1 1, 0 1))' );
+1 row inserted.
+$T0> insert into t2 values ( 2, 'b', geometry'polygon((1 1, 2 1, 2 2, 1 2))' );
+1 row inserted.
+$T0> insert into t2 values ( 3, 'c', geometry'polygon((2 2, 3 2, 3 3, 2 3))' );
+1 row inserted.
+$T0> insert into t2 values ( 4, 'd', geometry'polygon((3 3, 4 3, 4 4, 3 4))' );
+1 row inserted.
+$T0> insert into t2 values ( 5, 'e', geometry'polygon((4 4, 5 4, 5 5, 4 5))' );
+1 row inserted.
+$T0> insert into t2 values ( 6, 'f', geometry'polygon((5 5, 6 5, 6 6, 5 6))' );
+1 row inserted.
+$T0> insert into t2 values ( 7, 'g', geometry'polygon((6 6, 7 6, 7 7, 6 7))' );
+1 row inserted.
+$T0> insert into t2 values ( 8, 'h', geometry'polygon((7 7, 8 7, 8 8, 7 8))' );
+1 row inserted.
+$T0> insert into t2 values ( 9, 'i', geometry'polygon((8 8, 9 8, 9 9, 8 9))' );
+1 row inserted.
+$T0> insert into t2 values ( 10, 'j', geometry'polygon((9 9, 10 9, 10 10, 9 10))' );
+1 row inserted.
+
+$T0> create index t2_idx3 on t1(i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T2_IDX3                                  BTREE                  I3 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; JOIN PREDICATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select a.* from t1 a, t1 b where a.i2 = b.i2 order by a.i1;
+A.I1        A.I2        A.I3        A.I4        
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+5           5           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+8           8           bcd         1           
+9           9           bcd         2           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 19, DISK_PAGE_COUNT: BLOCKED, ACCESS: 19, COST: BLOCKED )
+  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 A, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 B, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 19, COST: BLOCKED )
+    [ VARIABLE KEY ]
+    OR
+     AND
+      A.I2 = B.I2
+    SCAN ( PARTITION: PD, RID SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select a.* from t1 a left outer join t1 b on a.i2 = b.i2 order by a.i1;
+A.I1        A.I2        A.I3        A.I4        
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+5           5           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+8           8           bcd         1           
+9           9           bcd         2           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+20                      lmn         3           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 20, DISK_PAGE_COUNT: BLOCKED, ACCESS: 20, COST: BLOCKED )
+  LEFT-OUTER-JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 A, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 B, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 20, COST: BLOCKED )
+    [ VARIABLE KEY ]
+    OR
+     AND
+      A.I2 = B.I2
+    SCAN ( PARTITION: PD, RID SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select a.* from t1 a, t1 b where a.i3 = b.i3 order by a.i1;
+A.I1        A.I2        A.I3        A.I4        
+-----------------------------------------------------
+1           1           abc         1           
+1           1           abc         1           
+1           1           abc         1           
+2           2           abc         2           
+2           2           abc         2           
+2           2           abc         2           
+3           3           abc         3           
+3           3           abc         3           
+3           3           abc         3           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+10          10          def         1           
+10          10          def         1           
+10          10          def         1           
+10          10          def         1           
+10          10          def         1           
+11          11          def         2           
+11          11          def         2           
+11          11          def         2           
+11          11          def         2           
+11          11          def         2           
+12          12          def         3           
+12          12          def         3           
+12          12          def         3           
+12          12          def         3           
+12          12          def         3           
+13          13          def         4           
+13          13          def         4           
+13          13          def         4           
+13          13          def         4           
+13          13          def         4           
+14          14          def         5           
+14          14          def         5           
+14          14          def         5           
+14          14          def         5           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+16          16          jkl         1           
+17          17          jkl         2           
+17          17          jkl         2           
+18          18          lmn         1           
+18          18          lmn         1           
+18          18          lmn         1           
+19          19          lmn         2           
+19          19          lmn         2           
+19          19          lmn         2           
+20                      lmn         3           
+20                      lmn         3           
+20                      lmn         3           
+84 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 84, DISK_PAGE_COUNT: BLOCKED, ACCESS: 84, COST: BLOCKED )
+  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 A, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 B, PARTITION: 2/2, INDEX: SYS.T2_IDX3, ACCESS: 84, COST: BLOCKED )
+    [ VARIABLE KEY ]
+    OR
+     AND
+      A.I3 = B.I3
+    SCAN ( PARTITION: PD, RID SCAN, ACCESS: 39, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 45, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select a.* from t1 a left outer join t1 b on a.i3 = b.i3 order by a.i1;
+A.I1        A.I2        A.I3        A.I4        
+-----------------------------------------------------
+1           1           abc         1           
+1           1           abc         1           
+1           1           abc         1           
+2           2           abc         2           
+2           2           abc         2           
+2           2           abc         2           
+3           3           abc         3           
+3           3           abc         3           
+3           3           abc         3           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+4           4           bcd         1           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+5           5           bcd         2           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+6           6           bcd         3           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+7           7           bcd         4           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+8           8           bcd         1           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+9           9           bcd         2           
+10          10          def         1           
+10          10          def         1           
+10          10          def         1           
+10          10          def         1           
+10          10          def         1           
+11          11          def         2           
+11          11          def         2           
+11          11          def         2           
+11          11          def         2           
+11          11          def         2           
+12          12          def         3           
+12          12          def         3           
+12          12          def         3           
+12          12          def         3           
+12          12          def         3           
+13          13          def         4           
+13          13          def         4           
+13          13          def         4           
+13          13          def         4           
+13          13          def         4           
+14          14          def         5           
+14          14          def         5           
+14          14          def         5           
+14          14          def         5           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+16          16          jkl         1           
+17          17          jkl         2           
+17          17          jkl         2           
+18          18          lmn         1           
+18          18          lmn         1           
+18          18          lmn         1           
+19          19          lmn         2           
+19          19          lmn         2           
+19          19          lmn         2           
+20                      lmn         3           
+20                      lmn         3           
+20                      lmn         3           
+84 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 84, DISK_PAGE_COUNT: BLOCKED, ACCESS: 84, COST: BLOCKED )
+  LEFT-OUTER-JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 A, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 B, PARTITION: 2/2, INDEX: SYS.T2_IDX3, ACCESS: 84, COST: BLOCKED )
+    [ VARIABLE KEY ]
+    OR
+     AND
+      A.I3 = B.I3
+    SCAN ( PARTITION: PD, RID SCAN, ACCESS: 39, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 45, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select a.* from t1 a, t1 b where a.i3 = b.i3 and a.i4 = b.i4 order by a.i1;
+A.I1        A.I2        A.I3        A.I4        
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+4           4           bcd         1           
+5           5           bcd         2           
+5           5           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+8           8           bcd         1           
+8           8           bcd         1           
+9           9           bcd         2           
+9           9           bcd         2           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+20                      lmn         3           
+24 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 24, DISK_PAGE_COUNT: BLOCKED, ACCESS: 24, COST: BLOCKED )
+  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 A, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 B, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 24, COST: BLOCKED )
+    [ VARIABLE KEY ]
+    OR
+     AND
+      A.I3 = B.I3
+      A.I4 = B.I4
+    SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 13, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select a.* from t1 a left outer join t1 b on a.i3 = b.i3 and a.i4 = b.i4 order by a.i1;
+A.I1        A.I2        A.I3        A.I4        
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+4           4           bcd         1           
+5           5           bcd         2           
+5           5           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+8           8           bcd         1           
+8           8           bcd         1           
+9           9           bcd         2           
+9           9           bcd         2           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+20                      lmn         3           
+24 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 24, DISK_PAGE_COUNT: BLOCKED, ACCESS: 24, COST: BLOCKED )
+  LEFT-OUTER-JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 A, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T1 B, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 24, COST: BLOCKED )
+    [ VARIABLE KEY ]
+    OR
+     AND
+      A.I3 = B.I3
+      A.I4 = B.I4
+    SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 13, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; JOIN PREDICATE
+$T0> ##################################
+
+$T0> select a.i1,astext(a.i3,64) from t2 a, t2 b where equals( a.i3, b.i3 ) order by a.i1;
+I1          ASTEXT(A.I3,64)                                                   
+---------------------------------------------------------------------------------
+1           POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))                                
+2           POLYGON((1 1, 2 1, 2 2, 1 2, 1 1))                                
+3           POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))                                
+4           POLYGON((3 3, 4 3, 4 4, 3 4, 3 3))                                
+5           POLYGON((4 4, 5 4, 5 5, 4 5, 4 4))                                
+6           POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))                                
+7           POLYGON((6 6, 7 6, 7 7, 6 7, 6 6))                                
+8           POLYGON((7 7, 8 7, 8 8, 7 8, 7 7))                                
+9           POLYGON((8 8, 9 8, 9 9, 8 9, 8 8))                                
+10          POLYGON((9 9, 10 9, 10 10, 9 10, 9 9))                            
+10 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 70, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 10, COST: BLOCKED )
+  JOIN ( METHOD: NL, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T2 A, PARTITION: 2/2, FULL SCAN, ACCESS: 10, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T2 B, PARTITION: 2/2, FULL SCAN, ACCESS: 10, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 60, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER ]
+     ST_EQUALS(A.I3, B.I3)
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER ]
+     ST_EQUALS(A.I3, B.I3)
+------------------------------------------------------------
+$T0> select a.i1,astext(a.i3,64) from t2 a left outer join t2 b on equals( a.i3, b.i3 ) order by a.i1;
+I1          ASTEXT(A.I3,64)                                                   
+---------------------------------------------------------------------------------
+1           POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))                                
+2           POLYGON((1 1, 2 1, 2 2, 1 2, 1 1))                                
+3           POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))                                
+4           POLYGON((3 3, 4 3, 4 4, 3 4, 3 3))                                
+5           POLYGON((4 4, 5 4, 5 5, 4 5, 4 4))                                
+6           POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))                                
+7           POLYGON((6 6, 7 6, 7 7, 6 7, 6 6))                                
+8           POLYGON((7 7, 8 7, 8 8, 7 8, 7 7))                                
+9           POLYGON((8 8, 9 8, 9 9, 8 9, 8 8))                                
+10          POLYGON((9 9, 10 9, 10 10, 9 10, 9 9))                            
+10 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 70, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 10, COST: BLOCKED )
+  LEFT-OUTER-JOIN ( METHOD: NL, COST: BLOCKED )
+   [ FILTER ]
+   ST_EQUALS(A.I3, B.I3)
+   PARTITION-COORDINATOR ( TABLE: SYS.T2 A, PARTITION: 2/2, FULL SCAN, ACCESS: 10, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T2 B, PARTITION: 2/2, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 60, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

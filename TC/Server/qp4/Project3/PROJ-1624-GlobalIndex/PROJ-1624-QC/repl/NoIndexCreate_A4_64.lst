@@ -1,0 +1,317 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ##########################################################################
+$T0> # PROJ-1624 FOR REPLICATION
+$T0> ##########################################################################
+
+$T0> DECLARE SERVER PROJ_1624_SERVER1 DB1;
+$T0> DECLARE SERVER PROJ_1624_SERVER2 DB2;
+$T0> DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+$T0> DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+$T0> THREAD T1 C11
+
+$T0> THREAD T2 C21
+
+$T0> JOIN;
+
+$T0> ########################################################
+$T0> SECTOR 0; ACTIVE-ACTIVE REPLICATION START
+$T0> ########################################################
+$T0> THREAD T1 C11
+$T0> JOIN;
+$T0> THREAD T2 C21
+
+$T0> JOIN;
+
+$T0> ########################################################
+$T0> SECTOR 1; DML DATA
+$T0> ########################################################
+$T0> THREAD T1 C11
+
+$T0> JOIN;
+$T0> THREAD T2 C21
+
+$T0> JOIN;
+
+$T0> ########################################################
+$T0> SECTOR 2; FINALIZATION
+$T0> ########################################################
+$T0> THREAD T1 C11
+
+$T0> THREAD T2 C21
+
+$T0> JOIN;
+$T1> ####################################
+$T1> # ON ACTIVE SYSTEM 1
+$T1> ####################################
+
+
+
+$T1> SKIP BEGIN;
+$T1> drop table t1;
+$T1> alter session set explain plan = off;
+$T1> alter session set trclog_detail_predicate = 0;
+$T1> alter system set trclog_explain_graph = 0;
+$T1> SKIP END;
+
+$T1> create table t1
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+Create success.
+
+$T1> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T1> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T1> CREATE REPLICATION REP1 WITH '${HOST_IP@DB2}',
+									  ${ALTIBASE_REPLICATION_PORT_NO@DB2}
+		FROM SYS.T1 TO SYS.T1;
+Create success.
+$T1> ####################################
+$T1> # ON ACTIVE SYSTEM 1
+$T1> ####################################
+
+$T1> ALTER REPLICATION REP1 START;
+Alter success.
+
+$T1> ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 1;
+Alter success.
+$T1> ALTER SESSION SET REPLICATION = DEFAULT;
+Alter success.
+
+$T1> alter session set explain plan = on;
+Alter success.
+$T1> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T1> CREATE INDEX IDX1 ON T1(I1);
+Create success.
+
+$T1> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 26 )
+ CONNECT BY ( ACCESS: 100, SELF_ID: 5, REF_ID: 10 )
+  [ LEVEL FILTER ]
+  LEVEL <= 100
+  MATERIALIZATION ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, SELF_ID: 10 )
+   VIEW ( ACCESS: 1, SELF_ID: 9 )
+    PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 3 )
+     SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, SELF_ID: 4 )
+------------------------------------------------------------
+
+$T1> insert into t1 values ( 0, 0, 0, 1 );
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T1> insert into t1 values ( 0, 1, null, null );
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T1> insert into t1 values ( 101, 0, null, null );
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+
+$T1> select * from t1 where i1=1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/5, INDEX: IDX1, ACCESS: 1, SELF_ID: 2 )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  [ FIXED KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+
+$T1> DESC T1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+IDX1                                     BTREE                  I1 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T1> desc "$GIT_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_IDX1                                BTREE    UNIQUE        $GIT_RID ASC
+$GIK_IDX1                                BTREE                  I1 ASC
+"$GIT_IDX1" has no primary key
+
+$T1> select count(*) from "$_TEMP";
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8 )
+ COUNT ( TABLE: $_TEMP, FULL SCAN, ACCESS: 1, SELF_ID: 1, REF_ID: 1 )
+------------------------------------------------------------
+
+$T1> ALTER REPLICATION REP1 FLUSH WAIT 60;
+Alter success.
+$T1> ALTER REPLICATION REP1 STOP;
+Alter success.
+$T1> DROP REPLICATION REP1;
+Drop success.
+$T1> DROP TABLE t1;
+Drop success.
+
+
+$T2> SKIP BEGIN;
+$T2> drop table t1;
+$T2> alter session set explain plan = off;
+$T2> alter session set trclog_detail_predicate = 0;
+$T2> alter system set trclog_explain_graph = 0;
+$T2> SKIP END;
+
+$T2> create table t1
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+Create success.
+
+$T2> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T2> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T2> CREATE REPLICATION REP1 WITH '${HOST_IP@DB1}',
+									  ${ALTIBASE_REPLICATION_PORT_NO@DB1}
+		FROM SYS.T1 TO SYS.T1;
+Create success.
+$T2> ####################################
+$T2> # ON ACTIVE SYSTEM 2
+$T2> ####################################
+
+$T2> ALTER REPLICATION REP1 START;
+Alter success.
+$T2> DESC T1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T2> desc "$GIT_IDX1";
+[ERR-91014 : The table ($GIT_IDX1) does not exist.]
+
+$T2> select count(*) from "$_TEMP";
+[ERR-31031 : Table or view was not found : 
+0001 : select COUNT(*) from "$_TEMP"
+                            ^     ^
+]
+
+$T2> alter session set explain plan = on;
+Alter success.
+$T2> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T2> select * from t1 where i1=1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/5, ACCESS: 1, SELF_ID: 2 )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+   [ FILTER ]
+   I1 = 1
+------------------------------------------------------------
+
+
+$T2> ALTER REPLICATION REP1 STOP;
+Alter success.
+$T2> DROP REPLICATION REP1;
+Drop success.
+$T2> DROP TABLE t1;
+Drop success.
+

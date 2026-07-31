@@ -1,0 +1,126 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ##########################################################################
+$T0> # PROJ-1624 Plan Compare
+$T0> ##########################################################################
+
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+
+$T0> create table t1
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index t1_idx1 on t1(i1);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3);
+Create success.
+$T0> create index t1_idx3 on t1(i2, i3, i4);
+Create success.
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> insert into t1 values ( 0, 0, 0, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 0, 1, null, null );
+1 row inserted.
+$T0> insert into t1 values ( 101, 0, null, null );
+1 row inserted.
+
+$T0> ########################################################
+$T0> #SECTOR; Compare Plan
+$T0> ########################################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+0           1                                   
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, SELF_ID: 9, REF_ID: 2 )
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 5/5, INDEX: T1_IDX2, ACCESS: 4, SELF_ID: 2 )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+------------------------------------------------------------
+
+$T0> select /*+ FULL SCAN(t1) */ * from t1 where i2 = 1 order by i1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+0           1                                   
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16 )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, SELF_ID: 8, REF_ID: 2 )
+  PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 5/5, ACCESS: 4, SELF_ID: 2 )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+    [ FILTER ]
+    I2 = 1
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+    [ FILTER ]
+    I2 = 1
+------------------------------------------------------------
+
+$T0> ########################################################
+$T0> #SECTOR; FINALIZATION
+$T0> ########################################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+

@@ -1,0 +1,500 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop function get_pid;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> SKIP END;
+
+$T0> create function get_pid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; CREATE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i4)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i1);
+Alter success.
+$T0> create index t1_idx1 on t1( i1+i2 );
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I1 ASC
+T1_IDX1                                  BTREE                  I1+I2 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I1
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i1 = b.i1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1" 
+) b 
+on a.h1 = b.h1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> insert into t1 select level, level/3, mod(level,3), level from dual connect by level <= 100;
+100 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T1 )
+ PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 100, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 100
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i1 = b.i1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1" 
+) b 
+on a.h1 = b.h1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> select * from t1 where i1 + i2 <= 10;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           2           
+3           1           0           3           
+4           1           1           4           
+5           1           2           5           
+6           2           0           6           
+7           2           1           7           
+8           2           2           8           
+8 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> update t1 set i2 = i2+1;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i1 = b.i1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1" 
+) b 
+on a.h1 = b.h1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i2 = i2+1, i4 = i4+10;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i1 = b.i1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1" 
+) b 
+on a.h1 = b.h1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> delete from t1 where i3 = 2;
+33 rows deleted.
+------------------------------------------------------------
+DELETE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 33, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 31, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i1 = b.i1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1" 
+) b 
+on a.h1 = b.h1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop function get_pid;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> SKIP END;
+

@@ -1,0 +1,225 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- TRUNCATE PARTITIOIN
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE PDT_HASH;
+--+SKIP END; 
+
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+
+-- should be 5
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+5                    
+1 row selected.
+
+$P0> ALTER TABLE PDT_HASH
+     TRUNCATE PARTITION P1;
+Alter success.
+
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+4                    
+1 row selected.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P1 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+----------------------------
+-- 2.1 파티션 이름 검사
+----------------------------
+-- should be fail
+$P0> ALTER TABLE PDT_HASH
+     TRUNCATE PARTITION P5;
+[ERR-3125B : The table partition does not exist. 
+0002 :      TRUNCATE PARTITION P5
+                              ^ ^
+]
+
+----------------------------
+-- 2.2 참조키 검사 
+----------------------------
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER PRIMARY KEY,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+
+$P0> CREATE TABLE T1
+     (
+         F1  INTEGER CONSTRAINT FK_CONST REFERENCES PDT_HASH( F1 ),
+         F2  INTEGER
+     );
+Create success.
+
+-- should be fail
+$P0> ALTER TABLE PDT_HASH
+     TRUNCATE PARTITION P1;
+[ERR-3102A : A foreign key constraint depends on the table or column.]
+
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( NULL, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( NULL, 0 );
+1 row inserted.
+
+$P0> SELECT F1 FROM PDT_HASH;
+F1          
+--------------
+2           
+1           
+3           
+4           
+            
+            
+0           
+7 rows selected.
+
+$P0> ALTER TABLE PDT_HASH
+     TRUNCATE PARTITION P4;
+Alter success.
+
+$P0> SELECT F1 FROM PDT_HASH;
+F1          
+--------------
+1           
+3           
+4           
+            
+            
+0           
+6 rows selected.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+0           
+1 row selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+1           
+3           
+4           
+            
+            
+5 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+No rows selected.
+
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+

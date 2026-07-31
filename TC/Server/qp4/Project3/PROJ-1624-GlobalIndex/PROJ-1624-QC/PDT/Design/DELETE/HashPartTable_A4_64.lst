@@ -1,0 +1,553 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# DELETE TEST
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+
+
+--###################################################################
+--+SECTOR 2; 각 데이터 타입별 DELETE
+--###################################################################
+
+--##############################
+--+SECTOR 3; INTEGER, BIGINT, SMALLINT
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER UNIQUE, I2 BIGINT , I3 SMALLINT )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 100, 100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 110, 110);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 120, 120);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 130, 130);
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+-- should be {}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       T1.I2                T1.I3       
+-------------------------------------------------
+No rows selected.
+
+
+--##############################
+--+SECTOR 4; BIT(10), BIT(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIT(10), I2 BIT(1000) )
+     PARTITION BY HASH (I1, I2)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, BIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'100', BIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'110', BIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'111', BIT'100');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+-- should be {}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+
+--##############################
+--+SECTOR 5; BLOB, CLOB
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1) WHERE I1 < 100;
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2) WHERE I1 < 200;
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3) WHERE I1 < 300;
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+-- should be 3
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 6; BYTE(1000), NIBBLE(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BYTE(1000), I3 NIBBLE(254) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 > 0;
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 7; CHAR(10), CHAR(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 CHAR(10), I2 CHAR(1000) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('100', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('200', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('300', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 > '000';
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 8; DATE
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 > TO_DATE('2006-12-25', 'YYYY-MM-DD');
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 9; DOUBLE, FLOAT, REAL
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DOUBLE, I2 FLOAT, I3 REAL )
+     PARTITION BY HASH (I1, I2, I3)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 100.5, 100.5);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100.5, 100.5, 100.5);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200.5, 100.5, 100.5);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300.5, 100.5, 100.5);
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 = I1;
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 10; NUMERIC
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC(20, 5) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100.505);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200.505);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300.505);
+1 row inserted.
+
+-- should be {100.505, 200.505, 300.505, NULL}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+100.505     
+200.505     
+300.505     
+            
+4 rows selected.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 11; VARBIT(10), VARBIT(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARBIT(10), I2 VARBIT(1000) )
+     PARTITION BY HASH (I1, I2)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, VARBIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (VARBIT'100', VARBIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (VARBIT'110', VARBIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (VARBIT'111', VARBIT'100');
+1 row inserted.
+
+-- should be {'100', '110', '111', NULL}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+100         
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+110         
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+111         
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+            
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+4 rows selected.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+No rows deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 12; VARCHAR(10), VARCHAR(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10), I2 VARCHAR(1000) )
+     PARTITION BY HASH (I1, I2)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, '100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('100', '100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('200', '100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('300', '100');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 13; DATATYPE MIX
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 FLOAT, I3 VARCHAR(1000) )
+     PARTITION BY HASH (I1, I2, I3)
+     ( PARTITION P1 TABLESPACE PDT_TBS2,
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL,1.5, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 2.5, 'DEF');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 3.5, 'GHI');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 4.5, 'JKL');
+1 row inserted.
+
+$P0> ALTER TABLE T1 ENABLE ROW MOVEMENT;
+Alter success.
+$P0> UPDATE T1 SET I1 = 999;
+4 rows updated.
+
+$P0> DELETE FROM T1;
+4 rows deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--###################################################################
+--+SECTOR 14; LOB 컬럼에 INSERT
+--###################################################################
+
+--##############################
+--+SECTOR 15; BLOB, CLOB
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 TABLESPACE PDT_TBS2
+                             LOB (I2, I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+       PARTITION P2 TABLESPACE PDT_TBS3,
+       PARTITION P3 TABLESPACE PDT_TBS4
+                             LOB (I3) STORE AS ( TABLESPACE PDT_TBS2 ),
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--##################################################################
+--+SECTOR 16; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+$P0> DROP TABLE T3 CASCADE;
+$P0> DROP TABLE T4 CASCADE;
+--+SKIP END; 
+

@@ -1,0 +1,100 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; RESERVED INDEX NAME
+$T0> ##################################
+
+$T0> create table t1(i1 integer, i2 integer, i3 integer);
+Create success.
+
+$T0> create index $git_idx1 on t1(i1);
+[ERR-31001 : SQL syntax error 
+
+line 1: parse error
+create index $git_idx1 on t1(i1)
+             ^
+
+]
+$T0> create index $gik_idx1 on t1(i2);
+[ERR-31001 : SQL syntax error 
+
+line 1: parse error
+create index $gik_idx1 on t1(i2)
+             ^
+
+]
+$T0> create index $gir_idx1 on t1(i3);
+[ERR-31001 : SQL syntax error 
+
+line 1: parse error
+create index $gir_idx1 on t1(i3)
+             ^
+
+]
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_MEM_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER         FIXED       
+I2                                       INTEGER         FIXED       
+I3                                       INTEGER         FIXED       
+T1 has no index
+T1 has no primary key
+
+$T0> create table t2(i1 integer, i2 integer, i3 integer);
+Create success.
+
+$T0> create index "$GIT_IDX1" on t2(i1);
+Create success.
+$T0> create index "$GIK_IDX1" on t2(i2);
+Create success.
+$T0> create index "$GIR_IDX1" on t2(i3);
+Create success.
+
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_MEM_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER         FIXED       
+I2                                       INTEGER         FIXED       
+I3                                       INTEGER         FIXED       
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_IDX1                                BTREE                  I2 ASC
+$GIR_IDX1                                BTREE                  I3 ASC
+$GIT_IDX1                                BTREE                  I1 ASC
+T2 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> SKIP END;
+

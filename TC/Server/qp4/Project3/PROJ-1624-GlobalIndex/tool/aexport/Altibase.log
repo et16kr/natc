@@ -1,0 +1,115 @@
+
+
+
+##############################
+#   CALL stdDestroydb()      #
+##############################
+PROCESS NAME : P68236/data/et16/work/altidev4/altibase_home
+
+iSQL> spool live-altibase.txt;
+[ERR-50032 : Client unable to establish connection. (Failed to invoke the connect() system function, errno=111)]
+iSQL> startup process
+Connecting to the DB server.... Connected.
+
+
+TRANSITION TO PHASE : PROCESS
+Command executed successfully.
+
+$$EOF$$
+iSQL> drop database mydb;
+Checking Log Anchor files
+[Ok] /data/et16/work/altidev4/altibase_home/logs/loganchor0 Exist. 
+
+[Ok] /data/et16/work/altidev4/altibase_home/logs/loganchor1 Exist. 
+
+[Ok] /data/et16/work/altidev4/altibase_home/logs/loganchor2 Exist. 
+
+Removing DB files
+Removing Log files
+Removing Log Anchor files
+Drop success.
+
+$$EOF$$
+iSQL> shutdown abort;
+
+$$EOF$$
+iSQL> quit
+
+
+
+##############################
+#   CALL stdCreatedb()       #
+##############################
+PROCESS NAME : P79811/data/et16/work/altidev4/altibase_home
+
+iSQL> startup process
+Connecting to the DB server.... Connected.
+
+
+TRANSITION TO PHASE : PROCESS
+Command executed successfully.
+
+$$EOF$$
+iSQL> create database mydb INITSIZE=4M noarchivelog character set KO16KSC5601 national character set UTF16;
+
+DB Info (Page Size     = 32768)
+        (Page Count    = 129)
+        (Total DB Size = 4227072)
+        (DB File Size  = 1073741824)
+
+	Creating MMDB FILES     [SUCCESS]
+
+	Creating Catalog Tables [SUCCESS]
+
+	Creating DRDB FILES     [SUCCESS]
+
+  [SM] Rebuilding Indices [Total Count:0]  [SUCCESS]
+
+DB Writing Completed. All Done.
+
+Create success.
+
+$$EOF$$
+iSQL> shutdown abort
+
+$$EOF$$
+iSQL> quit
+
+
+
+##############################
+#   CALL stdServerStart()    #
+##############################
+PROCESS NAME : P79765/data/et16/work/altidev4/altibase_home
+
+iSQL> startup
+Connecting to the DB server.... Connected.
+
+
+TRANSITION TO PHASE : PROCESS
+
+
+TRANSITION TO PHASE : CONTROL
+
+
+TRANSITION TO PHASE : META
+  [SM] Recovery Phase - 1 : Preparing Database
+                          : Dynamic Memory Version => Parallel Loading
+  [SM] Recovery Phase - 2 : Loading Database 
+  [SM] Recovery Phase - 3 : Skipping Recovery & Starting Threads...
+                            Refining Disk Table 
+  [SM] Refine Memory Table : .................................................................................................................................... [SUCCESS]
+  [SM] Rebuilding Indices [Total Count:134] ...................................................................................................................................... [SUCCESS]
+
+
+TRANSITION TO PHASE : SERVICE
+  [CM] Listener started : TCP on port 30104 [IPV4]
+  [CM] Listener started : UNIX
+  [CM] Listener started : IPC
+  [RP] Initialization : [PASS]
+
+--- STARTUP Process SUCCESS ---
+Command executed successfully.
+
+$$EOF$$
+iSQL> quit

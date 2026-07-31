@@ -1,0 +1,132 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- RENAME PARTITIOIN
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT_HASH;
+--+SKIP END; 
+
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE INDEX IDX ON PDT_HASH(F1);
+Create success.
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+$P0> ALTER TABLE PDT_HASH
+     RENAME PARTITION P1 TO P1_1;
+Alter success.
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+----------------------------
+-- 2.1 파티션 이름 중복 검사
+----------------------------
+-- should be fail
+$P0> ALTER TABLE PDT_HASH
+     RENAME PARTITION P1_1 TO P1_1;
+[ERR-31270 : The partition name is already used by the partitioned table 
+0002 :      RENAME PARTITION P1_1 TO P1_1
+                                    ^   ^
+]
+
+$P0> ALTER TABLE PDT_HASH
+     RENAME PARTITION P1_1 TO P3;
+[ERR-31270 : The partition name is already used by the partitioned table 
+0002 :      RENAME PARTITION P1_1 TO P3
+                                    ^ ^
+]
+
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+
+-- should be 5
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+5                    
+1 row selected.
+
+$P0> ALTER TABLE PDT_HASH
+     RENAME PARTITION P1 TO P1_1;
+Alter success.
+
+-- should be 5
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+5                    
+1 row selected.
+
+-- should be success
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P1_1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- should be fail
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P1 );
+[ERR-3125B : The table partition does not exist. ]
+
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+

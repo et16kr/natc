@@ -1,0 +1,10 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for CREATE INDEX
+
+#Description: PROJ-1502에서 추가된 구문에 대해서만 테스트한다.
+#             기존 구문과의 호환 테스트는 Legacy 테스트에서 한다.
+
+#CheckList
+    - 로컬 인덱스
+    - 로컬 유니크 인덱스

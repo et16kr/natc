@@ -1,0 +1,61 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# CREATE INDEX BUG
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1
+     (
+         I1 INTEGER PRIMARY KEY, 
+         I2 INTEGER, 
+         I3 VARCHAR(10), 
+         I4 INTEGER 
+     ) 
+     PARTITION BY RANGE( I1 ) 
+     ( 
+         PARTITION P1 VALUES DEFAULT 
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> CREATE INDEX T1_IDX1 ON T1(I2 ASC);
+Create success.
+
+--#########################################
+--+SECTOR 2; DO JOB
+--#########################################
+
+$P0> INSERT INTO T1 VALUES(1 , 1 , 'a', 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(2 , 2 , 'b', 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(3 , 4 , 'c', 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(4 , 5 , 'd', 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(5 , 9 , 'e', 5);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES(6 , 1 , 'f', 6);
+1 row inserted.
+
+--###################################################################
+--+SECTOR 3; FINALIZATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+

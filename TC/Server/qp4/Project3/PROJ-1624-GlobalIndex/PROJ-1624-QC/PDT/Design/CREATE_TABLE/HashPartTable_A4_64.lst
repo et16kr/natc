@@ -1,0 +1,1161 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# CREATE TABLE TEST
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP USER YNKANG CASCADE;
+--+SKIP END; 
+$P0> CREATE USER YNKANG IDENTIFIED BY YNKANG DEFAULT TABLESPACE PDT_TBS3;
+Create success.
+$P0> GRANT ALL PRIVILEGES TO YNKANG;
+Grant success.
+
+$P0> ALTER SESSION SET DEFAULT_DATE_FORMAT='DD-MON-RRRR';
+Alter success.
+
+
+--###################################################################
+--+SECTOR 2; 파싱 검사
+--###################################################################
+
+--##############################
+--+SECTOR 3; 기본 파티션 개수 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31267 : Hash partitioned table cannot have default partition]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2 VALUES DEFAULT,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+[ERR-31267 : Hash partitioned table cannot have default partition]
+
+
+--##############################
+--+SECTOR 4; MAXROWS 사용 유무 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) MAXROWS 1000 TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+0007 :      ) MAXROWS 1000 TABLESPACE PDT_TBS
+             ^      ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS MAXROWS 1000;
+[ERR-31001 : SQL syntax error 
+
+line 7: parse error
+     ) TABLESPACE PDT_TBS MAXROWS 1000
+                          ^     ^
+
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 MAXROWS 100,
+       PARTITION P2 MAXROWS 100,
+       PARTITION P3 MAXROWS 100,
+       PARTITION P4 MAXROWS 100
+     ) TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+
+line 3: parse error
+     ( PARTITION P1 MAXROWS 100,
+                    ^     ^
+
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1 MAXROWS 100,
+       PARTITION P2 MAXROWS 100,
+       PARTITION P3 MAXROWS 100,
+       PARTITION P4 MAXROWS 100
+     ) MAXROWS 1000 TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+
+line 3: parse error
+     ( PARTITION P1 MAXROWS 100,
+                    ^     ^
+
+]
+
+
+
+--##################################################################
+--+SECTOR 5; 파티션 키 컬럼에 대한 검사
+--##################################################################
+--##############################
+--+SECTOR 6; 파티션 키 컬럼이 테이블에 존재하는 컬럼인지 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+--should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH (I4)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+[ERR-31261 : Invalid partition key column name 
+0002 :      PARTITION BY HASH (I4)
+                              ^ ^
+]
+
+--##############################
+--+SECTOR 7; 파티션 키 컬럼의 데이터 타입이 대소 비교 가능한 타입인지 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIGINT, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIT(10), I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 BLOB, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+[ERR-31260 : Invalid partition key column type 
+0001 : CREATE TABLE T1 ( I1 BLOB, I2 INTEGER )
+                        ^ ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BYTE, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 CLOB, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+[ERR-31260 : Invalid partition key column type 
+0001 : CREATE TABLE T1 ( I1 CLOB, I2 INTEGER )
+                        ^ ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DOUBLE, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 FLOAT, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NIBBLE, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMBER, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 REAL, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 SMALLINT, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARBIT, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+--##############################
+--+SECTOR 8; 파티션 키 컬럼 개수 체크
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail 
+$P0> CREATE TABLE T1 ( 
+         I1     INTEGER, 
+         I2     INTEGER
+     )
+     PARTITION BY HASH (I1, I2)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+
+
+--##################################################################
+--+SECTOR 9; 각 파티션에 대한 검사
+--##################################################################
+--##############################
+--+SECTOR 10; 파티션 이름 중복 검사
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P4,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+[ERR-3125D : Duplicate partition name 
+0006 :        PARTITION P4
+                       ^ ^
+]
+
+
+
+--##############################
+--+SECTOR 11; 파티션 키 조건 값 검사(상수)
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+-- integer: ~ 2147483647
+$P0> CREATE TABLE T1 ( I1 BIGINT )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2147483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2947483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3147483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3947483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4147483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4947483648);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+5                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIT(10) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'0000000000');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101011');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101110');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101111');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010111010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010111011');
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BYTE(10) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('0000000000');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101011');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101110');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101111');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111011');
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+5                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY HASH ( I1 )
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-01-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-01', 'YYYY-MM-DD'));
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DOUBLE )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 FLOAT )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NIBBLE(10) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('0000000000');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101011');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101110');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101111');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111011');
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC)
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 REAL )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 SMALLINT)
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10) )
+     PARTITION BY HASH (I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('0');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('AAAAA');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('ABAAA');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('BBBBB');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('BCBBB');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('CCCCC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('CDCCC');
+1 row inserted.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+
+--##################################################################
+--+SECTOR 12; DISTRIBUTION
+--##################################################################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER,
+         I2   INTEGER
+     )
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE OR REPLACE PROCEDURE PROC_INSERT( FROM_IDX IN INTEGER,
+                                              TO_IDX   IN INTEGER )
+     AS
+     BEGIN
+         FOR I IN FROM_IDX .. TO_IDX LOOP
+             INSERT INTO T1 VALUES ( I, I );
+         END LOOP;
+     END;
+     /
+Create success.
+
+$P0> EXECUTE PROC_INSERT( 1, 10000 );
+Execute success.
+
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P1 );
+COUNT                
+-----------------------
+2499                 
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P2 );
+COUNT                
+-----------------------
+2504                 
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P3 );
+COUNT                
+-----------------------
+2497                 
+1 row selected.
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P4 );
+COUNT                
+-----------------------
+2500                 
+1 row selected.
+
+
+
+--##################################################################
+--+SECTOR 13; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP PROCEDURE PROC_INSERT;
+$P0> DROP USER YNKANG CASCADE;
+--+SKIP END; 
+

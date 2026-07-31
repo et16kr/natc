@@ -1,0 +1,641 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop user user1 cascade;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+Create success.
+$T0> create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+Create success.
+
+$T0> set linesize 200;
+
+$T0> create user user1 identified by user1;
+Create success.
+
+$T0> grant all privileges to user1;
+Grant success.
+
+$T0> ##################################
+$T0> # SECTOR; CREATE INDEX
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer constraint t1_nn not null,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index idx1 on t1(i1) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index idx2 on t1(i1, i2) tablespace data1;
+Create success.
+$T0> create index idx3 on t1(i1 desc, i2 desc, i3 asc) tablespace data1;
+Create success.
+
+$T0> create index idx4 on t1(i2 desc) tablespace data2;
+Create success.
+$T0> create index idx5 on t1(i2, i3) tablespace data2;
+Create success.
+
+$T0> connect user1/user1;
+Connect success.
+
+$T0> create index idx6 on sys.t1(i3);
+Create success.
+$T0> create index idx7 on sys.t1(i3 desc, i1 asc);
+Create success.
+$T0> create index idx8 on sys.t1(i3, i2 desc, i1);
+Create success.
+
+$T0> connect sys/manager;
+Connect success.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        TABLE_TYPE  HIDDEN  TBS_NAME                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SYS                                                                                                                               
+$GIT_IDX1                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+SYS                                                                                                                               
+$GIT_IDX2                                                                                                                         G  Y  DATA1                                     
+SYS                                                                                                                               
+$GIT_IDX3                                                                                                                         G  Y  DATA1                                     
+SYS                                                                                                                               
+$GIT_IDX4                                                                                                                         G  Y  DATA2                                     
+SYS                                                                                                                               
+$GIT_IDX5                                                                                                                         G  Y  DATA2                                     
+USER1                                                                                                                             
+$GIT_IDX6                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+USER1                                                                                                                             
+$GIT_IDX7                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+USER1                                                                                                                             
+$GIT_IDX8                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+8 rows selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                                                                                                        COLUMN_ORDER 
+--------------------------------------------------------------------------------------------------------------------------------------------------
+COLUMN_NAME                                                                                                                       TYPE_NAME                                 IS_NULLABLE  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+$GIT_IDX1                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX1                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX1                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX2                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX2                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX2                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX2                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX3                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX3                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX3                                                                                                                         2           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX3                                                                                                                         3           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX3                                                                                                                         4           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX4                                                                                                                         0           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX4                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX4                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX5                                                                                                                         0           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX5                                                                                                                         1           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX5                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX5                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX6                                                                                                                         0           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX6                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX6                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX7                                                                                                                         0           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX7                                                                                                                         1           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX7                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX7                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX8                                                                                                                         0           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX8                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX8                                                                                                                         2           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX8                                                                                                                         3           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX8                                                                                                                         4           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+31 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        INDEX_TYPE  IS_UNIQUE  TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SYS                                                                                                                               
+$GIK_IDX1                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIR_IDX1                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIK_IDX2                                                                                                                         1           F  DATA1                                     F  
+SYS                                                                                                                               
+$GIR_IDX2                                                                                                                         1           T  DATA1                                     F  
+SYS                                                                                                                               
+$GIK_IDX3                                                                                                                         1           F  DATA1                                     F  
+SYS                                                                                                                               
+$GIR_IDX3                                                                                                                         1           T  DATA1                                     F  
+SYS                                                                                                                               
+$GIK_IDX4                                                                                                                         1           F  DATA2                                     F  
+SYS                                                                                                                               
+$GIR_IDX4                                                                                                                         1           T  DATA2                                     F  
+SYS                                                                                                                               
+$GIK_IDX5                                                                                                                         1           F  DATA2                                     F  
+SYS                                                                                                                               
+$GIR_IDX5                                                                                                                         1           T  DATA2                                     F  
+USER1                                                                                                                             
+$GIK_IDX6                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX6                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIK_IDX7                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX7                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIK_IDX8                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX8                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+16 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                                                                                                        INDEX_COL_ORDER 
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+COLUMN_NAME                                                                                                                       SORT_ORDER  
+-------------------------------------------------------------------------------------------------------------------------------------------------
+$GIK_IDX1                                                                                                                         0           
+I1                                                                                                                                A  
+$GIR_IDX1                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX2                                                                                                                         0           
+I1                                                                                                                                A  
+$GIK_IDX2                                                                                                                         1           
+I2                                                                                                                                A  
+$GIR_IDX2                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX3                                                                                                                         0           
+I1                                                                                                                                D  
+$GIK_IDX3                                                                                                                         1           
+I2                                                                                                                                D  
+$GIK_IDX3                                                                                                                         2           
+I3                                                                                                                                A  
+$GIR_IDX3                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX4                                                                                                                         0           
+I2                                                                                                                                D  
+$GIR_IDX4                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX5                                                                                                                         0           
+I2                                                                                                                                A  
+$GIK_IDX5                                                                                                                         1           
+I3                                                                                                                                A  
+$GIR_IDX5                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX6                                                                                                                         0           
+I3                                                                                                                                A  
+$GIR_IDX6                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX7                                                                                                                         0           
+I3                                                                                                                                D  
+$GIK_IDX7                                                                                                                         1           
+I1                                                                                                                                A  
+$GIR_IDX7                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX8                                                                                                                         0           
+I3                                                                                                                                A  
+$GIK_IDX8                                                                                                                         1           
+I2                                                                                                                                D  
+$GIK_IDX8                                                                                                                         2           
+I1                                                                                                                                A  
+$GIR_IDX8                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+23 rows selected.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name = 'T1' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        TABLE_TYPE  HIDDEN  TBS_NAME                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SYS                                                                                                                               
+T1                                                                                                                                T  N  SYS_TBS_DISK_DATA                         
+1 row selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned, i.is_global
+from system_.sys_tables_ t, system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where t.table_name = 'T1' and t.table_id = i.table_id and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+[ERR-31058 : Column not found 
+0001 : select U.USER_NAME, I.INDEX_NAME, I.INDEX_TYPE, I.IS_UNIQUE, B.NAME TBS_NAME, I.IS_PARTITIONED, I.IS_GLOBAL
+                                                                                                        ^        ^
+]
+
+$T0> ##################################
+$T0> # SECTOR; CREATE INDEX
+$T0> ##################################
+
+$T0> connect user1/user1;
+Connect success.
+
+$T0> create table t2
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer constraint t2_nn not null,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index idx1 on t2(i1) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index idx2 on t2(i1, i2) tablespace data1;
+Create success.
+$T0> create index idx3 on t2(i1, i2 desc, i3) tablespace data1;
+Create success.
+
+$T0> create index idx4 on t2(i2) tablespace data2;
+Create success.
+$T0> create index idx5 on t2(i2, i3 desc) tablespace data2;
+Create success.
+
+$T0> connect sys/manager;
+Connect success.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        TABLE_TYPE  HIDDEN  TBS_NAME                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SYS                                                                                                                               
+$GIT_IDX1                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+SYS                                                                                                                               
+$GIT_IDX2                                                                                                                         G  Y  DATA1                                     
+SYS                                                                                                                               
+$GIT_IDX3                                                                                                                         G  Y  DATA1                                     
+SYS                                                                                                                               
+$GIT_IDX4                                                                                                                         G  Y  DATA2                                     
+SYS                                                                                                                               
+$GIT_IDX5                                                                                                                         G  Y  DATA2                                     
+USER1                                                                                                                             
+$GIT_IDX6                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+USER1                                                                                                                             
+$GIT_IDX7                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+USER1                                                                                                                             
+$GIT_IDX8                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+USER1                                                                                                                             
+$GIT_IDX1                                                                                                                         G  Y  SYS_TBS_DISK_DATA                         
+USER1                                                                                                                             
+$GIT_IDX2                                                                                                                         G  Y  DATA1                                     
+USER1                                                                                                                             
+$GIT_IDX3                                                                                                                         G  Y  DATA1                                     
+USER1                                                                                                                             
+$GIT_IDX4                                                                                                                         G  Y  DATA2                                     
+USER1                                                                                                                             
+$GIT_IDX5                                                                                                                         G  Y  DATA2                                     
+13 rows selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                                                                                                        COLUMN_ORDER 
+--------------------------------------------------------------------------------------------------------------------------------------------------
+COLUMN_NAME                                                                                                                       TYPE_NAME                                 IS_NULLABLE  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+$GIT_IDX1                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX1                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX1                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX2                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX2                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX2                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX2                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX3                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX3                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX3                                                                                                                         2           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX3                                                                                                                         3           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX3                                                                                                                         4           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX4                                                                                                                         0           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX4                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX4                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX5                                                                                                                         0           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX5                                                                                                                         1           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX5                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX5                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX6                                                                                                                         0           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX6                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX6                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX7                                                                                                                         0           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX7                                                                                                                         1           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX7                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX7                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX8                                                                                                                         0           
+I3                                                                                                                                INTEGER                                   T  
+$GIT_IDX8                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   F  
+$GIT_IDX8                                                                                                                         2           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX8                                                                                                                         3           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX8                                                                                                                         4           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX1                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX1                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX1                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX2                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX2                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   T  
+$GIT_IDX2                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX2                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX3                                                                                                                         0           
+I1                                                                                                                                INTEGER                                   T  
+$GIT_IDX3                                                                                                                         1           
+I2                                                                                                                                INTEGER                                   T  
+$GIT_IDX3                                                                                                                         2           
+I3                                                                                                                                INTEGER                                   F  
+$GIT_IDX3                                                                                                                         3           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX3                                                                                                                         4           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX4                                                                                                                         0           
+I2                                                                                                                                INTEGER                                   T  
+$GIT_IDX4                                                                                                                         1           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX4                                                                                                                         2           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+$GIT_IDX5                                                                                                                         0           
+I2                                                                                                                                INTEGER                                   T  
+$GIT_IDX5                                                                                                                         1           
+I3                                                                                                                                INTEGER                                   F  
+$GIT_IDX5                                                                                                                         2           
+$GIT_OID                                                                                                                          BIGINT                                    T  
+$GIT_IDX5                                                                                                                         3           
+$GIT_RID                                                                                                                          BIGINT                                    T  
+50 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        INDEX_TYPE  IS_UNIQUE  TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SYS                                                                                                                               
+$GIK_IDX1                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIR_IDX1                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIK_IDX2                                                                                                                         1           F  DATA1                                     F  
+SYS                                                                                                                               
+$GIR_IDX2                                                                                                                         1           T  DATA1                                     F  
+SYS                                                                                                                               
+$GIK_IDX3                                                                                                                         1           F  DATA1                                     F  
+SYS                                                                                                                               
+$GIR_IDX3                                                                                                                         1           T  DATA1                                     F  
+SYS                                                                                                                               
+$GIK_IDX4                                                                                                                         1           F  DATA2                                     F  
+SYS                                                                                                                               
+$GIR_IDX4                                                                                                                         1           T  DATA2                                     F  
+SYS                                                                                                                               
+$GIK_IDX5                                                                                                                         1           F  DATA2                                     F  
+SYS                                                                                                                               
+$GIR_IDX5                                                                                                                         1           T  DATA2                                     F  
+USER1                                                                                                                             
+$GIK_IDX6                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX6                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIK_IDX7                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX7                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIK_IDX8                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX8                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIK_IDX1                                                                                                                         1           F  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIR_IDX1                                                                                                                         1           T  SYS_TBS_DISK_DATA                         F  
+USER1                                                                                                                             
+$GIK_IDX2                                                                                                                         1           F  DATA1                                     F  
+USER1                                                                                                                             
+$GIR_IDX2                                                                                                                         1           T  DATA1                                     F  
+USER1                                                                                                                             
+$GIK_IDX3                                                                                                                         1           F  DATA1                                     F  
+USER1                                                                                                                             
+$GIR_IDX3                                                                                                                         1           T  DATA1                                     F  
+USER1                                                                                                                             
+$GIK_IDX4                                                                                                                         1           F  DATA2                                     F  
+USER1                                                                                                                             
+$GIR_IDX4                                                                                                                         1           T  DATA2                                     F  
+USER1                                                                                                                             
+$GIK_IDX5                                                                                                                         1           F  DATA2                                     F  
+USER1                                                                                                                             
+$GIR_IDX5                                                                                                                         1           T  DATA2                                     F  
+26 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                                                                                                        INDEX_COL_ORDER 
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+COLUMN_NAME                                                                                                                       SORT_ORDER  
+-------------------------------------------------------------------------------------------------------------------------------------------------
+$GIK_IDX1                                                                                                                         0           
+I1                                                                                                                                A  
+$GIR_IDX1                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX2                                                                                                                         0           
+I1                                                                                                                                A  
+$GIK_IDX2                                                                                                                         1           
+I2                                                                                                                                A  
+$GIR_IDX2                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX3                                                                                                                         0           
+I1                                                                                                                                D  
+$GIK_IDX3                                                                                                                         1           
+I2                                                                                                                                D  
+$GIK_IDX3                                                                                                                         2           
+I3                                                                                                                                A  
+$GIR_IDX3                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX4                                                                                                                         0           
+I2                                                                                                                                D  
+$GIR_IDX4                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX5                                                                                                                         0           
+I2                                                                                                                                A  
+$GIK_IDX5                                                                                                                         1           
+I3                                                                                                                                A  
+$GIR_IDX5                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX6                                                                                                                         0           
+I3                                                                                                                                A  
+$GIR_IDX6                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX7                                                                                                                         0           
+I3                                                                                                                                D  
+$GIK_IDX7                                                                                                                         1           
+I1                                                                                                                                A  
+$GIR_IDX7                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX8                                                                                                                         0           
+I3                                                                                                                                A  
+$GIK_IDX8                                                                                                                         1           
+I2                                                                                                                                D  
+$GIK_IDX8                                                                                                                         2           
+I1                                                                                                                                A  
+$GIR_IDX8                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX1                                                                                                                         0           
+I1                                                                                                                                A  
+$GIR_IDX1                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX2                                                                                                                         0           
+I1                                                                                                                                A  
+$GIK_IDX2                                                                                                                         1           
+I2                                                                                                                                A  
+$GIR_IDX2                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX3                                                                                                                         0           
+I1                                                                                                                                A  
+$GIK_IDX3                                                                                                                         1           
+I2                                                                                                                                D  
+$GIK_IDX3                                                                                                                         2           
+I3                                                                                                                                A  
+$GIR_IDX3                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX4                                                                                                                         0           
+I2                                                                                                                                A  
+$GIR_IDX4                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+$GIK_IDX5                                                                                                                         0           
+I2                                                                                                                                A  
+$GIK_IDX5                                                                                                                         1           
+I3                                                                                                                                D  
+$GIR_IDX5                                                                                                                         0           
+$GIT_RID                                                                                                                          A  
+37 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop user user1 cascade;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+

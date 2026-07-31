@@ -1,0 +1,187 @@
+##########################################################################
+# PROJ-1624 FOR REPLICATION
+##########################################################################
+
+DECLARE SERVER PROJ_1624_SERVER1 DB1;
+DECLARE SERVER PROJ_1624_SERVER2 DB2;
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+
+SKIP BEGIN;
+drop table t1;
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN ()
+{
+    THREAD T1 C11
+    {
+        ####################################
+        # ON ACTIVE SYSTEM 1
+        ####################################
+	
+		
+		CALL PREPARE();
+	
+		create table t1
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+
+		alter table t1 add constraint t1_pk primary key (i2, i1);
+		alter table t1 add constraint t1_uk unique (i3, i2, i1);
+		
+		CREATE REPLICATION REP1 WITH '${HOST_IP@DB2}',
+									  ${ALTIBASE_REPLICATION_PORT_NO@DB2}
+		FROM SYS.T1 TO SYS.T1;
+		}
+
+		THREAD T2 C21
+		{
+		
+		CALL PREPARE();
+	
+		create table t1
+		( 
+		  i1 integer,
+		  i2 integer, 
+		  i3 integer,
+		  i4 integer
+		)
+		partition by list(i1)	
+		(
+		  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+		  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+		  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+		  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+		  partition pd values default
+		)
+		tablespace sys_tbs_disk_data;
+		
+		alter table t1 add constraint t1_pk primary key (i2, i1);
+		alter table t1 add constraint t1_uk unique (i3, i2, i1);
+
+		CREATE REPLICATION REP1 WITH '${HOST_IP@DB1}',
+									  ${ALTIBASE_REPLICATION_PORT_NO@DB1}
+		FROM SYS.T1 TO SYS.T1;
+    }
+
+    JOIN;
+
+    ########################################################
+    SECTOR; ACTIVE-ACTIVE REPLICATION START
+    ########################################################
+    THREAD T1 C11
+    {
+        ####################################
+        # ON ACTIVE SYSTEM 1
+        ####################################
+
+        ALTER REPLICATION REP1 START;
+    }
+   JOIN;
+    THREAD T2 C21
+    {
+        ####################################
+        # ON ACTIVE SYSTEM 2
+        ####################################
+
+        ALTER REPLICATION REP1 START;
+    }
+
+    JOIN;
+
+    ########################################################
+    SECTOR; DML DATA
+    ########################################################
+    THREAD T1 C11
+    {
+    
+		ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 1;
+		ALTER SESSION SET REPLICATION = DEFAULT;
+		
+		alter session set explain plan = on;
+		alter session set trclog_detail_predicate = 1;
+
+		CREATE INDEX IDX1 ON T1(I1);
+		
+		insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+		insert into t1 values ( 0, 0, 0, 1 );
+		insert into t1 values ( 0, 1, null, null );
+		insert into t1 values ( 101, 0, null, null );
+
+		select * from t1 where i1=2;
+
+		DESC T1;
+		CALL DESC_INDEX('IDX1');
+		
+       	        ALTER REPLICATION REP1 FLUSH WAIT 60;
+    }
+
+    JOIN;
+    THREAD T2 C21
+    {
+    
+		ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 1;
+		ALTER SESSION SET REPLICATION = DEFAULT;
+		
+		CREATE INDEX IDX1 ON T1(I1);
+	
+		DESC T1;
+		CALL DESC_INDEX('IDX1');
+		
+		alter session set explain plan = on;
+		alter session set trclog_detail_predicate = 1;
+
+		select * from t1 where i1=2;
+		
+    }
+
+    JOIN;
+
+    ########################################################
+    SECTOR; FINALIZATION
+    ########################################################
+    THREAD T1 C11
+    {
+	ALTER REPLICATION REP1 STOP;
+        DROP REPLICATION REP1;
+        DROP TABLE t1;
+    }
+
+    THREAD T2 C21
+    {
+
+       ALTER REPLICATION REP1 STOP;
+       DROP REPLICATION REP1;
+       DROP TABLE t1;
+    }
+
+    JOIN;
+}

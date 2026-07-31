@@ -1,0 +1,347 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--############################################################################
+--# PR-16131
+--############################################################################
+
+--#####################################
+--+SECTOR 1; PREPARATION
+--#####################################
+
+--+SKIP BEGIN; 
+$P0> drop table t1 cascade;
+$P0> drop index idx;
+--+SKIP END; 
+
+
+--####################################
+--+SECTOR 2; CREATE TABLE TEST
+--####################################
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       primary key (i1)
+     )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> drop table t1 cascade;
+Drop success.
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       primary key (i2)
+     )
+     PARTITION BY RANGE(I2)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31260 : Invalid partition key column type 
+0003 :        I2 GEOMETRY,
+             ^ ^
+]
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       unique (i1)
+     )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> drop table t1 cascade;
+Drop success.
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       unique (i2)
+     )
+     PARTITION BY RANGE(I2)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31260 : Invalid partition key column type 
+0003 :        I2 GEOMETRY,
+             ^ ^
+]
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       primary key (i1,i2)
+     )
+     PARTITION BY RANGE(I1,I2)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31260 : Invalid partition key column type 
+0003 :        I2 GEOMETRY,
+             ^ ^
+]
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       primary key (i2,i1)
+     )
+     PARTITION BY RANGE(I2,I1)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31260 : Invalid partition key column type 
+0003 :        I2 GEOMETRY,
+             ^ ^
+]
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       unique (i1,i2)
+     )
+     PARTITION BY RANGE(I1,I2)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31260 : Invalid partition key column type 
+0003 :        I2 GEOMETRY,
+             ^ ^
+]
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(
+       i1 integer, 
+       i2 geometry,
+       unique (i2,i1)
+     )
+     PARTITION BY RANGE(I2,I1)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31260 : Invalid partition key column type 
+0003 :        I2 GEOMETRY,
+             ^ ^
+]
+
+--####################################
+--+SECTOR 3; CREATE INDEX TEST
+--####################################
+
+$P0> drop table t1 cascade;
+[ERR-31031 : Table or view was not found : 
+0001 : drop table T1 cascade
+                 ^ ^
+]
+$P0> create table t1(i1 integer, i2 integer, i3 geometry, i4 geometry)
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> create index idx on t1(i1);
+Create success.
+$P0> drop index idx;
+Drop success.
+$P0> create index idx on t1(i1) indextype is btree;
+Create success.
+$P0> drop index idx;
+Drop success.
+$P0> create index idx on t1(i1) indextype is rtree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1) indextype is tdrtree;
+[ERR-11059 : Index type name not found]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3);
+Create success.
+$P0> drop index idx;
+Drop success.
+$P0> create index idx on t1(i3) indextype is btree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3) indextype is rtree;
+Create success.
+$P0> drop index idx;
+Drop success.
+$P0> create index idx on t1(i3) indextype is tdrtree;
+[ERR-11059 : Index type name not found]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i2);
+Create success.
+$P0> drop index idx;
+Drop success.
+$P0> create index idx on t1(i1,i2) indextype is btree;
+Create success.
+$P0> drop index idx;
+Drop success.
+$P0> create index idx on t1(i1,i2) indextype is rtree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i2) indextype is tdrtree;
+[ERR-11059 : Index type name not found]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i3);
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i3) indextype is btree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i3) indextype is rtree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i3) indextype is tdrtree;
+[ERR-11059 : Index type name not found]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i1);
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i1) indextype is btree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i1) indextype is rtree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i1) indextype is tdrtree;
+[ERR-11059 : Index type name not found]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i4);
+[ERR-3123C : Invalid key columns in an index]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i4) indextype is btree;
+[ERR-31237 : cannot create index in the data type.]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i4) indextype is rtree;
+[ERR-3123C : Invalid key columns in an index]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i4) indextype is tdrtree;
+[ERR-11059 : Index type name not found]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i1);
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I1,I1)
+                                ^ ^
+]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i1) indextype is btree;
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I1,I1) indextype is btree
+                                ^ ^
+]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i1) indextype is rtree;
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I1,I1) indextype is rtree
+                                ^ ^
+]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i1,i1) indextype is tdrtree;
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I1,I1) indextype is tdrtree
+                                ^ ^
+]
+
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i3);
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I3,I3)
+                                ^ ^
+]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i3) indextype is btree;
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I3,I3) indextype is btree
+                                ^ ^
+]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i3) indextype is rtree;
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I3,I3) indextype is rtree
+                                ^ ^
+]
+$P0> drop index idx;
+[ERR-31014 : Index not found]
+$P0> create index idx on t1(i3,i3) indextype is tdrtree;
+[ERR-31007 : Duplicate column name 
+0001 : create index IDX on T1(I3,I3) indextype is tdrtree
+                                ^ ^
+]
+
+--####################################
+--+SECTOR 4; FINALIZATION
+--####################################
+
+--+SKIP BEGIN; 
+$P0> drop table t1 cascade;
+$P0> drop index idx;
+--+SKIP END; 
+

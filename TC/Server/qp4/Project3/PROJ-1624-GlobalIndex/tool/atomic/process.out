@@ -1,0 +1,10 @@
+[2026/07/30 14:12:13] /data/et16/work/natc/TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/tool/atomic/atomic_test.tc:
+MAIN_T0> (59) EXEC P1 "./atomic_insert"
+[2026/07/30 14:12:13] /data/et16/work/natc/TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/tool/atomic/atomic_test.tc:
+MAIN_T0> (60) Result of P1
+< CONNECT >
+
+ATOMIC ARRAY INSERT 
+
+< Disconnet >
+

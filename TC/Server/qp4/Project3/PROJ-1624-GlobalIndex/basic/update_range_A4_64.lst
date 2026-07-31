@@ -1,0 +1,2752 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop function get_oid;
+$T0> SKIP END;
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+
+$T0> SKIP BEGIN;
+$T0> drop function get_oid;
+$T0> SKIP END;
+
+$T0> create function get_oid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; RANGE PARTITION
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+disable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> insert into t1 values ( 0, 0, 0, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 0, 1, null, null );
+1 row inserted.
+$T0> insert into t1 values ( 101, 0, null, null );
+1 row inserted.
+
+$T0> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3, i4);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i2);
+Create success.
+$T0> create index t1_idx4 on t1(i4, i3);
+Create success.
+$T0> create index t1_idx5 on t1(i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T1_IDX1                                  BTREE                  I2 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 ASC
+T1_IDX4                                  BTREE                  I4 ASC,
+                                                                I3 ASC
+T1_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+0           0           0           1           
+0           1                                   
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+101         0                                   
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i2=i2+1;
+103 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           1           1           
+2           1           2           1           
+3           2           0           1           
+4           2           1           1           
+5           2           2           1           
+6           3           0           1           
+7           3           1           1           
+8           3           2           1           
+9           4           0           1           
+10          4           1           1           
+11          4           2           1           
+12          5           0           1           
+13          5           1           1           
+14          5           2           1           
+15          6           0           1           
+16          6           1           1           
+17          6           2           1           
+18          7           0           1           
+19          7           1           1           
+0           1           0           1           
+0           2                                   
+20          7           2           1           
+21          8           0           1           
+22          8           1           1           
+23          8           2           1           
+24          9           0           1           
+25          9           1           1           
+26          9           2           1           
+27          10          0           1           
+28          10          1           1           
+29          10          2           1           
+30          11          0           1           
+31          11          1           1           
+32          11          2           1           
+33          12          0           1           
+34          12          1           1           
+35          12          2           1           
+36          13          0           1           
+37          13          1           1           
+38          13          2           1           
+39          14          0           1           
+40          14          1           1           
+41          14          2           1           
+42          15          0           1           
+43          15          1           1           
+44          15          2           1           
+45          16          0           1           
+46          16          1           1           
+47          16          2           1           
+48          17          0           1           
+49          17          1           1           
+50          17          2           1           
+51          18          0           1           
+52          18          1           1           
+53          18          2           1           
+54          19          0           1           
+55          19          1           1           
+56          19          2           1           
+57          20          0           1           
+58          20          1           1           
+59          20          2           1           
+60          21          0           1           
+61          21          1           1           
+62          21          2           1           
+63          22          0           1           
+64          22          1           1           
+65          22          2           1           
+66          23          0           1           
+67          23          1           1           
+68          23          2           1           
+69          24          0           1           
+70          24          1           1           
+71          24          2           1           
+72          25          0           1           
+73          25          1           1           
+74          25          2           1           
+75          26          0           1           
+76          26          1           1           
+77          26          2           1           
+78          27          0           1           
+79          27          1           1           
+80          27          2           1           
+81          28          0           1           
+82          28          1           1           
+83          28          2           1           
+84          29          0           1           
+85          29          1           1           
+86          29          2           1           
+87          30          0           1           
+88          30          1           1           
+89          30          2           1           
+90          31          0           1           
+91          31          1           1           
+92          31          2           1           
+93          32          0           1           
+94          32          1           1           
+95          32          2           1           
+96          33          0           1           
+97          33          1           1           
+98          33          2           1           
+99          34          0           1           
+100         34          1           1           
+101         1                                   
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i3=i3+1;
+103 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           2           1           
+2           1           3           1           
+3           2           1           1           
+4           2           2           1           
+5           2           3           1           
+6           3           1           1           
+7           3           2           1           
+8           3           3           1           
+9           4           1           1           
+10          4           2           1           
+11          4           3           1           
+12          5           1           1           
+13          5           2           1           
+14          5           3           1           
+15          6           1           1           
+16          6           2           1           
+17          6           3           1           
+18          7           1           1           
+19          7           2           1           
+0           1           1           1           
+0           2                                   
+20          7           3           1           
+21          8           1           1           
+22          8           2           1           
+23          8           3           1           
+24          9           1           1           
+25          9           2           1           
+26          9           3           1           
+27          10          1           1           
+28          10          2           1           
+29          10          3           1           
+30          11          1           1           
+31          11          2           1           
+32          11          3           1           
+33          12          1           1           
+34          12          2           1           
+35          12          3           1           
+36          13          1           1           
+37          13          2           1           
+38          13          3           1           
+39          14          1           1           
+40          14          2           1           
+41          14          3           1           
+42          15          1           1           
+43          15          2           1           
+44          15          3           1           
+45          16          1           1           
+46          16          2           1           
+47          16          3           1           
+48          17          1           1           
+49          17          2           1           
+50          17          3           1           
+51          18          1           1           
+52          18          2           1           
+53          18          3           1           
+54          19          1           1           
+55          19          2           1           
+56          19          3           1           
+57          20          1           1           
+58          20          2           1           
+59          20          3           1           
+60          21          1           1           
+61          21          2           1           
+62          21          3           1           
+63          22          1           1           
+64          22          2           1           
+65          22          3           1           
+66          23          1           1           
+67          23          2           1           
+68          23          3           1           
+69          24          1           1           
+70          24          2           1           
+71          24          3           1           
+72          25          1           1           
+73          25          2           1           
+74          25          3           1           
+75          26          1           1           
+76          26          2           1           
+77          26          3           1           
+78          27          1           1           
+79          27          2           1           
+80          27          3           1           
+81          28          1           1           
+82          28          2           1           
+83          28          3           1           
+84          29          1           1           
+85          29          2           1           
+86          29          3           1           
+87          30          1           1           
+88          30          2           1           
+89          30          3           1           
+90          31          1           1           
+91          31          2           1           
+92          31          3           1           
+93          32          1           1           
+94          32          2           1           
+95          32          3           1           
+96          33          1           1           
+97          33          2           1           
+98          33          3           1           
+99          34          1           1           
+100         34          2           1           
+101         1                                   
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i2=i2-1, i3=i3-2, i4=2;
+103 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           0           2           
+2           0           1           2           
+3           1           -1          2           
+4           1           0           2           
+5           1           1           2           
+6           2           -1          2           
+7           2           0           2           
+8           2           1           2           
+9           3           -1          2           
+10          3           0           2           
+11          3           1           2           
+12          4           -1          2           
+13          4           0           2           
+14          4           1           2           
+15          5           -1          2           
+16          5           0           2           
+17          5           1           2           
+18          6           -1          2           
+19          6           0           2           
+0           0           -1          2           
+0           1                       2           
+20          6           1           2           
+21          7           -1          2           
+22          7           0           2           
+23          7           1           2           
+24          8           -1          2           
+25          8           0           2           
+26          8           1           2           
+27          9           -1          2           
+28          9           0           2           
+29          9           1           2           
+30          10          -1          2           
+31          10          0           2           
+32          10          1           2           
+33          11          -1          2           
+34          11          0           2           
+35          11          1           2           
+36          12          -1          2           
+37          12          0           2           
+38          12          1           2           
+39          13          -1          2           
+40          13          0           2           
+41          13          1           2           
+42          14          -1          2           
+43          14          0           2           
+44          14          1           2           
+45          15          -1          2           
+46          15          0           2           
+47          15          1           2           
+48          16          -1          2           
+49          16          0           2           
+50          16          1           2           
+51          17          -1          2           
+52          17          0           2           
+53          17          1           2           
+54          18          -1          2           
+55          18          0           2           
+56          18          1           2           
+57          19          -1          2           
+58          19          0           2           
+59          19          1           2           
+60          20          -1          2           
+61          20          0           2           
+62          20          1           2           
+63          21          -1          2           
+64          21          0           2           
+65          21          1           2           
+66          22          -1          2           
+67          22          0           2           
+68          22          1           2           
+69          23          -1          2           
+70          23          0           2           
+71          23          1           2           
+72          24          -1          2           
+73          24          0           2           
+74          24          1           2           
+75          25          -1          2           
+76          25          0           2           
+77          25          1           2           
+78          26          -1          2           
+79          26          0           2           
+80          26          1           2           
+81          27          -1          2           
+82          27          0           2           
+83          27          1           2           
+84          28          -1          2           
+85          28          0           2           
+86          28          1           2           
+87          29          -1          2           
+88          29          0           2           
+89          29          1           2           
+90          30          -1          2           
+91          30          0           2           
+92          30          1           2           
+93          31          -1          2           
+94          31          0           2           
+95          31          1           2           
+96          32          -1          2           
+97          32          0           2           
+98          32          1           2           
+99          33          -1          2           
+100         33          0           2           
+101         0                       2           
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> ##################################
+$T0> # SECTOR; RANGE PARTITION, ROW MOVEMENT
+$T0> ##################################
+
+$T0> drop table t1;
+Drop success.
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T1 )
+ PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 26, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 100, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 100
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3, i4);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i2);
+Create success.
+$T0> create index t1_idx4 on t1(i4, i3);
+Create success.
+$T0> create index t1_idx5 on t1(i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I2 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 ASC
+T1_IDX4                                  BTREE                  I4 ASC,
+                                                                I3 ASC
+T1_IDX5                                  BTREE                  I4 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i1=i1+10, i2=i2+1;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+11          1           1           1           
+12          1           2           1           
+13          2           0           1           
+14          2           1           1           
+15          2           2           1           
+16          3           0           1           
+17          3           1           1           
+18          3           2           1           
+19          4           0           1           
+30          7           2           1           
+31          8           0           1           
+32          8           1           1           
+33          8           2           1           
+34          9           0           1           
+35          9           1           1           
+36          9           2           1           
+37          10          0           1           
+38          10          1           1           
+39          10          2           1           
+20          4           1           1           
+21          4           2           1           
+22          5           0           1           
+23          5           1           1           
+24          5           2           1           
+25          6           0           1           
+26          6           1           1           
+27          6           2           1           
+28          7           0           1           
+29          7           1           1           
+50          14          1           1           
+51          14          2           1           
+52          15          0           1           
+53          15          1           1           
+54          15          2           1           
+55          16          0           1           
+56          16          1           1           
+57          16          2           1           
+58          17          0           1           
+59          17          1           1           
+40          11          0           1           
+41          11          1           1           
+42          11          2           1           
+43          12          0           1           
+44          12          1           1           
+45          12          2           1           
+46          13          0           1           
+47          13          1           1           
+48          13          2           1           
+49          14          0           1           
+70          21          0           1           
+71          21          1           1           
+72          21          2           1           
+73          22          0           1           
+74          22          1           1           
+75          22          2           1           
+76          23          0           1           
+77          23          1           1           
+78          23          2           1           
+79          24          0           1           
+60          17          2           1           
+61          18          0           1           
+62          18          1           1           
+63          18          2           1           
+64          19          0           1           
+65          19          1           1           
+66          19          2           1           
+67          20          0           1           
+68          20          1           1           
+69          20          2           1           
+90          27          2           1           
+91          28          0           1           
+92          28          1           1           
+93          28          2           1           
+94          29          0           1           
+95          29          1           1           
+96          29          2           1           
+97          30          0           1           
+98          30          1           1           
+99          30          2           1           
+100         31          0           1           
+101         31          1           1           
+102         31          2           1           
+103         32          0           1           
+104         32          1           1           
+105         32          2           1           
+106         33          0           1           
+107         33          1           1           
+108         33          2           1           
+109         34          0           1           
+110         34          1           1           
+80          24          1           1           
+81          24          2           1           
+82          25          0           1           
+83          25          1           1           
+84          25          2           1           
+85          26          0           1           
+86          26          1           1           
+87          26          2           1           
+88          27          0           1           
+89          27          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 31, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i1=i1-10, i3=i3+1;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 31, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           2           1           
+2           1           3           1           
+3           2           1           1           
+4           2           2           1           
+5           2           3           1           
+6           3           1           1           
+7           3           2           1           
+8           3           3           1           
+9           4           1           1           
+10          4           2           1           
+11          4           3           1           
+12          5           1           1           
+13          5           2           1           
+14          5           3           1           
+15          6           1           1           
+16          6           2           1           
+17          6           3           1           
+18          7           1           1           
+19          7           2           1           
+20          7           3           1           
+21          8           1           1           
+22          8           2           1           
+23          8           3           1           
+24          9           1           1           
+25          9           2           1           
+26          9           3           1           
+27          10          1           1           
+28          10          2           1           
+29          10          3           1           
+30          11          1           1           
+31          11          2           1           
+32          11          3           1           
+33          12          1           1           
+34          12          2           1           
+35          12          3           1           
+36          13          1           1           
+37          13          2           1           
+38          13          3           1           
+39          14          1           1           
+40          14          2           1           
+41          14          3           1           
+42          15          1           1           
+43          15          2           1           
+44          15          3           1           
+45          16          1           1           
+46          16          2           1           
+47          16          3           1           
+48          17          1           1           
+49          17          2           1           
+50          17          3           1           
+51          18          1           1           
+52          18          2           1           
+53          18          3           1           
+54          19          1           1           
+55          19          2           1           
+56          19          3           1           
+57          20          1           1           
+58          20          2           1           
+59          20          3           1           
+60          21          1           1           
+61          21          2           1           
+62          21          3           1           
+63          22          1           1           
+64          22          2           1           
+65          22          3           1           
+66          23          1           1           
+67          23          2           1           
+68          23          3           1           
+69          24          1           1           
+70          24          2           1           
+71          24          3           1           
+72          25          1           1           
+73          25          2           1           
+74          25          3           1           
+75          26          1           1           
+76          26          2           1           
+77          26          3           1           
+78          27          1           1           
+79          27          2           1           
+80          27          3           1           
+81          28          1           1           
+82          28          2           1           
+83          28          3           1           
+84          29          1           1           
+85          29          2           1           
+86          29          3           1           
+87          30          1           1           
+88          30          2           1           
+89          30          3           1           
+90          31          1           1           
+91          31          2           1           
+92          31          3           1           
+93          32          1           1           
+94          32          2           1           
+95          32          3           1           
+96          33          1           1           
+97          33          2           1           
+98          33          3           1           
+99          34          1           1           
+100         34          2           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> update t1 set i1=i1+10, i2=i2-1, i3=i3-2, i4=2;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+11          0           0           2           
+12          0           1           2           
+13          1           -1          2           
+14          1           0           2           
+15          1           1           2           
+16          2           -1          2           
+17          2           0           2           
+18          2           1           2           
+19          3           -1          2           
+30          6           1           2           
+31          7           -1          2           
+32          7           0           2           
+33          7           1           2           
+34          8           -1          2           
+35          8           0           2           
+36          8           1           2           
+37          9           -1          2           
+38          9           0           2           
+39          9           1           2           
+20          3           0           2           
+21          3           1           2           
+22          4           -1          2           
+23          4           0           2           
+24          4           1           2           
+25          5           -1          2           
+26          5           0           2           
+27          5           1           2           
+28          6           -1          2           
+29          6           0           2           
+50          13          0           2           
+51          13          1           2           
+52          14          -1          2           
+53          14          0           2           
+54          14          1           2           
+55          15          -1          2           
+56          15          0           2           
+57          15          1           2           
+58          16          -1          2           
+59          16          0           2           
+40          10          -1          2           
+41          10          0           2           
+42          10          1           2           
+43          11          -1          2           
+44          11          0           2           
+45          11          1           2           
+46          12          -1          2           
+47          12          0           2           
+48          12          1           2           
+49          13          -1          2           
+70          20          -1          2           
+71          20          0           2           
+72          20          1           2           
+73          21          -1          2           
+74          21          0           2           
+75          21          1           2           
+76          22          -1          2           
+77          22          0           2           
+78          22          1           2           
+79          23          -1          2           
+60          16          1           2           
+61          17          -1          2           
+62          17          0           2           
+63          17          1           2           
+64          18          -1          2           
+65          18          0           2           
+66          18          1           2           
+67          19          -1          2           
+68          19          0           2           
+69          19          1           2           
+90          26          1           2           
+91          27          -1          2           
+92          27          0           2           
+93          27          1           2           
+94          28          -1          2           
+95          28          0           2           
+96          28          1           2           
+97          29          -1          2           
+98          29          0           2           
+99          29          1           2           
+100         30          -1          2           
+101         30          0           2           
+102         30          1           2           
+103         31          -1          2           
+104         31          0           2           
+105         31          1           2           
+106         32          -1          2           
+107         32          0           2           
+108         32          1           2           
+109         33          -1          2           
+110         33          0           2           
+80          23          0           2           
+81          23          1           2           
+82          24          -1          2           
+83          24          0           2           
+84          24          1           2           
+85          25          -1          2           
+86          25          0           2           
+87          25          1           2           
+88          26          -1          2           
+89          26          0           2           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 31, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ###################################
+$T0> # create index t1_pk;
+$T0> ###################################
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_uk;
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_UK"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.i1 = b.i1 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx1 on t1(i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1"
+) b
+on a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx2 on t1(i2, i3, i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i2,-1000) i2, nvl(i3,-1000) i3, nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX2"
+) b
+on a.i2 = b.i2 and a.i3 = b.i3 and a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx3 on t1(i3, i2);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i3,-1000) i3, nvl(i2,-1000) i2, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX3"
+) b
+on a.i3 = b.i3 and a.i2 = b.i2 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx4 on t1(i4, i3);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join
+(
+  select nvl(i4,-1000) i4, nvl(i3,-1000) i3, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX4"
+) b
+on a.i4 = b.i4 and a.i3 = b.i3 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> ###################################
+$T0> # create index t1_idx5 on t1(i4);
+$T0> ###################################
+
+$T0> # should be no rows
+$T0> select a.*, b.*
+from 
+(
+  select nvl(i4,-1000) i4, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i4,-1000) i4, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i4,-1000) i4, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX5"
+) b
+on a.i4 = b.i4 and a.oid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+[ERR-31385 : _PROWID is not supported.]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop function get_oid;
+$T0> SKIP END;
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+

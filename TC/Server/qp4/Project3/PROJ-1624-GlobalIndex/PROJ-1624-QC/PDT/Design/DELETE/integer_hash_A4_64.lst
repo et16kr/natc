@@ -1,0 +1,739 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- INSERT HASH PARTITIOIN ( PK:INTEGER )
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT_HASH;
+--+SKIP END; 
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+$P0> DELETE FROM PDT_HASH PARTITION( P1 );
+1 row deleted.
+
+-- should be [ ]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+No rows selected.
+-- should be [1]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+1           
+3           
+2 rows selected.
+-- should be [2]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+No rows selected.
+-- should be [3]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+2           
+1 row selected.
+
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- should be fail
+$P0> DELETE FROM PDT_HASH PARTITION( P5 );
+[ERR-3125B : The table partition does not exist. ]
+
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+-------------------------------------
+-- 3.1 Partition Pruning ( User )
+-------------------------------------
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- please check plan
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH PARTITION( P1 );
+1 row deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 1, SELF_ID: 0 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 1 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH PARTITION( P2 );
+2 rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 2, SELF_ID: 0 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 1 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH PARTITION( P3 );
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 0, SELF_ID: 0 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 1 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH PARTITION( P4 );
+1 row deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 1, SELF_ID: 0 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 1 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+-------------------------------------
+-- 3.2 Partition filtering
+-------------------------------------
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- less than 
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH WHERE F1 < 10;
+4 rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 4, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 < 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 < 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 < 40;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- equal
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH WHERE F1 = 10;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 = 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 = 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 = 40;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 1/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- greater than
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH WHERE F1 > 10;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 > 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 > 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 > 40;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- less equal than
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH WHERE F1 <= 10;
+12 rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 12, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 <= 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 <= 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 <= 40;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- greater equal than
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH WHERE F1 >= 10;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 >= 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 >= 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 >= 40;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH WHERE F1 >= 10 AND F1 < 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 >= 20 AND F1 < 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+-- not equal
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH;
+12 rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 12, SELF_ID: 0 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 1 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 2 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 != 10;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 != 20;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 != 30;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 != 40;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$P0> DELETE FROM PDT_HASH;
+4 rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 4, SELF_ID: 0 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 1 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 2 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F2 = 0;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 2 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 = F1;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 1 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 2 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+------------------------------------------------------------
+$P0> DELETE FROM PDT_HASH WHERE F1 = F2;
+No rows deleted.
+------------------------------------------------------------
+PARTITION-COORDINATOR ( TABLE: PDT_HASH, PARTITION: 4/4, ACCESS: 0, SELF_ID: 1 )
+ SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 2 )
+ SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+ SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+ SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+------------------------------------------------------------
+$P0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+-------------------------------------
+-- 3.4 Foreign Key Check
+-------------------------------------
+--+SKIP BEGIN; 
+$P0> DROP TABLE T3 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+$P0> DROP TABLE T1 CASCADE;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER UNIQUE,
+         I2   INTEGER
+     )
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2
+     (
+         I1 INTEGER UNIQUE,
+         I2 INTEGER
+     );
+Create success.
+
+$P0> CREATE TABLE T3
+     (
+         I1   INTEGER UNIQUE,
+         I2   INTEGER
+     )
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+$P0> INSERT INTO T1 VALUES ( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 3, 3 );
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES ( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 3, 3 );
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES ( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 3, 3 );
+1 row inserted.
+
+-- should be fail
+$P0> DELETE FROM T1 WHERE I1 = 0;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_FK]
+$P0> DELETE FROM T1 WHERE I1 = 1;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_FK]
+$P0> DELETE FROM T1 WHERE I1 = 2;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_FK]
+$P0> DELETE FROM T1 WHERE I1 = 3;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_FK]
+
+$P0> ALTER TABLE T2 DROP CONSTRAINT T2_FK;
+Alter success.
+$P0> ALTER TABLE T3 DROP CONSTRAINT T3_FK;
+Alter success.
+
+$P0> TRUNCATE TABLE T1;
+Truncate success.
+$P0> TRUNCATE TABLE T2;
+Truncate success.
+$P0> TRUNCATE TABLE T3;
+Truncate success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_FK FOREIGN KEY(I2) REFERENCES T1(I1) ON DELETE CASCADE;
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_FK FOREIGN KEY(I2) REFERENCES T2(I1) ON DELETE CASCADE;
+Alter success.
+
+$P0> INSERT INTO T1 VALUES ( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 3, 3 );
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES ( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 3, 3 );
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES ( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 3, 3 );
+1 row inserted.
+
+-- should be success
+$P0> DELETE FROM T1 WHERE I1 = 0;
+1 row deleted.
+$P0> DELETE FROM T1 WHERE I1 = 1;
+1 row deleted.
+$P0> DELETE FROM T1 WHERE I1 = 2;
+1 row deleted.
+$P0> DELETE FROM T1 WHERE I1 = 3;
+1 row deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM T3;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+

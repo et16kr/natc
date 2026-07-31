@@ -1,0 +1,64 @@
+#######################################################################
+# Duplicate Index Name Test
+#######################################################################
+
+###################################
+#SECTOR; PREPARATION
+###################################
+
+INCLUDE select_meta.i;
+
+DEF PREPARE()
+{
+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+DROP INDEX IDX1;
+SKIP END;
+}
+
+###################################
+# SECTOR; PR-6119
+###################################
+
+DEF MAIN()
+{
+CALL PREPARE();
+
+create table t1 (i1 integer, i2 integer)
+partition by range(i1)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+create table t2 (i1 integer, i2 integer)
+partition by range(i2)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+alter table t1 add constraint pk_t1 primary key (i1, i2);
+
+CALL SELECT_META();
+
+create unique index idx1 on t1 (i1,i2);
+create unique index idx1 on t1 (i1);
+create unique index idx1 on t1 (i2);
+
+CALL SELECT_META();
+
+alter table t2 add constraint pk_t1 primary key (i1, i2);
+
+CALL SELECT_META();
+
+
+###################################
+#SECTOR; FINALIZATION
+###################################
+
+CALL PREPARE();
+}

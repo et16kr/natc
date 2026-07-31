@@ -1,0 +1,320 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- MOVE LIST PARTITIOIN ( PK:INTEGER )
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT_LIST;
+$P0> DROP TABLE PDT_LIST_SRC;
+--+SKIP END; 
+
+$P0> CREATE TABLE PDT_LIST_SRC
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10, 15 ),
+         PARTITION P2 VALUES ( 20, 25 ),
+         PARTITION P3 VALUES ( 30, 35 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 10, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 30, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 40, 0 );
+1 row inserted.
+
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+$P0> CREATE TABLE PDT_LIST
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10, 15 ),
+         PARTITION P2 VALUES ( 20, 25 ),
+         PARTITION P3 VALUES ( 30, 35 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> MOVE INTO PDT_LIST PARTITION( P1 ) FROM PDT_LIST_SRC PARTITION( P1 );
+1 row moved.
+$P0> MOVE INTO PDT_LIST PARTITION( P2 ) FROM PDT_LIST_SRC PARTITION( P2 );
+1 row moved.
+$P0> MOVE INTO PDT_LIST PARTITION( P3 ) FROM PDT_LIST_SRC PARTITION( P3 );
+1 row moved.
+$P0> MOVE INTO PDT_LIST PARTITION( P4 ) FROM PDT_LIST_SRC PARTITION( P4 );
+1 row moved.
+
+-- should be [10]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P1 );
+F1          
+--------------
+10          
+1 row selected.
+-- should be [20]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P2 );
+F1          
+--------------
+20          
+1 row selected.
+-- should be [30]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P3 );
+F1          
+--------------
+30          
+1 row selected.
+-- should be [40]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P4 );
+F1          
+--------------
+40          
+1 row selected.
+
+$P0> MOVE INTO PDT_LIST FROM PDT_LIST_SRC PARTITION( P1 );
+No rows moved.
+$P0> MOVE INTO PDT_LIST FROM PDT_LIST_SRC PARTITION( P2 );
+No rows moved.
+$P0> MOVE INTO PDT_LIST FROM PDT_LIST_SRC PARTITION( P3 );
+No rows moved.
+$P0> MOVE INTO PDT_LIST FROM PDT_LIST_SRC PARTITION( P4 );
+No rows moved.
+
+-- should be [10,10]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P1 );
+F1          
+--------------
+10          
+1 row selected.
+-- should be [20,20]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P2 );
+F1          
+--------------
+20          
+1 row selected.
+-- should be [30,30]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P3 );
+F1          
+--------------
+30          
+1 row selected.
+-- should be [40,40]
+$P0> SELECT F1 FROM PDT_LIST PARTITION( P4 );
+F1          
+--------------
+40          
+1 row selected.
+
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 10, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 30, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_LIST_SRC VALUES( 40, 0 );
+1 row inserted.
+
+$P0> DROP TABLE PDT_LIST;
+Drop success.
+$P0> CREATE TABLE PDT_LIST
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10, 15 ),
+         PARTITION P2 VALUES ( 20, 25 ),
+         PARTITION P3 VALUES ( 30, 35 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P1 ) FROM PDT_LIST_SRC;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P1 ) FROM PDT_LIST_SRC PARTITION( P2 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P2 ) FROM PDT_LIST_SRC PARTITION( P3 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P3 ) FROM PDT_LIST_SRC PARTITION( P4 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P4 ) FROM PDT_LIST_SRC PARTITION( P1 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P1 ) FROM PDT_LIST_SRC WHERE F1 = 20;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P2 ) FROM PDT_LIST_SRC WHERE F1 = 30;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P3 ) FROM PDT_LIST_SRC WHERE F1 = 40;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_LIST PARTITION( P4 ) FROM PDT_LIST_SRC WHERE F1 = 10;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_LIST;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+$P0> DROP TABLE PDT_LIST;
+Drop success.
+$P0> CREATE TABLE PDT_LIST
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10, 15 ),
+         PARTITION P2 VALUES ( 20, 25 ),
+         PARTITION P3 VALUES ( 30, 35 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> MOVE INTO PDT_LIST PARTITION( P1 ) FROM PDT_LIST_SRC WHERE F1 = 10;
+1 row moved.
+-- should be success
+$P0> MOVE INTO PDT_LIST PARTITION( P2 ) FROM PDT_LIST_SRC WHERE F1 = 20;
+1 row moved.
+-- should be success
+$P0> MOVE INTO PDT_LIST PARTITION( P3 ) FROM PDT_LIST_SRC WHERE F1 = 30;
+1 row moved.
+-- should be success
+$P0> MOVE INTO PDT_LIST PARTITION( P4 ) FROM PDT_LIST_SRC WHERE F1 = 40;
+1 row moved.
+
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+$P0> DROP TABLE PDT_LIST;
+Drop success.
+$P0> DROP TABLE PDT_LIST_SRC;
+Drop success.
+

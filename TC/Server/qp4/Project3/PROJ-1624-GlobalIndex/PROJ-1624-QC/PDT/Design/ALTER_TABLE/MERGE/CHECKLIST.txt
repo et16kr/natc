@@ -1,0 +1,44 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for ALTER TABLE ... MERGE PARTITIONS
+
+#Description: 
+
+#CheckList
+    - BASIC TEST
+        - 파티션드 테이블인지 체크
+        - SrcPart 파티션 이름 체크
+
+    - SrcPart의 파티션 키 조건
+        - 단일 컬럼
+        - 멀티 컬럼
+        - 데이터 타입
+            - INTEGER
+            - DATE
+            - VARCHAR
+
+    - DstPart의 TBS 체크
+
+    - DstPart의 LOB 컬럼의 TBS 체크
+
+    - 병합 기준 체크
+        - 인접 파티션인지 체크
+
+    - SrcPart1, SrcPart2의 이름 체크
+
+    - Merge Type
+        - Left In-place Merge
+        - Right In-place Merge
+        - Out-place Merge
+
+    - SrcPart1과 SrcPart2의 위치에 따른 병합
+        - 가장 작은 파티션 + 중간 파티션
+        - 중간 파티션 + 중간 파티션
+        - 중간 파티션 + 기본 파티션
+        - 병합 후, SrcPart1, SrcPart2, DstPart의 
+          PARTITION_MIN_VALUE, PARTITION_MAX_VALUE 체크
+        - 병합 후, 데이터가 정확히 이동했는지 체크
+
+    - SrcPart에 인덱스 유무
+        - 단일 인덱스
+        - 다중 인덱스

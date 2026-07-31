@@ -1,0 +1,427 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop view v1;
+$T0> drop view v2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition t1_p1 values less than (6),
+  partition t1_pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 4 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 5 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 6 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 7 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 8 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3);
+Create success.
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition t2_p1 values less than (6),
+  partition t2_pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 values ( 3, 3, 3 );
+1 row inserted.
+$T0> insert into t2 values ( 4, 4, 4 );
+1 row inserted.
+$T0> insert into t2 values ( 5, 5, 5 );
+1 row inserted.
+$T0> insert into t2 values ( 6, 6, 6 );
+1 row inserted.
+$T0> insert into t2 values ( 7, 7, 7 );
+1 row inserted.
+$T0> insert into t2 values ( 8, 8, 8 );
+1 row inserted.
+$T0> insert into t2 values ( 9, 9, 9 );
+1 row inserted.
+$T0> insert into t2 values ( 10, 10, 10 );
+1 row inserted.
+
+$T0> create index t2_idx2 on t2(i2);
+Create success.
+$T0> create index t2_idx3 on t2(i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC
+T1 has no primary key
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_IDX2                                  BTREE                  I2 ASC
+T2_IDX3                                  BTREE                  I3 ASC
+T2 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> create view v1 as
+  select cast(t.table_name || ',' || v.lock_desc || ',' || v.lock_cnt as varchar(50)) as lock_info
+  from system_.sys_tables_ t, v$lock v
+  where t.user_id = user_id() and t.table_oid = v.table_oid
+  order by t.table_name;
+Create success.
+
+$T0> create view v2 as
+  select cast(p.partition_name || ',' || v.lock_desc || ',' || v.lock_cnt as varchar(50)) as lock_info
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p, v$lock v
+  where t.user_id = user_id() and t.table_id = p.table_id and p.partition_oid = v.table_oid
+  order by p.partition_name;
+Create success.
+
+$T0> select to_char(i1) i1 from t1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+2                                                                 
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+13 rows selected.
+
+$T0> select to_char(i1) i1 from t1 where i2=1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+$GIT_T1_IDX2,IS_LOCK,1                                            
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+7 rows selected.
+
+$T0> select to_char(i1) i1 from t1 where i3=1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+$GIT_T1_IDX3,IS_LOCK,1                                            
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+7 rows selected.
+
+$T0> select to_char(i1) i1 from t1 where i2=1 and i3=1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+$GIT_T1_IDX2,IS_LOCK,1                                            
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+7 rows selected.
+
+$T0> select to_char(t1.i1) i1 from t1, t2 where t1.i2=t2.i2
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+$GIT_T2_IDX2,IS_LOCK,1                                            
+T1,IS_LOCK,1                                                      
+T2,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+T2_P1,IS_LOCK,1                                                   
+T2_PD,IS_LOCK,1                                                   
+15 rows selected.
+
+$T0> select to_char(t1.i1) i1 from t1, t2 where t1.i3=t2.i3
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+$GIT_T2_IDX3,IS_LOCK,1                                            
+T1,IS_LOCK,1                                                      
+T2,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+T2_P1,IS_LOCK,1                                                   
+T2_PD,IS_LOCK,1                                                   
+15 rows selected.
+
+$T0> select to_char(t1.i1) i1 from t1, t2 where t1.i2=t2.i2 and t1.i3=t2.i3
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+T1,IS_LOCK,1                                                      
+T2,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+T2_P1,IS_LOCK,1                                                   
+T2_PD,IS_LOCK,1                                                   
+14 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> insert into t1 values ( 10, 10, 10 );
+1 row inserted.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+$GIT_T1_IDX2,IX_LOCK,1                              
+$GIT_T1_IDX3,IX_LOCK,1                              
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_PD,IX_LOCK,1                                     
+6 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> update t1 set i1=11, i2=11, i3=11 where i1=10;
+1 row updated.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+$GIT_T1_IDX2,IX_LOCK,1                              
+$GIT_T1_IDX3,IX_LOCK,1                              
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_PD,IX_LOCK,1                                     
+6 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE ROW MOVEMENT
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> update t1 set i1=0, i2=0, i3=0 where i1=11;
+1 row updated.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+$GIT_T1_IDX2,IX_LOCK,1                              
+$GIT_T1_IDX3,IX_LOCK,1                              
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_P1,IX_LOCK,1                                     
+T1_PD,IX_LOCK,1                                     
+7 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; DELETE
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> delete from t1 where i1=0;
+1 row deleted.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+$GIT_T1_IDX2,IX_LOCK,1                              
+$GIT_T1_IDX3,IX_LOCK,1                              
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_P1,IX_LOCK,1                                     
+6 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop view v1;
+$T0> drop view v2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

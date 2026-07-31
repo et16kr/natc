@@ -1,0 +1,367 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop tablespace data1 including contents and datafiles;
+drop tablespace data2 including contents and datafiles;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+}
+
+DEF CREATE_TABLE( @aPartType, @aColType1, @aColType2 )
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+if ( @aPartType == 'range' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by range(i1)
+(
+  partition p1 values less than ('100'),
+  partition p2 values less than ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+}
+elsif ( @aPartType == 'hash' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+
+}
+elsif ( @aPartType == 'list' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by list(i1)
+(
+  partition p1 values ('100'),
+  partition p2 values ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+}
+else
+{
+  print "error";
+}
+
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; GLOBAL, LOCAL
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create index idx1 on t1(i1) local;
+  create index idx2 on t1(i2);
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create localunique index idx1 on t1(i1) local;
+  create unique index idx2 on t1(i2);
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+}
+
+##################################
+# SECTOR; PREFIX, NON-PREFIX
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create index idx1 on t1(i1);
+  create index idx2 on t1(i1, i2);
+  create index idx3 on t1(i1, i2, i3);
+
+  create index idx4 on t1(i2);
+  create index idx5 on t1(i2, i3);
+
+  create index idx6 on t1(i3);
+  create index idx7 on t1(i3, i1);
+  create index idx8 on t1(i3, i2, i1);
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+  CALL DESC_INDEX( "IDX4" );
+  CALL DESC_INDEX( "IDX5" );
+  CALL DESC_INDEX( "IDX6" );
+  CALL DESC_INDEX( "IDX7" );
+  CALL DESC_INDEX( "IDX8" );
+}
+
+##################################
+# SECTOR; TABLESPACE
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create index idx1 on t1(i1) tablespace sys_tbs_mem_data;
+  create index idx2 on t1(i2) tablespace sys_tbs_disk_data;
+  create index idx3 on t1(i3) tablespace data1;
+  create index idx4 on t1(i2, i3) tablespace data2;
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+  CALL DESC_INDEX( "IDX4" );
+}
+
+##################################
+# SECTOR; DATA TYPE
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  for $sPartColType in "integer" "varchar(10)"
+  {
+    for $sColType in "integer" "numeric(5,1)" "char(10)" "varchar(10)" "date"
+    {
+      CALL CREATE_TABLE( $sPartType, $sPartColType, $sColType );
+
+      create index idx1 on t1(i1);
+      create index idx2 on t1(i1, i2);
+      create index idx3 on t1(i1, i2, i3);
+
+      create index idx4 on t1(i2);
+      create index idx5 on t1(i2, i3);
+
+      create index idx6 on t1(i3);
+      create index idx7 on t1(i3, i1);
+      create index idx8 on t1(i3, i2, i1);
+
+      desc t1;
+      CALL DESC_INDEX( "IDX1" );
+      CALL DESC_INDEX( "IDX2" );
+      CALL DESC_INDEX( "IDX3" );
+      CALL DESC_INDEX( "IDX4" );
+      CALL DESC_INDEX( "IDX5" );
+      CALL DESC_INDEX( "IDX6" );
+      CALL DESC_INDEX( "IDX7" );
+      CALL DESC_INDEX( "IDX8" );
+    }
+  }
+}
+
+##################################
+# SECTOR; B-TREE, R-TREE
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  for $sColType in "integer" "geometry"
+  {
+    CALL CREATE_TABLE( $sPartType, "varchar(10)", $sColType );
+
+    create index idx1 on t1(i2);
+    create index idx2 on t1(i3);
+    create index idx3 on t1(i2, i3);
+
+    desc t1;
+    CALL DESC_INDEX( "IDX1" );
+    CALL DESC_INDEX( "IDX2" );
+    CALL DESC_INDEX( "IDX3" );
+  }
+}
+
+##################################
+# SECTOR; NON-UNIQUE, UNIQUE
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create unique index idx1 on t1(i1);
+  create unique index idx2 on t1(i1, i2);
+  create unique index idx3 on t1(i1, i2, i3);
+
+  create unique index idx4 on t1(i2);
+  create unique index idx5 on t1(i2, i3);
+
+  create unique index idx6 on t1(i3);
+  create unique index idx7 on t1(i3, i1);
+  create unique index idx8 on t1(i3, i2, i1);
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+  CALL DESC_INDEX( "IDX4" );
+  CALL DESC_INDEX( "IDX5" );
+  CALL DESC_INDEX( "IDX6" );
+  CALL DESC_INDEX( "IDX7" );
+  CALL DESC_INDEX( "IDX8" );
+}
+
+##################################
+# SECTOR; ASC, DESC
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create unique index idx1 on t1(i1 desc);
+  create unique index idx2 on t1(i1 desc, i2 asc);
+  create unique index idx3 on t1(i1 asc, i2 desc, i3 desc);
+
+  create unique index idx4 on t1(i2 asc);
+  create unique index idx5 on t1(i2 asc, i3 desc);
+
+  create unique index idx6 on t1(i3 desc);
+  create unique index idx7 on t1(i3 desc, i1 desc);
+  create unique index idx8 on t1(i3 desc, i2 desc, i1 desc);
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+  CALL DESC_INDEX( "IDX4" );
+  CALL DESC_INDEX( "IDX5" );
+  CALL DESC_INDEX( "IDX6" );
+  CALL DESC_INDEX( "IDX7" );
+  CALL DESC_INDEX( "IDX8" );
+}
+
+##################################
+# SECTOR; PARALLEL OPTION
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create unique index idx1 on t1(i1) noparallel;
+  create unique index idx2 on t1(i1, i2) parallel 1;
+  create unique index idx3 on t1(i1, i2, i3) parallel 2;
+
+  create unique index idx4 on t1(i2) noparallel;
+  create unique index idx5 on t1(i2, i3) parallel 5;
+
+  create unique index idx6 on t1(i3) noparallel;
+  create unique index idx7 on t1(i3, i1) parallel 5;
+  create unique index idx8 on t1(i3, i2, i1) parallel 10;
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+  CALL DESC_INDEX( "IDX4" );
+  CALL DESC_INDEX( "IDX5" );
+  CALL DESC_INDEX( "IDX6" );
+  CALL DESC_INDEX( "IDX7" );
+  CALL DESC_INDEX( "IDX8" );
+}
+
+##################################
+# SECTOR; LOGGING OPTION
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create unique index idx1 on t1(i1) logging;
+  create unique index idx2 on t1(i2) nologging force;
+  create unique index idx3 on t1(i3) nologging noforce;
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+}
+
+##################################
+# SECTOR; PHYSICAL ATTRIBUTES OPTION
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create index idx1 on t1(i1) initrans 8 maxtrans 24;
+  create index idx2 on t1(i2) initrans 16 maxtrans 30;
+  create index idx3 on t1(i3) initrans 4 maxtrans 8;
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+}
+
+##################################
+# SECTOR; STORAGE OPTION
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  create index idx1 on t1(i1) storage ( initextents 3 nextextents 2 minextents 2 maxextents 10 );
+  create index idx2 on t1(i2) storage ( minextents 2 maxextents unlimited );
+  create index idx3 on t1(i3) storage ( maxextents 128 );
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+}
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

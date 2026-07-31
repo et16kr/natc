@@ -1,0 +1,296 @@
+#######################################################################
+# INDEX DDL TEST
+#######################################################################
+
+#######################################################################
+# SIMPLE INDEX DDL TEST
+#######################################################################
+
+INCLUDE select_meta.i;
+
+###################################
+#SECTOR; PREPARATION
+###################################
+
+DEF MAIN()
+{
+DROP INDEX T1_IDX;
+DROP TABLE T1;
+CREATE TABLE T1 ( I INTEGER, J VARCHAR(10) )
+partition by range(I)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+
+###################################
+#SECTOR; WITHOUT DATA
+###################################
+
+CALL SELECT_META();
+
+CREATE INDEX T1_IDX ON T1 (I);
+
+CALL SELECT_META();
+
+INSERT INTO T1 VALUES (1, 'AA');
+INSERT INTO T1 VALUES (2, 'BB');
+
+CREATE UNIQUE INDEX T1_IDX2 ON T1 (J);
+INSERT INTO T1 VALUES (2, 'BB');
+INSERT INTO T1 VALUES (2, 'CC');
+SELECT * FROM T1;
+
+###################################
+#SECTOR; DROP INDEX
+###################################
+
+DROP INDEX T1_IDX;
+
+CALL SELECT_META();
+
+DELETE FROM T1 WHERE I = 1;
+
+SELECT * FROM T1 ORDER BY I, J;
+
+###################################
+#SECTOR; CREATE INDEX WITH DATA
+###################################
+
+CREATE UNIQUE INDEX T1_IDX ON T1 (I);
+
+INSERT INTO T1 VALUES (2, 'DD');
+
+SELECT * FROM T1 ORDER BY I, J;
+
+###################################
+#SECTOR; FINALIZATION
+###################################
+
+DROP TABLE T1;
+
+#######################################################################
+# BTREE INDEX test
+#######################################################################
+
+###################################
+#SECTOR; PREPARATION
+###################################
+
+SKIP BEGIN;
+DROP TABLE T1;
+SKIP END;
+
+CREATE TABLE T1 (I1 CHAR(3), I2 CHAR(3), I3 CHAR(3))
+partition by list(i1)
+(
+	partition p1 values ('aaa','c'),
+	partition p2 values ('ddd','bbb'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+
+INSERT INTO T1 VALUES ('aaa','aaa','aaa');
+INSERT INTO T1 VALUES ('bbb','b','b');
+INSERT INTO T1 VALUES ('c','c','c');
+INSERT INTO T1 VALUES ('ddd','d','d');
+INSERT INTO T1 VALUES ('ddd','e','e');
+INSERT INTO T1 VALUES ('ddd','f','f');
+INSERT INTO T1 VALUES ('a','a','a');
+INSERT INTO T1 VALUES ('e','e','e');
+INSERT INTO T1 VALUES ('c','a','c');
+INSERT INTO T1 VALUES ('f','f','f');
+INSERT INTO T1 VALUES ('c','c','c');
+
+SKIP BEGIN;
+DROP INDEX IDX1;
+SKIP END;
+
+##################################
+#SECTOR; BTREE INDEX test ASC
+###################################
+
+CREATE INDEX IDX1 ON T1 (I1 ASC);
+
+SELECT * FROM T1 WHERE I1 > 'b' AND I2 >= 'c';
+SELECT * FROM T1 WHERE I2 >= 'c' AND I1 > 'b';
+SELECT * FROM T1 WHERE I2 = 'd' AND I1 LIKE 'd%' AND I3 = 'd';
+SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' AND I1 = 'ddd';
+SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' OR I1 = 'ddd';
+
+SKIP BEGIN;
+DROP INDEX IDX1;
+SKIP END;
+
+###################################
+#SECTOR; BTREE INDEX test DESC
+###################################
+
+CREATE INDEX IDX1 ON T1 (I1 DESC);
+
+SELECT * FROM T1 WHERE I1 > 'b' AND I2 >= 'c';
+SELECT * FROM T1 WHERE I2 >= 'c' AND I1 > 'b';
+SELECT * FROM T1 WHERE I2 = 'd' AND I1 LIKE 'd%' AND I3 = 'd';
+SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' AND I1 = 'ddd';
+SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' OR I1 = 'ddd';
+
+###################################
+#SECTOR; FINALIZATION
+###################################
+
+SKIP BEGIN;
+DROP TABLE T1;
+DROP INDEX IDX1;
+SKIP END;
+
+#######################################################################
+# CREATE INDEX 
+#######################################################################
+
+###################################
+#SECTOR; PREPARATION
+###################################
+
+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+DROP TABLE T3;
+SKIP END;
+
+CREATE TABLE T1 (I1 NUMERIC, I2 NUMERIC, I3 NUMERIC) 
+partition by range(i1)
+(
+	partition p1 values less than('15'),
+	partition p2 values less than('35'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE TABLE T2 (I4 NUMERIC, I5 NUMERIC, I6 NUMERIC)
+partition by range(i1)
+(
+	partition p1 values less than('15'),
+	partition p2 values less than('45'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE TABLE T3 (I6 NUMERIC, I7 NUMERIC, I8 NUMERIC)
+partition by range(i1)
+(
+	partition p1 values less than('25'),
+	partition p2 values less than('55'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+
+INSERT INTO T1 VALUES (10,10,10);
+INSERT INTO T1 VALUES (20,20,20);
+INSERT INTO T1 VALUES (30,30,30);
+INSERT INTO T2 VALUES (10,10,10);
+INSERT INTO T2 VALUES (20,20,20);
+INSERT INTO T2 VALUES (40,40,40);
+INSERT INTO T3 VALUES (10,10,10);
+INSERT INTO T3 VALUES (20,20,20);
+INSERT INTO T3 VALUES (50,50,50);
+
+SKIP BEGIN;
+DROP INDEX IDX1;
+DROP INDEX IDX2;
+DROP INDEX IDX3;
+DROP INDEX IDX4;
+DROP INDEX IDX5;
+DROP INDEX IDX6;
+DROP INDEX IDX7;
+DROP INDEX IDX8;
+DROP INDEX IDX9;
+SKIP END;
+
+###################################
+#SECTOR; CREATE INDEX ASC
+###################################
+
+CREATE INDEX idx1 ON t1 (i1 ASC);
+
+###################################
+#SECTOR; CREATE INDEX ASC has already index
+###################################
+
+CREATE INDEX idx2 ON t1 (i1 ASC) INDEXTYPE IS BTREE;
+CREATE INDEX idx3 ON t1 (i2 ASC);
+CREATE INDEX idx4 ON t1 (i2 ASC) INDEXTYPE IS RTREE;
+CREATE INDEX idx5 ON t1 (i3 ASC);
+CREATE INDEX idx6 ON t1 (i3 ASC) INDEXTYPE IS BTREE;
+CREATE INDEX idx7 ON t1 (i1 ASC, i2 ASC, i3 ASC);
+CREATE INDEX idx8 ON t1 (i1 ASC, i2 ASC, i3 ASC) INDEXTYPE IS BTREE;
+CREATE INDEX idx9 ON t1 (i1 ASC, i2 ASC);
+
+SKIP BEGIN;
+DROP INDEX IDX1;
+DROP INDEX IDX2;
+DROP INDEX IDX3;
+DROP INDEX IDX4;
+DROP INDEX IDX5;
+DROP INDEX IDX6;
+DROP INDEX IDX7;
+DROP INDEX IDX8;
+DROP INDEX IDX9;
+DROP INDEX IDX10;
+DROP INDEX IDX11;
+DROP INDEX IDX12;
+DROP INDEX IDX13;
+DROP INDEX IDX14;
+SKIP END;
+
+###################################
+#SECTOR; CREATE INDEX DESC 
+###################################
+
+CREATE INDEX IDX1 ON T1 (I1 DESC);
+
+###################################
+#SECTOR; CREATE INDEX DESC has already index & COLUMN ORDER
+###################################
+
+CREATE INDEX IDX2 ON T1 (I1 DESC) INDEXTYPE IS BTREE;
+CREATE INDEX IDX3 ON T1 (I2 DESC);
+CREATE INDEX IDX4 ON T1 (I2 DESC) INDEXTYPE IS RTREE;
+CREATE INDEX IDX5 ON T1 (I3 DESC);
+CREATE INDEX IDX6 ON T1 (I3 DESC) INDEXTYPE IS BTREE;
+CREATE INDEX IDX7 ON T1 (I1 DESC, I2 DESC, I3 DESC);
+CREATE INDEX IDX8 ON T1 (I1 DESC, I2 DESC, I3 DESC) INDEXTYPE IS BTREE;
+CREATE INDEX IDX9 ON T1 (I1 DESC, I3 DESC, I2 DESC);
+CREATE INDEX IDX10 ON T1 (I1 ASC, I3 DESC, I2 ASC);
+CREATE INDEX IDX11 ON T1 (I2 ASC);
+CREATE INDEX IDX12 ON T2 (I4 DESC, I4 ASC);
+
+INSERT INTO T3 VALUES (NULL,NULL,NULL);
+INSERT INTO T3 VALUES (NULL,NULL,NULL);
+CREATE INDEX IDX13 ON T3 (I7 DESC);
+CREATE UNIQUE INDEX IDX14 ON T3 (I8 DESC);
+
+###################################
+#SECTOR; FINALIZATION
+###################################
+
+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+DROP TABLE T3;
+DROP INDEX IDX1;
+DROP INDEX IDX2;
+DROP INDEX IDX3;
+DROP INDEX IDX4;
+DROP INDEX IDX5;
+DROP INDEX IDX6;
+DROP INDEX IDX7;
+DROP INDEX IDX8;
+DROP INDEX IDX9;
+DROP INDEX IDX10;
+DROP INDEX IDX11;
+DROP INDEX IDX12;
+DROP INDEX IDX13;
+DROP INDEX IDX14;
+SKIP END;
+}
+

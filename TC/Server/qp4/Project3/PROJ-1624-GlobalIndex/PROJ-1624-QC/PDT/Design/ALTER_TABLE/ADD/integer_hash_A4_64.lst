@@ -1,0 +1,448 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- ADD PARTITIOIN ( PK:INTEGER )
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT_HASH;
+--+SKIP END; 
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+------------------------------------------
+-- 1.1 ADD PARTITION WITH 4 PARTITON
+--     VS. PARTITIONED TABLE WITH 5 PARTITON
+------------------------------------------
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 6, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 7, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 8, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 9, 0 );
+1 row inserted.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+0           
+8           
+2 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+1           
+3           
+4           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+2           
+5           
+6           
+7           
+9           
+5 rows selected.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+$P0> ALTER TABLE PDT_HASH
+     ADD PARTITION P5;
+Alter success.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+2           
+6           
+7           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+8           
+4           
+2 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+0           
+1           
+3           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P5 );
+F1          
+--------------
+5           
+9           
+2 rows selected.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4,
+         PARTITION P5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 6, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 7, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 8, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 9, 0 );
+1 row inserted.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+2           
+6           
+7           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+4           
+8           
+2 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+0           
+1           
+3           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P5 );
+F1          
+--------------
+5           
+9           
+2 rows selected.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+------------------------------------------
+-- 1.2 ADD PARTITION WITH 4 PARTITON(INDEX)
+--     VS. PARTITIONED TABLE WITH 5 PARTITON
+------------------------------------------
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER PRIMARY KEY,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 6, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 7, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 8, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 9, 0 );
+1 row inserted.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 ) WHERE F1 < 10;
+F1          
+--------------
+0           
+8           
+2 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 ) WHERE F1 < 10;
+F1          
+--------------
+1           
+3           
+4           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 ) WHERE F1 < 10;
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 ) WHERE F1 < 10;
+F1          
+--------------
+2           
+5           
+6           
+7           
+9           
+5 rows selected.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+$P0> ALTER TABLE PDT_HASH
+     ADD PARTITION P5;
+Alter success.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 ) WHERE F1 < 10;
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 ) WHERE F1 < 10;
+F1          
+--------------
+2           
+6           
+7           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 ) WHERE F1 < 10;
+F1          
+--------------
+4           
+8           
+2 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 ) WHERE F1 < 10;
+F1          
+--------------
+0           
+1           
+3           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P5 ) WHERE F1 < 10;
+F1          
+--------------
+5           
+9           
+2 rows selected.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER PRIMARY KEY,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4,
+         PARTITION P5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 3, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 4, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 6, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 7, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 8, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH VALUES( 9, 0 );
+1 row inserted.
+
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 ) WHERE F1 < 10;
+F1          
+--------------
+No rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 ) WHERE F1 < 10;
+F1          
+--------------
+2           
+6           
+7           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 ) WHERE F1 < 10;
+F1          
+--------------
+4           
+8           
+2 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 ) WHERE F1 < 10;
+F1          
+--------------
+0           
+1           
+3           
+3 rows selected.
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P5 ) WHERE F1 < 10;
+F1          
+--------------
+5           
+9           
+2 rows selected.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+------------------------------------------
+-- 2.1 파티션 이름 중복 검사
+------------------------------------------
+-- should be fail
+$P0> ALTER TABLE PDT_HASH
+     ADD PARTITION P1;
+[ERR-31270 : The partition name is already used by the partitioned table 
+0002 :      ADD PARTITION P1
+                         ^ ^
+]
+
+------------------------------------------
+-- 2.2 메모리 테이블스페이스 검사
+------------------------------------------
+-- should be fail
+$P0> ALTER TABLE PDT_HASH
+     ADD PARTITION P6 
+     TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-31264 : Unable to create a partitioned table or partition in the memory tablespace.]
+
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+-- nothing to do
+
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+

@@ -1,0 +1,139 @@
+--######################################################
+-- TRUNCATE PARTITIOIN
+--######################################################
+
+--###################################
+--+SECTOR; INTIALIZE
+--###################################
+
+--+SKIP BEGIN;
+DROP TABLE T1 CASCADE;
+DROP TABLE PDT_RANGE CASCADE;
+--+SKIP END;
+
+CREATE TABLE PDT_RANGE
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( 10 ),
+    PARTITION P2 VALUES LESS THAN ( 20 ),
+    PARTITION P3 VALUES LESS THAN ( 30 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+
+
+--#########################################
+--+SECTOR; DO JOB #1 (1. Basic Test)
+--#########################################
+
+INSERT INTO PDT_RANGE VALUES( 0, 0 );
+INSERT INTO PDT_RANGE VALUES( 10, 0 );
+INSERT INTO PDT_RANGE VALUES( 20, 0 );
+INSERT INTO PDT_RANGE VALUES( 30, 0 );
+
+-- should be 4
+SELECT COUNT(*) FROM PDT_RANGE;
+
+ALTER TABLE PDT_RANGE
+TRUNCATE PARTITION P1;
+
+-- should be 3
+SELECT COUNT(*) FROM PDT_RANGE;
+
+-- should be 0
+SELECT COUNT(*) FROM PDT_RANGE PARTITION( P1 );
+
+
+--#########################################
+--+SECTOR; DO JOB #2 (2. Validation Test)
+--#########################################
+
+----------------------------
+-- 2.1 파티션 이름 검사
+----------------------------
+-- should be fail
+ALTER TABLE PDT_RANGE
+TRUNCATE PARTITION P5;
+
+----------------------------
+-- 2.2 참조키 검사 
+----------------------------
+DROP TABLE PDT_RANGE CASCADE;
+CREATE TABLE PDT_RANGE
+(
+    F1   INTEGER PRIMARY KEY,
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( 10 ),
+    PARTITION P2 VALUES LESS THAN ( 20 ),
+    PARTITION P3 VALUES LESS THAN ( 30 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT_RANGE VALUES( 0, 0 );
+INSERT INTO PDT_RANGE VALUES( 10, 0 );
+INSERT INTO PDT_RANGE VALUES( 20, 0 );
+INSERT INTO PDT_RANGE VALUES( 30, 0 );
+
+CREATE TABLE T1
+(
+    F1  INTEGER CONSTRAINT FK_CONST REFERENCES PDT_RANGE( F1 ),
+    F2  INTEGER
+);
+
+-- should be fail
+ALTER TABLE PDT_RANGE
+TRUNCATE PARTITION P1;
+
+
+--#########################################
+--+SECTOR; DO JOB #3 (3. Execution Test)
+--#########################################
+
+DROP TABLE PDT_RANGE CASCADE;
+CREATE TABLE PDT_RANGE
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( 10 ),
+    PARTITION P2 VALUES LESS THAN ( 20 ),
+    PARTITION P3 VALUES LESS THAN ( 30 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_RANGE VALUES( 0, 0 );
+INSERT INTO PDT_RANGE VALUES( 10, 0 );
+INSERT INTO PDT_RANGE VALUES( 20, 0 );
+INSERT INTO PDT_RANGE VALUES( 30, 0 );
+INSERT INTO PDT_RANGE VALUES( NULL, 0 );
+INSERT INTO PDT_RANGE VALUES( NULL, 0 );
+
+-- should be 6
+SELECT COUNT(*) FROM PDT_RANGE;
+
+-- should be 3
+SELECT COUNT(*) FROM PDT_RANGE PARTITION( P4 );
+
+ALTER TABLE PDT_RANGE
+TRUNCATE PARTITION P4;
+
+-- should be 3
+SELECT COUNT(*) FROM PDT_RANGE;
+
+-- should be 0
+SELECT COUNT(*) FROM PDT_RANGE PARTITION( P4 );
+
+
+--###################################
+--+SECTOR; FINALIZE
+--###################################
+
+DROP TABLE T1 CASCADE;
+DROP TABLE PDT_RANGE CASCADE;

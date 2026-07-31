@@ -1,0 +1,663 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# ALTER TABLE ... ENABLE/DISABLE ROWMOVEMENT(PartKey: INTEGER)
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+--+SKIP END; 
+
+--+APPEND_LST Schema_List_Integer.sql;
+>>> [Schema_List_Integer.sql] BEGIN <<<
+DROP TABLE T1;
+DROP TABLE T2;
+
+CREATE TABLE T1( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+PARTITION BY LIST (I1)
+(
+    PARTITION P1 VALUES (0, 50, 75) TABLESPACE PDT_TBS2,
+    PARTITION P2 VALUES (100, 150, 175, NULL) TABLESPACE PDT_TBS3,
+    PARTITION P3 VALUES (200, 250, 275),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+
+INSERT INTO T1 VALUES (NULL, 100, 100);
+INSERT INTO T1 VALUES (0, 100, 100);
+INSERT INTO T1 VALUES (50, 100, 100);
+INSERT INTO T1 VALUES (75, 100, 100);
+INSERT INTO T1 VALUES (100, 100, 100);
+INSERT INTO T1 VALUES (150, 100, 100);
+INSERT INTO T1 VALUES (175, 100, 100);
+INSERT INTO T1 VALUES (200, 100, 100);
+INSERT INTO T1 VALUES (250, 100, 100);
+INSERT INTO T1 VALUES (275, 100, 100);
+INSERT INTO T1 VALUES (300, 100, 100);
+INSERT INTO T1 VALUES (350, 100, 100);
+INSERT INTO T1 VALUES (375, 100, 100);
+
+
+CREATE TABLE T2( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+PARTITION BY LIST (I1)
+(
+    PARTITION P1 VALUES (0, 50, 75) TABLESPACE PDT_TBS2,
+    PARTITION P2 VALUES (100, 150, 175, NULL) TABLESPACE PDT_TBS3,
+    PARTITION P3 VALUES (200, 250, 275),
+    PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO T2 VALUES (NULL, 100, 100);
+INSERT INTO T2 VALUES (0, 100, 100);
+INSERT INTO T2 VALUES (50, 100, 100);
+INSERT INTO T2 VALUES (75, 100, 100);
+INSERT INTO T2 VALUES (100, 100, 100);
+INSERT INTO T2 VALUES (150, 100, 100);
+INSERT INTO T2 VALUES (175, 100, 100);
+INSERT INTO T2 VALUES (200, 100, 100);
+INSERT INTO T2 VALUES (250, 100, 100);
+INSERT INTO T2 VALUES (275, 100, 100);
+INSERT INTO T2 VALUES (300, 100, 100);
+INSERT INTO T2 VALUES (350, 100, 100);
+INSERT INTO T2 VALUES (375, 100, 100);
+
+CREATE INDEX IDX1 ON T2(I1, I3);
+CREATE INDEX IDX2 ON T2(I3, I1, I2);
+CREATE INDEX IDX3 ON T2(I2, I3);
+CREATE INDEX IDX4 ON T2(I1) LOCAL
+(
+    PARTITION IDX1_P3 ON P3,
+    PARTITION IDX1_P4 ON P4
+);>>> [Schema_List_Integer.sql] END <<<
+--+SYSTEM is -silent -f Schema_List_Integer.sql;
+
+--###################################################################
+--+SECTOR 2; BASIC TEST
+--###################################################################
+--##############################
+--+SECTOR 3; 문법 체크
+--##############################
+$P0> DROP TABLE TEST;
+Drop success.
+
+-- should be fail
+$P0> CREATE TABLE TEST( I1 INTEGER, I2 INTEGER )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (100),
+         PARTITION P2 VALUES (200),
+         PARTITION P3 VALUES (300),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS ENABLE ROW MOVEMENT;
+[ERR-31001 : SQL syntax error 
+
+line 8: parse error
+     ) TABLESPACE PDT_TBS ENABLE ROW MOVEMENT
+                          ^    ^
+
+]
+
+-- should be fail
+$P0> CREATE TABLE TEST( I1 INTEGER, I2 INTEGER )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (100),
+         PARTITION P2 VALUES (200),
+         PARTITION P3 VALUES (300) ENABLE ROW MOVEMENT,
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+
+line 6: parse error
+         PARTITION P3 VALUES (300) ENABLE ROW MOVEMENT,
+                                   ^    ^
+
+]
+
+-- should be success
+$P0> CREATE TABLE TEST( I1 INTEGER, I2 INTEGER )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (100),
+         PARTITION P2 VALUES (200),
+         PARTITION P3 VALUES (300),
+         PARTITION P4 VALUES DEFAULT
+     ) ENABLE ROW MOVEMENT TABLESPACE PDT_TBS;
+Create success.
+
+
+--##############################
+--+SECTOR 4; 파티션의 개수
+--##############################
+--#############
+--# 4개
+--#############
+--+SYSTEM is -silent -f Schema_List_Integer.sql;
+
+$P0> ALTER TABLE T1
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T1 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 7
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+7                    
+1 row selected.
+
+
+$P0> ALTER TABLE T2
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T2 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 7
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+7                    
+1 row selected.
+
+--#############
+--# 1개
+--#############
+--+SYSTEM is -silent -f Schema_List_Integer.sql;
+
+$P0> ALTER TABLE T1
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> ALTER TABLE T1 
+     MERGE PARTITIONS P1, P2 INTO PARTITION P1;
+Alter success.
+
+$P0> ALTER TABLE T1 
+     MERGE PARTITIONS P3, P4 INTO PARTITION P3;
+Alter success.
+
+$P0> ALTER TABLE T1 
+     MERGE PARTITIONS P1, P3 INTO PARTITION P1;
+Alter success.
+
+$P0> UPDATE T1 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 13
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+13                   
+1 row selected.
+
+
+$P0> ALTER TABLE T2
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> ALTER TABLE T2 
+     MERGE PARTITIONS P1, P2 INTO PARTITION P1;
+Alter success.
+
+$P0> ALTER TABLE T2 
+     MERGE PARTITIONS P3, P4 INTO PARTITION P3;
+Alter success.
+
+$P0> ALTER TABLE T2 
+     MERGE PARTITIONS P1, P3 INTO PARTITION P1;
+Alter success.
+
+$P0> UPDATE T2 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 13
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+13                   
+1 row selected.
+
+
+--##############################
+--+SECTOR 5; LOB 컬럼이 있는 경우
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY LIST(I1) 
+     ( PARTITION P1 VALUES (0, 50, 75) TABLESPACE PDT_TBS 
+                             LOB(I2, I3) STORE AS ( TABLESPACE PDT_TBS2 ), 
+       PARTITION P2 VALUES (100, 150, 175, NULL) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES (200, 250, 275) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 );
+Create success.
+
+$P0> CREATE INDEX IDX_LOB ON T1(I1) LOCAL;
+Create success.
+
+$P0> INSERT INTO T1 VALUES ( NULL,'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 0,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 50,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 75,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 100,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 150,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 175,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 200,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 250,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 275,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 300,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 350,   'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 375,   'ABC', 'DEF' );
+1 row inserted.
+
+$P0> ALTER TABLE T1
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T1 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 7
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+7                    
+1 row selected.
+
+
+
+--##################################################################
+--+SECTOR 6; UPDATE 조건에 따른 검사
+--##################################################################
+--##############################
+--+SECTOR 7; 여러 파티션으로 분산
+--##############################
+--+SYSTEM is -silent -f Schema_List_Integer.sql;
+
+$P0> ALTER TABLE T1
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T1 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 7
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+7                    
+1 row selected.
+
+
+$P0> ALTER TABLE T2
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T2 SET I1 = I1 + 50;
+13 rows updated.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 7
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+7                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 8; 모두 같은 파티션으로 이동
+--##############################
+--+SYSTEM is -silent -f Schema_List_Integer.sql;
+
+$P0> ALTER TABLE T1
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T1 SET I1 = 50;
+13 rows updated.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> UPDATE T1 SET I1 = 150;
+13 rows updated.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> UPDATE T1 SET I1 = 250;
+13 rows updated.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> UPDATE T1 SET I1 = 1000;
+13 rows updated.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+
+
+$P0> ALTER TABLE T2
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+$P0> UPDATE T2 SET I1 = 50;
+13 rows updated.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> UPDATE T2 SET I1 = 150;
+13 rows updated.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> UPDATE T2 SET I1 = 250;
+13 rows updated.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> UPDATE T2 SET I1 = 1000;
+13 rows updated.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 13
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+13                   
+1 row selected.
+
+
+
+--##################################################################
+--+SECTOR 9; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+--+SKIP END; 
+

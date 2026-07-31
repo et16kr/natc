@@ -1,0 +1,77 @@
+###########################################################################
+# BUG-35460
+###########################################################################
+
+DEF FINALIZE()
+{
+
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; RANGE PARTITION
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+alter table t1 add constraint t1_pk primary key (i2, i1);
+alter table t1 add constraint t1_uk unique (i3, i2, i1);
+
+desc t1;
+desc "$GIT_T1_PK";
+desc "$GIT_T1_UK";
+
+##################################
+# SECTOR; INSERT
+##################################
+
+select * from t1;
+
+insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+select count(*) from t1;
+
+select count(*) from "$GIT_T1_PK";
+
+select count(*) from "$GIT_T1_UK";
+
+select table_name from system_.sys_tables_ where table_type = 'T' and user_id = user_id() order by table_id;
+
+select table_name from system_.sys_tables_ where table_type = 'G' and user_id = user_id() order by table_id;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

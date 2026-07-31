@@ -1,0 +1,559 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###############################################################
+$T0> # KEYRANGE TEST
+$T0> ###############################################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> COMMIT;
+Commit success.
+$T0> ALTER SESSION SET AUTOCOMMIT = TRUE;
+Alter success.
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+
+$T0> ####################################
+$T0> #SECTOR; PREPARATION
+$T0> ####################################
+
+$T0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+
+$T0> CREATE TABLE T1 (I1 NUMERIC, I2 NUMERIC, I3 NUMERIC, I4 NUMERIC, I5 NUMERIC)
+partition by range(i1)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values less than('10'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO T1 VALUES (1,1,1,1,1);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T1 VALUES (2,2,2,2,2);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T1 VALUES (3,3,3,3,3);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T1 VALUES (4,4,4,4,4);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T1 VALUES (5,5,5,5,5);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T1 VALUES (6,6,6,6,6);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T1 VALUES (7,7,7,7,7);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+
+$T0> DROP INDEX IDX1_1;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_2;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_3;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_4;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_5;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_6;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_7;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_8;
+[ERR-31014 : Index not found]
+
+$T0> ####################################
+$T0> #SECTOR; Composite index - unique, hash==>TTREE, asc 
+$T0> ####################################
+
+$T0> CREATE INDEX IDX1_1 ON T1 (I2 ASC, I1 ASC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX1_2 ON T1 (I1 ASC);
+Create success.
+$T0> CREATE INDEX IDX1_3 ON T1 (I2 ASC);
+Create success.
+$T0> CREATE INDEX IDX1_4 ON T1 (I2 ASC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE UNIQUE INDEX IDX1_7 ON T1 (I1 ASC, I2 ASC, I3 ASC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX1_5 ON T1 (I3 ASC);
+Create success.
+$T0> CREATE INDEX IDX1_6 ON T1 (I3 ASC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX1_1 ON T1 (I1 ASC);
+[ERR-3104C : Duplicate index name]
+$T0> CREATE INDEX IDX1_8 ON T1 (I1 ASC, I2 ASC, I3 ASC);
+[ERR-31051 : Duplicate key columns in an index]
+
+$T0> SELECT * FROM T1 WHERE I1 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: IDX1_2, ACCESS: 1, SELF_ID: 2 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 = '1';
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: IDX1_2, ACCESS: 1, SELF_ID: 2 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 >= 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 5/6, INDEX: IDX1_2, ACCESS: 7, SELF_ID: 2 )
+  SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 = 1 AND I2 = 1 AND I3 = 1 AND I4 = 1 AND I5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: IDX1_7, ACCESS: 1, SELF_ID: 2 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 > 3 OR I1 < 2;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: IDX1_2, ACCESS: 5, SELF_ID: 2 )
+  SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+------------------------------------------------------------
+
+$T0> ####################################
+$T0> #SECTOR; PREPARATION
+$T0> ####################################
+
+$T0> DROP INDEX IDX1_1;
+Drop success.
+$T0> DROP INDEX IDX1_2;
+Drop success.
+$T0> DROP INDEX IDX1_3;
+Drop success.
+$T0> DROP INDEX IDX1_4;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_5;
+Drop success.
+$T0> DROP INDEX IDX1_6;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_7;
+Drop success.
+$T0> DROP INDEX IDX1_8;
+[ERR-31014 : Index not found]
+
+$T0> ####################################
+$T0> #SECTOR; Composite index - unique, desc
+$T0> ####################################
+
+$T0> CREATE INDEX IDX1_1 ON T1 (I2 DESC, I1 DESC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX1_2 ON T1 (I1 DESC);
+Create success.
+$T0> CREATE INDEX IDX1_3 ON T1 (I2 DESC);
+Create success.
+$T0> CREATE INDEX IDX1_4 ON T1 (I2 DESC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE UNIQUE INDEX IDX1_7 ON T1 (I1 DESC, I2 DESC, I3 DESC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX1_5 ON T1 (I3 DESC);
+Create success.
+$T0> CREATE INDEX IDX1_6 ON T1 (I3 DESC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX1_1 ON T1 (I1 DESC);
+[ERR-3104C : Duplicate index name]
+$T0> CREATE INDEX IDX1_8 ON T1 (I1 DESC, I2 DESC, I3 DESC);
+[ERR-31051 : Duplicate key columns in an index]
+
+$T0> SELECT * FROM T1 WHERE I1 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: IDX1_2, ACCESS: 1, SELF_ID: 2 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 = '1';
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: IDX1_2, ACCESS: 1, SELF_ID: 2 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 >= 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+7           7           7           7           7           
+6           6           6           6           6           
+5           5           5           5           5           
+4           4           4           4           4           
+3           3           3           3           3           
+2           2           2           2           2           
+1           1           1           1           1           
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 5/6, INDEX: IDX1_2, ACCESS: 7, SELF_ID: 2 )
+  SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 = 1 AND I2 = 1 AND I3 = 1 AND I4 = 1 AND I5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 1/6, INDEX: IDX1_7, ACCESS: 1, SELF_ID: 2 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+------------------------------------------------------------
+$T0> SELECT * FROM T1 WHERE I1 > 3 OR I1 < 2;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+7           7           7           7           7           
+6           6           6           6           6           
+5           5           5           5           5           
+4           4           4           4           4           
+1           1           1           1           1           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 115 )
+ PARTITION-COORDINATOR ( TABLE: T1, PARTITION: 6/6, INDEX: IDX1_2, ACCESS: 5, SELF_ID: 2 )
+  SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+------------------------------------------------------------
+
+$T0> ####################################
+$T0> #SECTOR; FINALIZATION
+$T0> ####################################
+
+$T0> DROP INDEX IDX1_1;
+Drop success.
+$T0> DROP INDEX IDX1_2;
+Drop success.
+$T0> DROP INDEX IDX1_3;
+Drop success.
+$T0> DROP INDEX IDX1_4;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_5;
+Drop success.
+$T0> DROP INDEX IDX1_6;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX1_7;
+Drop success.
+$T0> DROP INDEX IDX1_8;
+[ERR-31014 : Index not found]
+
+$T0> DROP TABLE T1;
+Drop success.
+
+$T0> ####################################
+$T0> #SECTOR; PREPARATION
+$T0> ####################################
+
+$T0> DROP TABLE T2;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2
+                 ^ ^
+]
+
+$T0> CREATE TABLE T2 (I1 NUMERIC, I2 NUMERIC, I3 NUMERIC, I4 VARCHAR(10), I5 VARCHAR(10))
+partition by range(i1)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values less than('10'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO T2 VALUES (1,1,1,'AAA','AAC');
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T2 VALUES (2,2,2,'ACA','ADC');
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T2 VALUES (3,1,1,'BAA','AFC');
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T2 VALUES (1,2,1,'BAA','AAC');
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T2 VALUES (2,2,1,'BCA','CDC');
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> INSERT INTO T2 VALUES (3,2,1,'DAA','AFC');
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+
+$T0> DROP INDEX IDX2_1;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_2;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_3;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_4;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_5;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_6;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_7;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_8;
+[ERR-31014 : Index not found]
+
+$T0> ####################################
+$T0> #SECTOR; Composite index - unique, asc 
+$T0> ####################################
+
+$T0> CREATE INDEX IDX2_1 ON T2 (I1 ASC,I2 ASC,I3 ASC);
+Create success.
+$T0> CREATE INDEX IDX2_2 ON T2 (I2 ASC,I3 ASC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX2_3 ON T2 (I2 ASC,I3 ASC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX2_4 ON T2 (I2 ASC);
+Create success.
+$T0> CREATE INDEX IDX2_5 ON T2 (I1 ASC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX2_6 ON T2 (I1 ASC);
+[ERR-31051 : Duplicate key columns in an index]
+
+$T0> SELECT * FROM T2 WHERE (I1,I2,I3) = ((1,1,1)) OR (I1,I2,I3) = ((2,2,2));
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           AAA         AAC         
+2           2           2           ACA         ADC         
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 94 )
+ CONCATENATION 
+  PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, INDEX: IDX2_1, ACCESS: 2, SELF_ID: 2 )
+   SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+  FILTER
+   PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, INDEX: IDX2_1, ACCESS: 2, SELF_ID: 2 )
+    SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+    SCAN ( PARTITION: P5, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 16 )
+    SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 17 )
+    SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 18 )
+    SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 19 )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 20 )
+------------------------------------------------------------
+$T0> SELECT * FROM T2 WHERE I2 = 1 AND I3 = 1;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+3           1           1           BAA         AFC         
+1           1           1           AAA         AAC         
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 94 )
+ PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, INDEX: IDX2_2, ACCESS: 2, SELF_ID: 2 )
+  SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+------------------------------------------------------------
+
+$T0> ####################################
+$T0> #SECTOR; PREPARATION
+$T0> ####################################
+
+$T0> DROP INDEX IDX2_1;
+Drop success.
+$T0> DROP INDEX IDX2_2;
+Drop success.
+$T0> DROP INDEX IDX2_3;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_4;
+Drop success.
+$T0> DROP INDEX IDX2_5;
+Drop success.
+$T0> DROP INDEX IDX2_6;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_7;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_8;
+[ERR-31014 : Index not found]
+
+$T0> ####################################
+$T0> #SECTOR; Composite index - unique, desc 
+$T0> ####################################
+
+$T0> CREATE INDEX IDX2_1 ON T2 (I1 DESC,I2 DESC,I3 DESC);
+Create success.
+$T0> CREATE INDEX IDX2_2 ON T2 (I2 DESC,I3 DESC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX2_3 ON T2 (I2 DESC,I3 DESC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX2_4 ON T2 (I2 DESC);
+Create success.
+$T0> CREATE INDEX IDX2_5 ON T2 (I1 DESC);
+Create success.
+$T0> CREATE UNIQUE INDEX IDX2_6 ON T2 (I1 DESC);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> SELECT * FROM T2 WHERE (I1,I2,I3) = ((1,1,1)) OR (I1,I2,I3) = ((2,2,2));
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           AAA         AAC         
+2           2           2           ACA         ADC         
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 94 )
+ CONCATENATION 
+  PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, INDEX: IDX2_1, ACCESS: 2, SELF_ID: 2 )
+   SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 9 )
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 10 )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 11 )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 12 )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 13 )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 14 )
+  FILTER
+   PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, INDEX: IDX2_1, ACCESS: 2, SELF_ID: 2 )
+    SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 15 )
+    SCAN ( PARTITION: P5, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 16 )
+    SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 17 )
+    SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 18 )
+    SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 19 )
+    SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 20 )
+------------------------------------------------------------
+$T0> SELECT * FROM T2 WHERE I2 = 1 AND I3 = 1;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+3           1           1           BAA         AFC         
+1           1           1           AAA         AAC         
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 94 )
+ PARTITION-COORDINATOR ( TABLE: T2, PARTITION: 6/6, INDEX: IDX2_2, ACCESS: 2, SELF_ID: 2 )
+  SCAN ( PARTITION: P6, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 3 )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 4 )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 5 )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 6 )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 7 )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, SELF_ID: 8 )
+------------------------------------------------------------
+
+$T0> ####################################
+$T0> #SECTOR; FINALIZATION
+$T0> ####################################
+
+$T0> DROP INDEX IDX2_1;
+Drop success.
+$T0> DROP INDEX IDX2_2;
+Drop success.
+$T0> DROP INDEX IDX2_3;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_4;
+Drop success.
+$T0> DROP INDEX IDX2_5;
+Drop success.
+$T0> DROP INDEX IDX2_6;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_7;
+[ERR-31014 : Index not found]
+$T0> DROP INDEX IDX2_8;
+[ERR-31014 : Index not found]
+
+$T0> DROP TABLE T2;
+Drop success.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+

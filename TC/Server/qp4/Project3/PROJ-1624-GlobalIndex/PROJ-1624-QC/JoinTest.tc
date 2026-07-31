@@ -1,0 +1,846 @@
+
+
+#######################################################################
+# Join Predicate with Composite Index
+#######################################################################
+
+###################################
+#SECTOR; PREPARATION
+###################################
+
+DEF MAIN()
+{
+ALTER SYSTEM SET __DBMS_STAT_METHOD = 1;
+ALTER SESSION SET EXPLAIN PLAN = ON;
+
+DROP TABLE J1;
+DROP TABLE J2;
+DROP TABLE J3;
+DROP TABLE J4;
+
+DROP INDEX J1_I123;
+DROP INDEX J2_I123;
+
+CREATE TABLE J1 ( I1 INTEGER, I2 VARCHAR(5), I3 DATE, I4 CHAR(2), I5 NUMBER )
+partition by range(i1)
+(
+	partition p1 values less than('10'),
+	partition p2 values less than('30'),
+	partition p3 values less than('50'),
+	partition p4 values less than('70'),
+	partition p5 values less than('100'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE TABLE J2 ( I1 INTEGER, I2 VARCHAR(5), I3 DATE, I4 CHAR(2), I5 NUMBER )
+partition by range(i1)
+(
+	partition p1 values less than('10'),
+	partition p2 values less than('30'),
+	partition p3 values less than('50'),
+	partition p4 values less than('70'),
+	partition p5 values less than('100'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE TABLE J3 ( I1 INTEGER, I2 VARCHAR(5), I3 DATE, I4 CHAR(2), I5 NUMBER )
+partition by range(i1)
+(
+	partition p1 values less than('10'),
+	partition p2 values less than('30'),
+	partition p3 values less than('50'),
+	partition p4 values less than('70'),
+	partition p5 values less than('100'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE TABLE J4 ( I1 INTEGER, I2 VARCHAR(5), I3 DATE, I4 CHAR(2), I5 NUMBER )
+partition by range(i1)
+(
+	partition p1 values less than('10'),
+	partition p2 values less than('30'),
+	partition p3 values less than('50'),
+	partition p4 values less than('70'),
+	partition p5 values less than('100'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE INDEX J1_I12345 ON J1 ( I1, I2, I3, I4, I5 );
+CREATE INDEX J2_I12345 ON J2 ( I1, I2, I3, I4, I5 ); 
+CREATE INDEX J3_I12345 ON J3 ( I1, I2, I3, I4, I5 );
+CREATE INDEX J4_I12345 ON J4 ( I1, I2, I3, I4, I5 );
+
+INSERT INTO J1 VALUES (    1,   'AAA', '27-OCT-2006', NULL, NULL );
+INSERT INTO J1 VALUES ( NULL,  '컬럼',          NULL, 'A1',    0 );
+INSERT INTO J1 VALUES (  100,   'AAA', '27-OCT-2006', 'A2',   -1 );
+INSERT INTO J1 VALUES (   -2,   '123', '30-JUN-2003', 'A3',  2.5 );
+INSERT INTO J1 VALUES ( 3E+6,  '조인',          NULL, 'A2', NULL ); 
+INSERT INTO J1 VALUES (    2,    NULL, '15-MAR-2000', 'A4', -1.2 );
+INSERT INTO J1 VALUES ( NULL,  '가_A', '01-JAN-1998', 'A4',  100 );
+INSERT INTO J1 VALUES ( -555,  'T/티', '20-APR-2001', 'A3', 10.5 );
+INSERT INTO J1 VALUES ( 3333, '%^&__', '01-JAN-1998', NULL,   42 );
+INSERT INTO J1 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
+
+INSERT INTO J2 VALUES (   -2,  'AAA', '01-JAN-1998', 'A4', NULL );
+INSERT INTO J2 VALUES ( NULL,   NULL,          NULL, NULL, NULL );
+INSERT INTO J2 VALUES (    1, '컬럼', '30-JUN-2003', 'A1', -1.2 );
+INSERT INTO J2 VALUES (    9,  '123', '15-MAR-2000', 'A9',    9 );
+INSERT INTO J2 VALUES (  350, 'S/하',          NULL, NULL, 9999 );
+
+INSERT INTO J3 VALUES (   -2,   'AAA', '01-JAN-1998', 'A4', NULL );
+INSERT INTO J3 VALUES ( -555,  'T/티', '20-APR-2001', 'A3', 10.5 ); 
+INSERT INTO J3 VALUES ( NULL,  'LIKE', '01-NOV-2002', 'A3',    1 );
+INSERT INTO J3 VALUES (  100,   'AAA', '27-OCT-2006', 'A2',   -1 );
+INSERT INTO J3 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
+
+INSERT INTO J4 VALUES (   -2,   'AAA', '01-JAN-1998', 'A4', NULL );
+INSERT INTO J4 VALUES ( NULL,  'LIKE', '01-NOV-2002', 'A3',    1 );
+INSERT INTO J4 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
+
+#######################################################################
+# 2 Table Join
+#######################################################################
+
+###################################
+#SECTOR; without Join Predicate
+###################################
+
+### No Predicate
+SELECT * FROM J1, J2; 
+
+### with Non-Join Predicate
+SELECT * FROM J1, J2 WHERE J1.I1=1 AND J1.I2='AAA' AND J2.I1 BETWEEN 1 AND -3;
+SELECT * FROM J1, J2 WHERE J1.I1 IS NULL AND J2.I1 IN ( 1, 2, -3 ); 
+
+###################################
+SECTOR; 1 Join Predicate
+###################################
+
+### only Join Predicate(First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1; 
+SELECT * FROM J1, J2 WHERE J1.I1 
+                     = (SELECT I2 FROM J2 WHERE J2.I1='123'); 
+SELECT * FROM J1, J2 WHERE J1.I1 
+                     = (SELECT I2 FROM J2 WHERE J2.I1=123); 
+
+### only Join Predicate(Non-First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I2 = J2.I2;
+SELECT * FROM J1, J2 WHERE J1.I2 LIKE J2.I2;
+SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3;
+                     
+### with Other Predicate(Join Column Predicate_First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I1!=J2.I1 AND J1.I1=1;
+SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I1 IS NOT NULL;
+SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 
+                       AND EXISTS (SELECT I1 FROM J2 WHERE I1=J1.I1); 
+SELECT * FROM J1, J2 WHERE J1.I1 NOT LIKE (J2.I1) AND J1.I1 = 1; 
+SELECT * FROM J1, J2 WHERE J1.I1 LIKE J2.I1 
+                       AND J2.I1 BETWEEN 1 AND 2; 
+
+### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I2 <= J2.I2 AND J1.I2 =ANY ( 'A', '컬럼' );
+SELECT * FROM J1, J2 WHERE J1.I3 > J2.I3 AND J2.I3 IS NULL;
+SELECT * FROM J1, J2 WHERE J1.I2 = J2.I2 
+                       AND UNIQUE (SELECT I2 FROM J2 WHERE I2='AAA');
+
+### with Other Predicate(Non-Join Column Predicate_First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I2 = J2.I2 AND J1.I1 =ALL ( 1,2,3 );
+SELECT * FROM J1, J2 WHERE J1.I2 >= J2.I2 
+                       AND NOT EXISTS (SELECT I1 FROM J2); 
+
+SELECT * FROM J1, J2 WHERE J1.I3 <= J2.I3 AND J1.I1 = 1;
+SELECT * FROM J1, J2 WHERE J1.I3  LIKE (J2.I3)
+                       AND J1.I1 NOT BETWEEN 1 AND 3333;
+
+### with Other Predicate(Non-Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I2 NOT IN ('1','2','3','123');
+SELECT * FROM J1, J2 WHERE J1.I1 NOT IN (J2.I1) AND J1.I3 = NULL;
+SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I2 LIKE 'T/티';
+SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I3 >= '30-JUN-2003';
+
+SELECT * FROM J1, J2 WHERE J1.I2 != J2.I2 AND J2.I3 != NULL;
+SELECT * FROM J1, J2 WHERE J1.I2 BETWEEN J2.I2 AND J2.I2 AND J2.I3 IS NOT NULL;
+
+SELECT * FROM J1, J2 WHERE J1.I3 IN (J2.I3) AND J2.I2 IN ( 'A', '컬럼' );
+SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3 AND J1.I2 IS NULL;
+
+### with Other Predicate(Join Column Predicates on Both Tables_First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I1=1 AND J2.I1=-2; 
+SELECT * FROM J1, J2 WHERE J1.I1!=J2.I1 AND J1.I1=1 AND J2.I1=2; 
+
+SELECT * FROM J1, J2 WHERE J1.I1>=J2.I1 AND J1.I1>300000 AND J2.I1<100000;
+SELECT * FROM J1, J2 WHERE J1.I1!=ANY(J2.I1) 
+                            AND J1.I1=ALL(1) AND J2.I1>=ALL(100);
+SELECT * FROM J1, J2 WHERE J1.I1!=ANY(J2.I1) 
+                            AND J1.I1=1 AND J2.I1>=100;
+
+### with Other Predicate(Join Column Predicates on Both Tables_Non-First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I2 > J2.I2 
+                       AND J1.I2>'T/티' AND J2.I2 IS NOT NULL;
+SELECT * FROM J1, J2 WHERE J1.I2 NOT LIKE J2.I2
+          AND J1.I2 LIKE 'A%' AND J2.I2 !=ALL (NULL, '123', '%^&__');
+
+SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 
+                       AND J1.I3='15-MAR-2000' AND J2.I3 =ANY ('15-MAR-00');
+SELECT * FROM J1, J2 WHERE J1.I3 BETWEEN J1.I3 AND J2.I3 
+                       AND J1.I3 <=ANY ('01-JAN-1998', NULL)
+                       AND J2.I3 != ( '11-FEB-2003');
+
+### with Other Predicate(Non-Join Column Predicate on Both Tables_First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I1 NOT IN(1,2,3) AND J2.I1>-10;
+SELECT * FROM J1, J2 WHERE J1.I2 LIKE J2.I2 AND J1.I1=1 AND J2.I1!=1;
+SELECT * FROM J1, J2 WHERE J1.I3 >=ANY (J2.I3)
+          AND J1.I1 !=ALL (-1,-2,0,1000) AND J2.I1 BETWEEN 1 AND 2;
+
+### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2='조인' AND J2.I2 NOT LIKE NULL;
+SELECT * FROM J1, J2 WHERE J1.I1>J2.I1 AND J1.I2='AAA' AND J2.I3 IS NOT NULL;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1
+                       AND J1.I3 IS NOT NULL AND J2.I3!='01-JAN-1998';
+
+SELECT * FROM J1, J2 WHERE J1.I2 >=ALL (J2.I2)
+                       AND J1.I3 IN ( '01-JAN-1998', NULL )
+                       AND J2.I3 LIKE '01-JAN-1998'; 
+
+SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3
+                       AND J1.I2 NOT BETWEEN 'AAA' AND '하하하'
+                       AND J2.I2 <ANY ('AAA', '하하하');
+
+###################################
+#SECTOR; 2 Join Predicate
+###################################
+
+### only Join Predicate
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2<=J2.I2;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=ANY(J2.I2);
+SELECT * FROM J1, J2 WHERE J1.I1>=J2.I1 AND J1.I2=J2.I2;
+
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I3=J2.I3;
+SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I1=J2.I1;
+
+### with Other Predicate
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 
+                       AND J1.I3='27-OCT-2006' AND J2.I3 IS NOT NULL;
+
+SELECT * FROM J1, J2 WHERE J1.I1>J2.I1 AND J1.I2=J2.I2
+                       AND J1.I3 IS NOT NULL AND J2.I3 IS NOT NULL;
+
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2>J2.I2
+          AND J1.I3 IS NOT NULL AND J2.I3 IS NOT NULL;  
+
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2
+          AND J1.I3>'27-OCT-2006' AND J2.I3 IS NOT NULL;
+
+###################################
+#SECTOR; More than 2 Join Predicates
+###################################
+
+### Non-Fully Predicate
+### (Use First Indexed Column_Fully Use Composite Index_Index Order)
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 AND J1.I3=J2.I3;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 
+                       AND J1.I3=J2.I3 AND J1.I4=J2.I4;
+
+### Non-Fully Predicate
+### (Use First Indexed Column_Fully Use Composite Index_Non-index order)
+SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I2=J2.I2 AND J1.I1=J2.I1;
+SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I4=J2.I4 
+                       AND J1.I2=J2.I2 AND J1.I1=J2.I1;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially) 
+### Column Missing_Index Order
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I3=J2.I3 AND J1.I4=J2.I4;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 AND J1.I4=J2.I4;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I3=J2.I3 
+                       AND J1.I4=J2.I4 AND J1.I5=J2.I5;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 
+                       AND J1.I3=J2.I3 AND J1.I5=J2.I5;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially)
+### Column Missing_Non-index order
+SELECT * FROM J1, J2 WHERE J1.I4=J2.I4 AND J1.I1=J2.I1 AND J1.I3=J2.I3;
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I1=J2.I1 AND J1.I4=J2.I4;
+SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I1=J2.I1
+                       AND J1.I5=J2.I5 AND J1.I2=J2.I2; 
+
+### Non-Fully Predicate(Use First Indexed Column_Partially)
+### Missing by Predicate_Index Order
+SELECT * FROM J1, J2 WHERE J1.I1>J2.I1 AND J1.I2=J2.I2 AND J1.I3=J2.I3;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2>J2.I2
+                       AND J1.I3=J2.I3 AND J1.I4=J2.I4; 
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2
+                       AND J1.I3>J2.I3 AND J1.I4=J2.I4;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2
+                       AND J1.I3=J2.I3 AND J1.I4>J2.I4;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially)
+### Missing by Predicate_Non-index order
+SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I1>J2.I1 AND J1.I2=J2.I2;
+SELECT * FROM J1, J2 WHERE J1.I2>J2.I2 AND J1.I4=J2.I4 
+                       AND J1.I1=J2.I1 AND J1.I3=J2.I3;
+SELECT * FROM J1, J2 WHERE J1.I3>J2.I3 AND J1.I2=J2.I2
+                       AND J1.I4=J2.I4 AND J1.I1=J2.I1;
+SELECT * FROM J1, J2 WHERE J1.I4>J2.I4 AND J1.I3=J2.I3 
+                       AND J1.I1=J2.I1 AND J1.I2=J2.I2;
+
+### Non-Fully Predicate(No Use First Indexed Column_Index Order)
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I3=J2.I3 AND J1.I4=J2.I4;
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I3=J2.I3
+                       AND J1.I4=J2.I4 AND J1.I5=J2.I5;
+
+### Non-Fully Predicate(No Use First Indexed Column_Non-index order)
+SELECT * FROM J1, J2 WHERE J1.I4=J2.I4 AND J1.I2=J2.I2 AND J1.I3=J2.I3;
+SELECT * FROM J1, J2 WHERE J1.I5=J2.I5 AND J1.I3=J2.I3 
+                       AND J1.I2=J2.I2 AND J1.I4=J2.I4;
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I3>=J2.I3
+                       AND J1.I4=ALL(J2.I4) AND J1.I5>=ANY(J2.I5);
+
+### Full Predicate(Use First Indexed Column)
+### Fully Use Composite Index_Index Order
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 AND J1.I3=J2.I3
+                       AND J1.I4=J2.I4 AND J1.I5=J2.I5;
+
+### Full Predicate(Use First Indexed Column)
+### Fully Use Composite Index_Non-index order
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I5=J2.I5 AND J1.I3=J2.I3
+                       AND J1.I1=J2.I1 AND J1.I4=J2.I4;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use only First Column_Index Order
+SELECT * FROM J1, J2 WHERE J1.I1>J2.I1 AND J1.I2=J2.I2 AND J1.I3=J2.I3
+                       AND J1.I4=J2.I4 AND J1.I5=J2.I5;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use only First Column_Non-index order
+SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I5=J2.I5 AND J1.I3=J2.I3
+                       AND J1.I1>J2.I1 AND J1.I4=J2.I4;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use until Second Column_Index Order
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2>J2.I2 AND J1.I3=J2.I3
+                       AND J1.I4=J2.I4 AND J1.I5=J2.I5;
+
+--### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+--### Missing by Predicate_Use until Second Column_Non-Index Order
+SELECT * FROM J1, J2 WHERE J1.I4=J2.I4 AND J1.I1=J2.I1 AND J1.I3=J2.I3
+                       AND J1.I2>J2.I2 AND J1.I5=J2.I5;
+
+#######################################################################
+# 3 Table Join
+#######################################################################
+
+###################################
+#SECTOR; without Join Predicate
+###################################
+
+### with Non-Join Predicate_First Indexed Column
+SELECT * FROM J1, J2, J3 WHERE J1.I1=100 AND J2.I1=-2 AND J3.I1=-2;
+SELECT * FROM J1, J2, J3 WHERE J1.I1!=1 AND J2.I1 IN ( 1,2,3 )
+                           AND J3.I1 BETWEEN -2 AND 0 AND J1.I4='A4';
+
+### with Non-Join Predicate_Non-First Indexed Column
+SELECT * FROM J1, J2, J3 WHERE J1.I2 IS NULL AND J2.I3 IS NULL 
+                           AND J3.I5 = 10.5;
+SELECT * FROM J1, J2, J3 WHERE J1.I4 LIKE 'A4' AND J2.I3>ALL('15-MAR-2000')
+                           AND J3.I5 = 1 AND J1.I2 IS NULL; 
+
+###################################
+#SECTOR; 2 Join Predicates
+###################################
+
+### Linked-Column Join Predicate(Sequence Order_First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1;
+SELECT * FROM J1, J2, J3 WHERE J1.I1 =ALL (J2.I1) AND J2.I1 >=ALL (J3.I1)
+                           AND J1.I2='AAA';
+
+### Linked-Column Join Predicate(Sequence Order_Non-First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J1.I2=J2.I2 AND J2.I2=J3.I2;
+SELECT * FROM J1, J2, J3 WHERE J1.I3>ALL(J2.I3) AND J2.I3 LIKE J3.I3
+                           AND J1.I2='123' AND J2.I5 IS NULL;
+
+### Linked-Column Join Predicate(Non-Sequence Order_First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J3.I1=J1.I1 AND J3.I1=J2.I1;
+SELECT * FROM J1, J2, J3 WHERE J2.I1<J3.I1 AND J2.I1 IN (J1.I1);
+
+### Linked-Column Join Predicate(Non-Sequence Order_Non-First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J2.I2=J1.I2 AND J3.I2=J1.I2
+                           AND J1.I4 IS NULL;
+SELECT * FROM J1, J2, J3 WHERE J3.I4 LIKE J1.I4 AND J1.I4 NOT LIKE J2.I4
+                           AND J2.I2='123' AND J3.I5=10.5;
+
+### Non Linked-Column Join Predicate(Sequence Order_First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I2=J3.I2;
+SELECT * FROM J1, J2, J3 WHERE J1.I1>=J2.I1 AND J2.I4 LIKE J3.I4 
+                           AND J1.I1=J2.I1;
+
+### Non Linked-Column Join Predicate(Sequence Order_Non-First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J1.I2=J2.I2 AND J2.I3=J3.I3;
+SELECT * FROM J1, J2, J3 WHERE J1.I5=J2.I5 AND J2.I3<J3.I3;
+
+### Non Linked-Column Join Predicate(Non-Sequence Order_First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J3.I1=J2.I1 AND J3.I2=J1.I2;
+SELECT * FROM J1, J2, J3 WHERE J1.I1>=J3.I1 AND J1.I3=J2.I3
+                           AND J1.I1=-2;
+
+### Non Linked-Column Join Predicate(Non-Sequence Order_Non-First Indexed Column)
+SELECT * FROM J1, J2, J3 WHERE J2.I3=J3.I3 AND J1.I4=J3.I4;
+SELECT * FROM J1, J2, J3 WHERE J1.I2<=ANY(J3.I2) AND J2.I4>=J1.I4
+                           AND J2.I5 IS NULL AND J1.I2='T/티';
+
+###################################
+#SECTOR; More than 2 Join Predicates
+###################################
+
+### Non-Fully Predicate
+### (Use First Indexed Column_Fully Use Composite Index_Index Order)
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3;
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4;
+
+### Non-Fully Predicate
+### (Use First Indexed Column_Fully Use Composite Index_Non-index order)
+SELECT * FROM J1, J2, J3 WHERE J2.I1=J3.I1 AND J1.I3=J2.I3
+                           AND J2.I2=J3.I2 AND J1.I1=J2.I1
+                           AND J2.I3=J3.I3 AND J1.I2=J2.I2;
+SELECT * FROM J1, J2, J3 WHERE J2.I4=J3.I4 AND J2.I2=J3.I2
+                           AND J1.I1=J2.I1 AND J1.I4=J2.I4
+                           AND J1.I2=J2.I2 AND J1.I3=J2.I3
+                           AND J2.I1=J3.I1 AND J2.I3=J3.I3;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially) 
+### Column Missing_Index Order
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4;
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I5=J2.I5 AND J2.I4=J3.I4;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially)
+### Column Missing_Non-index order
+SELECT * FROM J1, J2, J3 WHERE J1.I3=J2.I3 AND J2.I1=J3.I1
+                           AND J1.I4=J2.I4 AND J2.I3=J3.I3
+                           AND J1.I1=J2.I1 AND  J2.I4=J3.I4;
+SELECT * FROM J1, J2, J3 WHERE J1.I2=J2.I2 AND J2.I4=J3.I4
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I1=J2.I1 AND J1.I5=J2.I5
+                           AND J2.I2=J3.I2 AND J2.I1=J3.I1;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially)
+### Missing by Predicate_Index Order
+SELECT * FROM J1, J2, J3 WHERE J1.I1>J2.I1 AND J2.I1>J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3;
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3>J2.I3 AND J2.I3>J3.I3
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4;
+
+### Non-Fully Predicate(Use First Indexed Column_Partially)
+### Missing by Predicate_Non-index order
+SELECT * FROM J1, J2, J3 WHERE J1.I3=J2.I3 AND J1.I1>J2.I1
+                           AND J1.I2=J2.I2 AND J2.I1>J3.I1
+                           AND J2.I3=J3.I3 AND  J2.I2=J3.I2;
+SELECT * FROM J1, J2, J3 WHERE J2.I1=J3.I1 AND J2.I4=J3.I4
+                           AND J2.I2=J3.I2 AND J1.I1=J2.I1
+                           AND J1.I3>J2.I3 AND J1.I2=J2.I2
+                           AND J1.I4=J2.I4 AND J2.I3>J3.I3;
+
+### Non-Fully Predicate(No Use First Indexed Column_Index Order)
+SELECT * FROM J1, J2, J3 WHERE J1.I2>=J2.I2 AND J2.I2!=J3.I2
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I4=ALL(J2.I4) AND J2.I4!=ANY(J3.I4);
+SELECT * FROM J1, J2, J3 WHERE J1.I2=J2.I2 AND J2.I2=J3.I2 
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4
+                           AND J1.I5=J2.I5 AND J2.I5=J3.I5; 
+
+### Non-Fully Predicate(No Use First Indexed Column_Non-index order)
+SELECT * FROM J1, J2, J3 WHERE J1.I4=ALL(J2.I4) AND J2.I3=J3.I3
+                           AND J2.I4!=ANY(J3.I4) AND J1.I2>=J2.I2
+                           AND J1.I3=J2.I3 AND J2.I2!=J3.I2;
+SELECT * FROM J1, J2, J3 WHERE J2.I5=J3.I5 AND J1.I3=J2.I3 
+                           AND J2.I4=J3.I4 AND J2.I2=J3.I2
+                           AND J1.I4=J2.I4 AND J1.I5=J2.I5
+                           AND J2.I3=J3.I3 AND J1.I2=J2.I2;
+
+### Full Predicate(Use First Indexed Column)
+### Fully Use Composite Index_Index Order
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4
+                           AND J1.I5=J2.I5 AND J2.I5=J3.I5;
+
+### Full Predicate(Use First Indexed Column)
+### Fully Use Composite Index_Non-index order
+SELECT * FROM J1, J2, J3 WHERE J2.I4=J3.I4 AND J2.I3=J3.I3
+                           AND J2.I5=J3.I5 AND J1.I2=J2.I2
+                           AND J1.I1=J2.I1 AND J1.I5=J2.I5
+                           AND J1.I3=J2.I3 AND J2.I2=J3.I2
+                           AND J1.I4=J2.I4 AND J2.I1=J3.I1;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use only First Column_Index Order
+SELECT * FROM J1, J2, J3 WHERE J1.I1>J2.I1 AND J2.I1>J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2 
+                           AND J1.I3=J2.I3 AND J2.I3=J3.I3
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4 
+                           AND J1.I5=J2.I5 AND J2.I5=J3.I5;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use only First Column_Non-index order
+SELECT * FROM J1, J2, J3 WHERE J2.I1>J3.I1 AND J1.I3=J2.I3
+                           AND J1.I5=J2.I5 AND J2.I4=J3.I4
+                           AND J1.I2=J2.I2 AND J1.I1>J2.I1
+                           AND J1.I4=J2.I4 AND J2.I2=J3.I2
+                           AND J2.I5=J3.I5 AND J2.I3=J3.I3;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use until Second Column_Index Order
+SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
+                           AND J1.I2=J2.I2 AND J2.I2=J3.I2
+                           AND J1.I3!=J2.I3 AND J2.I3>=ANY(J3.I3)
+                           AND J1.I4=J2.I4 AND J2.I4=J3.I4
+                           AND J1.I5=J2.I5 AND J2.I5=J3.I5;
+
+### Full Predicate(Use First Indexed Column_Partially Use Composite Index)
+### Missing by Predicate_Use until Second Column_Non-Index Order
+SELECT * FROM J1, J2, J3 WHERE J1.I5=J2.I5 AND J2.I2=J3.I2
+                           AND J1.I1=J2.I1 AND J1.I3!=J2.I3
+                           AND J2.I5=J3.I5 AND J1.I2=J2.I2
+                           AND J2.I1=J3.I1 AND J2.I4=J3.I4
+                           AND J1.I4=J2.I4 AND J2.I3>=ANY(J3.I3); 
+
+#######################################################################
+# More Than 3 Table Join
+#######################################################################
+
+###################################
+#SECTOR; Non-Fully Join Predicates
+###################################
+
+### Use First Indexed Column(Fully Use Composite Index)
+SELECT * FROM J1, J2, J3, J4 
+         WHERE J1.I1=J2.I1 AND J2.I1=J3.I1 AND J3.I1=J4.I1
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3
+           AND J1.I4=J2.I4 AND J2.I4=J3.I4 AND J3.I4=J4.I4;
+
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1=J2.I1 AND J2.I1=J3.I1 AND J3.I1=J4.I1
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3;
+
+### Use First Indexed Column(Partially Use Composite Index_Column Missing)
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1=J2.I1 AND J2.I1=J3.I1 AND J3.I1=J4.I1
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I4=J2.I4 AND J2.I4=J3.I4 AND J3.I4=J4.I4;
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1=J2.I1 AND J2.I1=J3.I1 AND J3.I1=J4.I1
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3;
+
+### Use First Indexed Column(Partially Use Composite Index_Missing by Predicate)
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1>=J2.I1 AND J2.I1<=J3.I1 AND J3.I1>J4.I1
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3
+           AND J1.I4=J2.I4 AND J2.I4=J3.I4 AND J3.I4=J4.I4;
+
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1=J2.I1 AND J2.I1=J3.I1 AND J3.I1=J4.I1
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3!=J2.I3 AND J2.I3<=ALL(J3.I3) AND J3.I3 IN (J4.I3);
+
+### No Use First Indexed Column
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1!=J2.I1 AND J2.I1 NOT LIKE J3.I1 AND J3.I1 NOT IN (J4.I1)
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3
+           AND J1.I4=J2.I4 AND J2.I4=J3.I4 AND J3.I4=J4.I4;
+
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3
+           AND J1.I4=J2.I4 AND J2.I4=J3.I4 AND J3.I4=J4.I4;
+
+###################################
+#SECTOR; Full Join Predicates
+###################################
+
+### Use First Indexed Column
+### Fully Use Composite Index_Linked-Column Join Predicate)
+SELECT * FROM J1, J2, J3, J4
+         WHERE J1.I1=J2.I1 AND J2.I1=J3.I1 AND J3.I1=J4.I1
+           AND J1.I2=J2.I2 AND J2.I2=J3.I2 AND J3.I2=J4.I2
+           AND J1.I3=J2.I3 AND J2.I3=J3.I3 AND J3.I3=J4.I3
+           AND J1.I4=J2.I4 AND J2.I4=J3.I4 AND J3.I4=J4.I4
+           AND J1.I5=J2.I5 AND J2.I5=J3.I5 AND J3.I5=J4.I5; 
+
+#######################################################################
+# Left Outer Join
+#######################################################################
+
+###################################
+#SECTOR; without Join Predicate
+###################################
+
+### with Non-Join Predicate_First Indexed Column
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1=1 AND J1.I2='AAA' AND J2.I1=1;
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1=3333 AND J2.I1>350 
+                                   AND J1.I2 IS NULL AND J2.I2>'AAA' ;
+
+### with Non-Join Predicate_Non-First Indexed Column
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I2='AAA' AND J2.I5=-1;
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1!=3000000 AND J2.I1 IN (1,2,3)
+                                   AND J1.I2='123' AND J2.I2='123';
+
+###################################
+#SECTOR; 1 Join Predicate
+###################################
+
+### only Join Predicate_First Indexed Column
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1=J2.I1;
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1 IN (J2.I1);
+
+### only Join Predicate_Non-First Indexed Column
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I2>J2.I2;
+SELECT * FROM J2 LEFT OUTER JOIN J1 ON J2.I3=J1.I3;
+
+### with Other Predicate(Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I1=9;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J4.I1!=9;
+
+### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I2 AND J3.I2='AAA';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I4=J4.I4 AND J4.I4 LIKE 'A4';
+
+### with Other Predicate(Non-Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I2 AND J4.I1=9;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J3.I4 AND J3.I1=-2;
+
+### with Other Predicate(Non-Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I3 IS NULL;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J4.I4='AAA';
+
+### with Other Predicate(Join Column Predicates on Both Tables_First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 
+                                   AND J3.I1>=ALL(1,2) AND J4.I1 BETWEEN 1 AND 2;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1
+                                   AND J4.I1 IN (1, 2, 3) AND J3.I1=1;     
+
+### with Other Predicate(Join Column Predicates on Both Tables_Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I4
+                                   AND J3.I2='조인' AND J4.I4='A3';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I3 IN ( J4.I3)
+                                   AND J3.I3 IS NULL AND J4.I3 IS NOT NULL;
+
+### with Other Predicate(Non-Join Column Predicate on Both Tables_First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2>=ANY(J4.I2) 
+                                   AND J3.I1=1 AND J4.I1 > 4;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I4=J4.I4
+                                   AND J3.I1 IS NOT NULL AND J4.I1 < 100; 
+
+### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1>=J4.I1 
+                                   AND J3.I2='컬럼' AND J4.I4='A3';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I4
+                                   AND J3.I3 IS NULL AND J4.I5=1;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I4
+                                 WHERE J3.I3 IS NULL AND J4.I5=1;
+
+###################################
+#SECTOR; 2 Join Predicate
+###################################
+
+### only Join Predicate(First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I1!=J4.I1;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1>J4.I1 OR J3.I1<J4.I1;
+
+### only Join Predicate(Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I2 AND J3.I3!=J4.I3;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2 IN (J4.I4) 
+                                   AND J4.I4 NOT IN (J3.I2);
+
+### with Other Predicate(Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I2=J4.I2
+                                   AND J3.I1=100 AND J3.I2='AAA';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1!=J4.I1 AND J3.I2 NOT IN(J4.I2)
+                                   AND J4.I1=-2 AND J4.I2 IS NULL;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1!=J4.I1 AND J3.I2 NOT IN(J4.I2)
+                                   AND J4.I1=-2 AND J4.I2 IS NULL
+                                   AND J3.I1=100 AND J3.I2='AAA';
+
+### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2>J4.I2 OR J3.I2=J4.I2
+                                   AND J3.I2='T/티' OR J3.I2='LIKE';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I5=J4.I5 AND J3.I4=J4.I4
+                                   AND J4.I5=(SELECT I5 FROM J3 WHERE I5=-1)
+                                   AND J4.I4='A3';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I2 AND J3.I4=J4.I4
+                                   AND J3.I2 IS NOT NULL AND J3.I4 LIKE 'A%'
+                                   AND J4.I2 NOT LIKE 'B%' AND J4.I4 IS NULL;
+
+### with Other Predicate(Non-Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2 LIKE J4.I2 AND J3.I4 NOT LIKE J4.I4
+                                   AND J3.I1 NOT BETWEEN -1 AND -100;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2 LIKE J4.I2 AND J3.I4 NOT LIKE J4.I4
+                                   AND J4.I1 NOT BETWEEN -1 AND -100;
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2 =ALL (J4.I4) AND J3.I4 !=ALL(J4.I2)
+                                   AND J3.I1!=-555 AND J4.I1 IS NOT NULL;
+
+### with Other Predicate(Non-Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I3=J4.I3 AND J3.I3!=J4.I3
+                                   AND J3.I4 BETWEEN 'A2' AND 'A4';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON TRIM(J3.I2)=ANY(J4.I2) 
+                                   AND J3.I4=ALL(TRIM(J4.I4))
+                                   AND CHR(J4.I5)='1';
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I4=J4.I2
+                                   AND J3.I4='A3'  AND J4.I3 IS NOT NULL
+        WHERE J3.I1=100 AND J4.I1 IN (1,2,3) AND J4.I2 >=ALL (1,2,3);
+
+#######################################################################
+#Full Outer Join
+#######################################################################
+
+###################################
+#SECTOR; without Join Predicate
+###################################
+
+### with Non-Join Predicate_First Indexed Column
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1=1 AND J1.I2='AAA' AND J2.I1=1;
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1=3333 AND J2.I1>350 
+                                   AND J1.I2 IS NULL AND J2.I2>'AAA' ;
+
+### with Non-Join Predicate_Non-First Indexed Column
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I2='AAA' AND J2.I5=-1;
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1!=3000000 AND J2.I1 IN (1,2,3)
+                                   AND J1.I2='123' AND J2.I2='123';
+
+###################################
+#SECTOR; 1 Join Predicate
+###################################
+
+### only Join Predicate_First Indexed Column
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1=J2.I1;
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1 IN (J2.I1);
+
+### only Join Predicate_Non-First Indexed Column
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I2>J2.I2;
+SELECT * FROM J2 FULL OUTER JOIN J1 ON J2.I3=J1.I3;
+
+### with Other Predicate(Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I1=9;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J4.I1!=9;
+
+### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I2 AND J3.I2='AAA';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I4=J4.I4 AND J4.I4 LIKE 'A4';
+
+### with Other Predicate(Non-Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I2 AND J4.I1=9;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J3.I4 AND J3.I1=-2;
+
+### with Other Predicate(Non-Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I3 IS NULL;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J4.I4='AAA';
+
+### with Other Predicate(Join Column Predicates on Both Tables_First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 
+                                   AND J3.I1>=ALL(1,2) AND J4.I1 BETWEEN 1 AND 2;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1
+                                   AND J4.I1 IN (1, 2, 3) AND J3.I1=1;     
+
+### with Other Predicate(Join Column Predicates on Both Tables_Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I4
+                                   AND J3.I2='조인' AND J4.I4='A3';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I3 IN ( J4.I3)
+                                   AND J3.I3 IS NULL AND J4.I3 IS NOT NULL;
+
+### with Other Predicate(Non-Join Column Predicate on Both Tables_First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2>=ANY(J4.I2) 
+                                   AND J3.I1=1 AND J4.I1 > 4;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I4=J4.I4
+                                   AND J3.I1 IS NOT NULL AND J4.I1 < 100; 
+
+### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1>=J4.I1 
+                                   AND J3.I2='컬럼' AND J4.I4='A3';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I4
+                                   AND J3.I3 IS NULL AND J4.I5=1;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I4
+                                 WHERE J3.I3 IS NULL AND J4.I5=1;
+
+##################################
+#SECTOR; 2 Join Predicate
+###################################
+
+### only Join Predicate(First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I1!=J4.I1;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1>J4.I1 OR J3.I1<J4.I1;
+
+### only Join Predicate(Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I2 AND J3.I3!=J4.I3;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2 IN (J4.I4) 
+                                   AND J4.I4 NOT IN (J3.I2);
+
+### with Other Predicate(Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I2=J4.I2
+                                   AND J3.I1=100 AND J3.I2='AAA';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1!=J4.I1 AND J3.I2 NOT IN(J4.I2)
+                                   AND J4.I1=-2 AND J4.I2 IS NULL;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1!=J4.I1 AND J3.I2 NOT IN(J4.I2)
+                                   AND J4.I1=-2 AND J4.I2 IS NULL
+                                   AND J3.I1=100 AND J3.I2='AAA';
+
+### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2>J4.I2 OR J3.I2=J4.I2
+                                   AND J3.I2='T/티' OR J3.I2='LIKE';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I5=J4.I5 AND J3.I4=J4.I4
+                                   AND J4.I5=(SELECT I5 FROM J3 WHERE I5=-1)
+                                   AND J4.I4='A3';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I2 AND J3.I4=J4.I4
+                                   AND J3.I2 IS NOT NULL AND J3.I4 LIKE 'A%'
+                                   AND J4.I2 NOT LIKE 'B%' AND J4.I4 IS NULL;
+
+### with Other Predicate(Non-Join Column Predicate_First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2 LIKE J4.I2 AND J3.I4 NOT LIKE J4.I4
+                                   AND J3.I1 NOT BETWEEN -1 AND -100;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2 LIKE J4.I2 AND J3.I4 NOT LIKE J4.I4
+                                   AND J4.I1 NOT BETWEEN -1 AND -100;
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2 =ALL (J4.I4) AND J3.I4 !=ALL(J4.I2)
+                                   AND J3.I1!=-555 AND J4.I1 IS NOT NULL;
+
+### with Other Predicate(Non-Join Column Predicate_Non-First Indexed Column)
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I3=J4.I3 AND J3.I3!=J4.I3
+                            AND J3.I4 BETWEEN 'A2' AND 'A4'; 
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I3=J4.I3 AND J3.I3!=J4.I3 
+                                   AND J3.I4 IN(J4.I4);     
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I3=J4.I3 AND J3.I3!=J4.I3 
+                                   AND J3.I4 >=ALL(J4.I4);  
+SELECT * FROM J3 FULL OUTER JOIN J4 ON TRIM(J3.I2)=ANY(J4.I2) 
+                                   AND J3.I4=ALL(TRIM(J4.I4))
+                                   AND CHR(J4.I5)='1';
+SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I4=J4.I2
+                                   AND J3.I4='A3'  AND J4.I3 IS NOT NULL
+        WHERE J3.I1=100 AND J4.I1 IN (1,2,3) AND J4.I2 >=ALL (1,2,3);
+
+
+###################################
+#SECTOR; FINALIZATION
+###################################
+
+DROP TABLE J1;
+DROP TABLE J2;
+DROP TABLE J3;
+DROP TABLE J4;
+
+ALTER SYSTEM SET __DBMS_STAT_METHOD = 0;
+}

@@ -1,0 +1,62 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- Initialize tablespace 
+--######################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLESPACE PDT_TBS 
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+
+$P0> DROP TABLESPACE PDT_TBS2 
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+
+$P0> DROP TABLESPACE PDT_TBS3
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+
+$P0> DROP TABLESPACE PDT_TBS4
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+
+$P0> DROP TABLESPACE PDT_TBS5
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+--+SKIP END; 
+
+$P0> CREATE TABLESPACE PDT_TBS
+     DATAFILE 'PDT_TBS.dbf' 
+     SIZE 50M 
+     AUTOEXTEND ON;
+Create success.
+
+$P0> CREATE TABLESPACE PDT_TBS2
+     DATAFILE 'PDT_TBS2.dbf' 
+     SIZE 10M 
+     AUTOEXTEND ON;
+Create success.
+
+$P0> CREATE TABLESPACE PDT_TBS3
+     DATAFILE 'PDT_TBS3.dbf' 
+     SIZE 10M 
+     AUTOEXTEND ON;
+Create success.
+
+$P0> CREATE TABLESPACE PDT_TBS4
+     DATAFILE 'PDT_TBS4.dbf' 
+     SIZE 10M 
+     AUTOEXTEND ON;
+Create success.
+
+$P0> CREATE TABLESPACE PDT_TBS5
+     DATAFILE 'PDT_TBS5.dbf' 
+     SIZE 10M 
+     AUTOEXTEND ON;
+Create success.
+

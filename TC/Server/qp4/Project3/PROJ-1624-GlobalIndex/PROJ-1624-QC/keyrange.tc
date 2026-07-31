@@ -1,0 +1,202 @@
+###############################################################
+# KEYRANGE TEST
+###############################################################
+DEF MAIN()
+{
+CONNECT SYS/MANAGER;
+COMMIT;
+ALTER SESSION SET AUTOCOMMIT = TRUE;
+ALTER SESSION SET EXPLAIN PLAN = ON;
+
+####################################
+#SECTOR; PREPARATION
+####################################
+
+DROP TABLE T1;
+
+CREATE TABLE T1 (I1 NUMERIC, I2 NUMERIC, I3 NUMERIC, I4 NUMERIC, I5 NUMERIC)
+partition by range(i1)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values less than('10'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+INSERT INTO T1 VALUES (1,1,1,1,1);
+INSERT INTO T1 VALUES (2,2,2,2,2);
+INSERT INTO T1 VALUES (3,3,3,3,3);
+INSERT INTO T1 VALUES (4,4,4,4,4);
+INSERT INTO T1 VALUES (5,5,5,5,5);
+INSERT INTO T1 VALUES (6,6,6,6,6);
+INSERT INTO T1 VALUES (7,7,7,7,7);
+
+DROP INDEX IDX1_1;
+DROP INDEX IDX1_2;
+DROP INDEX IDX1_3;
+DROP INDEX IDX1_4;
+DROP INDEX IDX1_5;
+DROP INDEX IDX1_6;
+DROP INDEX IDX1_7;
+DROP INDEX IDX1_8;
+
+####################################
+#SECTOR; Composite index - unique, hash==>TTREE, asc 
+####################################
+
+CREATE INDEX IDX1_1 ON T1 (I2 ASC, I1 ASC);
+CREATE UNIQUE INDEX IDX1_2 ON T1 (I1 ASC);
+CREATE INDEX IDX1_3 ON T1 (I2 ASC);
+CREATE INDEX IDX1_4 ON T1 (I2 ASC);
+CREATE UNIQUE INDEX IDX1_7 ON T1 (I1 ASC, I2 ASC, I3 ASC);
+CREATE UNIQUE INDEX IDX1_5 ON T1 (I3 ASC);
+CREATE INDEX IDX1_6 ON T1 (I3 ASC);
+CREATE INDEX IDX1_1 ON T1 (I1 ASC);
+CREATE INDEX IDX1_8 ON T1 (I1 ASC, I2 ASC, I3 ASC);
+
+SELECT * FROM T1 WHERE I1 = 1;
+SELECT * FROM T1 WHERE I1 = '1';
+SELECT * FROM T1 WHERE I1 >= 1;
+SELECT * FROM T1 WHERE I1 = 1 AND I2 = 1 AND I3 = 1 AND I4 = 1 AND I5 = 1;
+SELECT * FROM T1 WHERE I1 > 3 OR I1 < 2;
+
+####################################
+#SECTOR; PREPARATION
+####################################
+
+DROP INDEX IDX1_1;
+DROP INDEX IDX1_2;
+DROP INDEX IDX1_3;
+DROP INDEX IDX1_4;
+DROP INDEX IDX1_5;
+DROP INDEX IDX1_6;
+DROP INDEX IDX1_7;
+DROP INDEX IDX1_8;
+
+####################################
+#SECTOR; Composite index - unique, desc
+####################################
+
+CREATE INDEX IDX1_1 ON T1 (I2 DESC, I1 DESC);
+CREATE UNIQUE INDEX IDX1_2 ON T1 (I1 DESC);
+CREATE INDEX IDX1_3 ON T1 (I2 DESC);
+CREATE INDEX IDX1_4 ON T1 (I2 DESC);
+CREATE UNIQUE INDEX IDX1_7 ON T1 (I1 DESC, I2 DESC, I3 DESC);
+CREATE UNIQUE INDEX IDX1_5 ON T1 (I3 DESC);
+CREATE INDEX IDX1_6 ON T1 (I3 DESC);
+CREATE INDEX IDX1_1 ON T1 (I1 DESC);
+CREATE INDEX IDX1_8 ON T1 (I1 DESC, I2 DESC, I3 DESC);
+
+SELECT * FROM T1 WHERE I1 = 1;
+SELECT * FROM T1 WHERE I1 = '1';
+SELECT * FROM T1 WHERE I1 >= 1;
+SELECT * FROM T1 WHERE I1 = 1 AND I2 = 1 AND I3 = 1 AND I4 = 1 AND I5 = 1;
+SELECT * FROM T1 WHERE I1 > 3 OR I1 < 2;
+
+####################################
+#SECTOR; FINALIZATION
+####################################
+
+DROP INDEX IDX1_1;
+DROP INDEX IDX1_2;
+DROP INDEX IDX1_3;
+DROP INDEX IDX1_4;
+DROP INDEX IDX1_5;
+DROP INDEX IDX1_6;
+DROP INDEX IDX1_7;
+DROP INDEX IDX1_8;
+
+DROP TABLE T1;
+
+####################################
+#SECTOR; PREPARATION
+####################################
+
+DROP TABLE T2;
+
+CREATE TABLE T2 (I1 NUMERIC, I2 NUMERIC, I3 NUMERIC, I4 VARCHAR(10), I5 VARCHAR(10))
+partition by range(i1)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values less than('10'),
+	partition p6 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+INSERT INTO T2 VALUES (1,1,1,'AAA','AAC');
+INSERT INTO T2 VALUES (2,2,2,'ACA','ADC');
+INSERT INTO T2 VALUES (3,1,1,'BAA','AFC');
+INSERT INTO T2 VALUES (1,2,1,'BAA','AAC');
+INSERT INTO T2 VALUES (2,2,1,'BCA','CDC');
+INSERT INTO T2 VALUES (3,2,1,'DAA','AFC');
+
+DROP INDEX IDX2_1;
+DROP INDEX IDX2_2;
+DROP INDEX IDX2_3;
+DROP INDEX IDX2_4;
+DROP INDEX IDX2_5;
+DROP INDEX IDX2_6;
+DROP INDEX IDX2_7;
+DROP INDEX IDX2_8;
+
+####################################
+#SECTOR; Composite index - unique, asc 
+####################################
+
+CREATE INDEX IDX2_1 ON T2 (I1 ASC,I2 ASC,I3 ASC);
+CREATE INDEX IDX2_2 ON T2 (I2 ASC,I3 ASC);
+CREATE UNIQUE INDEX IDX2_3 ON T2 (I2 ASC,I3 ASC);
+CREATE INDEX IDX2_4 ON T2 (I2 ASC);
+CREATE INDEX IDX2_5 ON T2 (I1 ASC);
+CREATE UNIQUE INDEX IDX2_6 ON T2 (I1 ASC);
+
+SELECT * FROM T2 WHERE (I1,I2,I3) = ((1,1,1)) OR (I1,I2,I3) = ((2,2,2));
+SELECT * FROM T2 WHERE I2 = 1 AND I3 = 1;
+
+####################################
+#SECTOR; PREPARATION
+####################################
+
+DROP INDEX IDX2_1;
+DROP INDEX IDX2_2;
+DROP INDEX IDX2_3;
+DROP INDEX IDX2_4;
+DROP INDEX IDX2_5;
+DROP INDEX IDX2_6;
+DROP INDEX IDX2_7;
+DROP INDEX IDX2_8;
+
+####################################
+#SECTOR; Composite index - unique, desc 
+####################################
+
+CREATE INDEX IDX2_1 ON T2 (I1 DESC,I2 DESC,I3 DESC);
+CREATE INDEX IDX2_2 ON T2 (I2 DESC,I3 DESC);
+CREATE UNIQUE INDEX IDX2_3 ON T2 (I2 DESC,I3 DESC);
+CREATE INDEX IDX2_4 ON T2 (I2 DESC);
+CREATE INDEX IDX2_5 ON T2 (I1 DESC);
+CREATE UNIQUE INDEX IDX2_6 ON T2 (I1 DESC);
+SELECT * FROM T2 WHERE (I1,I2,I3) = ((1,1,1)) OR (I1,I2,I3) = ((2,2,2));
+SELECT * FROM T2 WHERE I2 = 1 AND I3 = 1;
+
+####################################
+#SECTOR; FINALIZATION
+####################################
+
+DROP INDEX IDX2_1;
+DROP INDEX IDX2_2;
+DROP INDEX IDX2_3;
+DROP INDEX IDX2_4;
+DROP INDEX IDX2_5;
+DROP INDEX IDX2_6;
+DROP INDEX IDX2_7;
+DROP INDEX IDX2_8;
+
+DROP TABLE T2;
+
+ALTER SESSION SET EXPLAIN PLAN = OFF;
+}

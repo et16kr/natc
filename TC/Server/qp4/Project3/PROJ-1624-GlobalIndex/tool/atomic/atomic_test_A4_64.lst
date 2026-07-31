@@ -1,0 +1,145 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Merge Query Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> MAKE "clean";
+$T0> SKIP END;
+
+$T0> create table t1 (i1 integer, i2 integer, i3 varchar(10))
+partition by hash(i1)
+(
+  partition p1,
+  partition p2
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index idx1 on t1(i2) local;
+Create success.
+$T0> create index idx2 on t1(i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+IDX1                                     BTREE                  I2 ASC
+IDX2                                     BTREE                  I3 ASC
+T1 has no primary key
+
+$T0> MAKE "all";
+
+$T0> ##################################
+$T0> # SECTOR; ATOMIC ARRAY INSERT
+$T0> ##################################
+
+$T0> EXEC P1 "./atomic_insert";
+$T0> P_WAIT P1;
+
+$T0> < CONNECT >
+
+ATOMIC ARRAY INSERT 
+
+< Disconnet >
+
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+IDX1                                     BTREE                  I2 ASC
+IDX2                                     BTREE                  I3 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter system set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select i1,i2,i3 from t1;
+I1          I2          I3          
+----------------------------------------
+1           2           abc         
+2           3           cde         
+3           4           fgh         
+4           5           ijk         
+5           6           lmn         
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1 where i2 = 3;
+T1.I1       T1.I2       T1.I3       
+----------------------------------------
+2           3           cde         
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: P2, INDEX: SYS.IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, INDEX: SYS.IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i3 = 'abc';
+T1.I1       T1.I2       T1.I3       
+----------------------------------------
+1           2           abc         
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX2, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter system set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> MAKE "clean";
+$T0> SKIP END;
+

@@ -1,0 +1,1002 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# CREATE TABLE AS SELECT TEST
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+--+SKIP END; 
+
+
+--###################################################################
+--+SECTOR 2; List->Range (Single Part-Key Column)
+--###################################################################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY LIST (I1)
+     ( PARTITION P1 VALUES (NULL, 0),
+       PARTITION P2 VALUES (100, 150),
+       PARTITION P3 VALUES (200, 250),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+
+--##############################
+--+SECTOR 3; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2
+                 ^ ^
+]
+$P0> CREATE TABLE T2 ( I1 ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 4; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (100),
+         PARTITION P2 VALUES LESS THAN (200),
+         PARTITION P3 VALUES LESS THAN (300),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1;
+Create success.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 5; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (150),
+         PARTITION P2 VALUES LESS THAN (250),
+         PARTITION P3 VALUES LESS THAN (350),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1 PARTITION(P2);
+Create success.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 6; List->List (Single Part-Key Column)
+--###################################################################
+
+--##############################
+--+SECTOR 7; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 8; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (NULL, 0),
+         PARTITION P2 VALUES (100, 150),
+         PARTITION P3 VALUES (200, 250),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1;
+Create success.
+
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 9; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (NULL, 0),
+         PARTITION P2 VALUES (100, 150),
+         PARTITION P3 VALUES (200, 250),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1 PARTITION(P2);
+Create success.
+
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 10; List->Hash(Single Part-Key Column)
+--###################################################################
+
+--##############################
+--+SECTOR 11; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 12; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 )
+     PARTITION BY HASH(I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1;
+Create success.
+
+-- result: 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 13; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1 )
+     PARTITION BY HASH(I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1 FROM T1 PARTITION(P2);
+Create success.
+
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 14; List->Range (Multiple Part-Key Column, Index )
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 VARCHAR(1000) )
+     PARTITION BY LIST(I1)
+     ( PARTITION P1 VALUES (NULL, 0),
+       PARTITION P2 VALUES (100, 150),
+       PARTITION P3 VALUES (200, 250),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350, 'ABC');
+1 row inserted.
+
+$P0> CREATE INDEX IDX1 ON T1(I1) LOCAL;
+Create success.
+$P0> CREATE INDEX IDX2 ON T1(I2) LOCAL;
+Create success.
+$P0> CREATE INDEX IDX3 ON T1(I1, I2) LOCAL;
+Create success.
+
+
+--##############################
+--+SECTOR 15; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 16; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (100),
+         PARTITION P2 VALUES LESS THAN (200),
+         PARTITION P3 VALUES LESS THAN (300),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1;
+Create success.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 17; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (150),
+         PARTITION P2 VALUES LESS THAN (250),
+         PARTITION P3 VALUES LESS THAN (350),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1 PARTITION(P2);
+Create success.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 18; List->List (Multiple Part-Key Column, Index )
+--###################################################################
+
+--##############################
+--+SECTOR 19; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 20; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (NULL, 0),
+         PARTITION P2 VALUES (100, 150),
+         PARTITION P3 VALUES (200, 250),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1;
+Create success.
+
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 21; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (NULL, 0),
+         PARTITION P2 VALUES (100, 150),
+         PARTITION P3 VALUES (200, 250),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1 PARTITION(P2);
+Create success.
+
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 22; List->Hash (Multiple Part-Key Column, Index )
+--###################################################################
+
+--##############################
+--+SECTOR 23; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 24; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 )
+     PARTITION BY HASH(I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1;
+Create success.
+
+-- result: 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 25; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2 )
+     PARTITION BY HASH(I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2 FROM T1 PARTITION(P2);
+Create success.
+
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 26; List->Range (Multiple Part-Key Column, Index, Lob Column )
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 BLOB )
+     PARTITION BY LIST (I1)
+     ( PARTITION P1 VALUES (100) TABLESPACE PDT_TBS2
+                             LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+       PARTITION P2 VALUES (200)
+                             LOB(I3) STORE AS ( TABLESPACE PDT_TBS4 ),
+       PARTITION P3 VALUES (300)
+                             LOB(I4) STORE AS ( TABLESPACE PDT_TBS5 ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350, 'ABC', 'ABC', 'ABC' );
+1 row inserted.
+
+$P0> CREATE INDEX IDX1 ON T1(I1) LOCAL;
+Create success.
+$P0> CREATE INDEX IDX2 ON T1(I2) LOCAL;
+Create success.
+$P0> CREATE INDEX IDX3 ON T1(I1, I2) LOCAL;
+Create success.
+
+
+--##############################
+--+SECTOR 27; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 28; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2
+                                 LOB (I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+         PARTITION P2 VALUES LESS THAN (200)
+                                 LOB (I4) STORE AS ( TABLESPACE PDT_TBS4 ),
+         PARTITION P3 VALUES LESS THAN (300)
+                                 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1;
+Create success.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 29; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (150),
+         PARTITION P2 VALUES LESS THAN (250) TABLESPACE PDT_TBS2
+                                 LOB (I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+         PARTITION P3 VALUES LESS THAN (350)
+                                 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+         PARTITION P4 VALUES DEFAULT
+                                 LOB (I4) STORE AS ( TABLESPACE PDT_TBS5 )
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1 PARTITION(P2);
+Create success.
+
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 30; List->List (Multiple Part-Key Column, Index, Lob Column )
+--###################################################################
+
+--##############################
+--+SECTOR 31; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 32; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (NULL, 0) TABLESPACE PDT_TBS2
+                                 LOB (I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+         PARTITION P2 VALUES (100, 150)
+                                 LOB (I4) STORE AS ( TABLESPACE PDT_TBS4 ),
+         PARTITION P3 VALUES (200, 250)
+                                 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1;
+Create success.
+
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 33; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 )
+     PARTITION BY LIST(I1)
+     (
+         PARTITION P1 VALUES (NULL, 0),
+         PARTITION P2 VALUES (100, 150) TABLESPACE PDT_TBS2
+                                 LOB (I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+         PARTITION P3 VALUES (200, 250)
+                                 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+         PARTITION P4 VALUES DEFAULT
+                                 LOB (I4) STORE AS ( TABLESPACE PDT_TBS5 )
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1 PARTITION(P2);
+Create success.
+
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P1);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P2);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T2 PARTITION (P4);
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 34; List->Hash (Multiple Part-Key Column, Index, Lob Column )
+--###################################################################
+
+--##############################
+--+SECTOR 35; CREATE none-partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1;
+Create success.
+
+-- should be 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 36; CREATE partitioned table
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 )
+     PARTITION BY HASH(I1)
+     (
+         PARTITION P1 TABLESPACE PDT_TBS2
+                 LOB (I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+         PARTITION P2 
+                 LOB (I4) STORE AS ( TABLESPACE PDT_TBS4 ),
+         PARTITION P3
+                 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+         PARTITION P4
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1;
+Create success.
+
+-- result: 8
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 37; prepruning
+--##############################
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T2 ( I1, I2, I3, I4 )
+     PARTITION BY HASH(I1)
+     (
+         PARTITION P1 TABLESPACE PDT_TBS2
+                 LOB (I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+         PARTITION P2 
+                 LOB (I4) STORE AS ( TABLESPACE PDT_TBS4 ),
+         PARTITION P3
+                 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+         PARTITION P4
+     ) TABLESPACE PDT_TBS
+     AS SELECT I1, I2, I3, I4 FROM T1 PARTITION(P2);
+Create success.
+
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+
+--##################################################################
+--+SECTOR 38; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+--+SKIP END; 
+

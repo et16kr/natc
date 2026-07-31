@@ -1,0 +1,383 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- CREATE LIST PARTITIONED DISK TABLE 
+-- PARTITION KEY : INTEGER
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT;
+--+SKIP END; 
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT VALUES( 10, 0 );
+1 row inserted.
+
+$P0> INSERT INTO PDT VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 20, 0 );
+1 row inserted.
+
+$P0> INSERT INTO PDT VALUES( 30, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 30, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 30, 0 );
+1 row inserted.
+
+$P0> INSERT INTO PDT VALUES( 40, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 40, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 40, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 40, 0 );
+1 row inserted.
+
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 2
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- are u sure that COUNT(*) is 3
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P3 );
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- are u sure that COUNT(*) is 4
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P4 );
+COUNT                
+-----------------------
+4                    
+1 row selected.
+
+$P0> DROP TABLE PDT;
+Drop success.
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+------------------------------------------
+-- 2.1 파티션 키 컬럼 개수 체크
+------------------------------------------
+-- should be fail
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1, F2 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31256 : Too many partition key columns]
+$P0> DROP TABLE PDT;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE PDT
+                 ^  ^
+]
+
+------------------------------------------
+-- 2.2 중복 파티션 조건값 체크 
+------------------------------------------
+-- should be fail
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 10 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-3125A : Duplicate partition key condition value : 
+0008 :          PARTITION P1 VALUES ( 10 ),
+                                     ^ ^
+]
+$P0> DROP TABLE PDT;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE PDT
+                 ^  ^
+]
+
+------------------------------------------
+-- 2.3 메모리 테이블스페이스 검사
+------------------------------------------
+-- should be fail
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-31258 : Unable to create a partitioned table or partition in the memory tablespace.]
+$P0> DROP TABLE PDT;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE PDT
+                 ^  ^
+]
+
+------------------------------------------
+-- 2.4 파티션 이름 중복 검사
+------------------------------------------
+-- should be fail
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 10 ),
+         PARTITION P1 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31251 : Duplicate partition name 
+0011 :          PARTITION P1 VALUES DEFAULT
+                         ^ ^
+]
+$P0> DROP TABLE PDT;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE PDT
+                 ^  ^
+]
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+------------------------------------------
+-- 3.1 Unique key
+------------------------------------------
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER PRIMARY KEY,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT VALUES( 10, 0 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO PDT VALUES( 10, 1 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO PDT VALUES( 20, 0 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO PDT VALUES( 20, 1 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO PDT VALUES( 30, 0 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO PDT VALUES( 30, 1 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO PDT VALUES( 40, 0 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO PDT VALUES( 40, 1 );
+[ERR-11058 : The row already exists in a unique index.]
+
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P2 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P3 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P4 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+$P0> DROP TABLE PDT;
+Drop success.
+
+------------------------------------------
+-- 3.2 Boundary Checking
+------------------------------------------
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT VALUES( 10, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 30, 0 );
+1 row inserted.
+-- MAX
+$P0> INSERT INTO PDT VALUES( 2147483647, 0 );
+1 row inserted.
+
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P2 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P3 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P4 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+$P0> DROP TABLE PDT;
+Drop success.
+
+
+------------------------------------------
+-- 3.3 NULL
+------------------------------------------
+$P0> CREATE TABLE PDT
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY LIST( F1 )
+     (
+         PARTITION P1 VALUES ( 10 ),
+         PARTITION P2 VALUES ( 20 ),
+         PARTITION P3 VALUES ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT VALUES( 10, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT VALUES( 30, 0 );
+1 row inserted.
+-- NULL
+$P0> INSERT INTO PDT VALUES( NULL, 0 );
+1 row inserted.
+
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P2 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P3 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- are u sure that COUNT(*) is 1
+$P0> SELECT COUNT(*) FROM PDT PARTITION( P4 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+$P0> DROP TABLE PDT;
+Drop success.
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT;
+--+SKIP END; 
+

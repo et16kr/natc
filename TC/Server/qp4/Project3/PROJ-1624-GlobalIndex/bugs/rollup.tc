@@ -1,0 +1,79 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+alter session set explain plan = off;
+alter system set trclog_detail_predicate = 0;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i4)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+alter table t1 add constraint t1_pk primary key (i1);
+create index t1_idx1 on t1( i1, i2, i3 );
+
+desc t1;
+
+insert into t1 select level, level/3, mod(level,3), level from dual connect by level <= 100;
+
+##################################
+# SECTOR; ROLLUP
+##################################
+
+alter session set explain plan = on;
+alter system set trclog_detail_predicate = 1;
+
+# SORT GROUP BY NOSORT ROLLUP
+select i1, i2, i3, sum(i4)
+from t1
+group by rollup( i1, i2, i3 );
+
+drop index t1_idx1;
+
+# SORT GROUP BY SORT ROLLUP
+select i1, i2, i3, sum(i4)
+from t1
+group by rollup( i1, i2, i3 );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

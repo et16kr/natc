@@ -1,0 +1,1102 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# CREATE INDEX TEST
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP INDEX IDX1;
+$P0> DROP INDEX IDX2;
+--+SKIP END; 
+
+--###################################################################
+--+SECTOR 2; BASIC TEST
+--###################################################################
+----------------------------------------
+-- CREATING INDEX USING CREATE_TABLE
+----------------------------------------
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER PRIMARY KEY,
+         I2   INTEGER
+     ) 
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO T1 VALUES( 35, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 30, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 15, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 10, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 0, 0 );
+1 row inserted.
+
+-- BUGBUG
+-- should be {0}
+$P0> SELECT I1 FROM T1
+     WHERE I1 >= 0 LIMIT 1;
+I1          
+--------------
+0           
+1 row selected.
+
+----------------------------------------
+-- CREATING INDEX USING CREATE_INDEX
+----------------------------------------
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER,
+         I2   INTEGER
+     ) 
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO T1 VALUES( 35, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 30, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 20, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 15, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 10, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 0, 0 );
+1 row inserted.
+
+-- should be {20}
+$P0> SELECT I1 FROM T1 PARTITION( P1 ) LIMIT 1;
+I1          
+--------------
+20          
+1 row selected.
+
+$P0> CREATE INDEX IDX1
+     ON T1( I1 ) LOCAL;
+Create success.
+
+-- BUGBUG
+-- should be {0}
+$P0> SELECT /*+ INDEX ASC ( T1, IDX1 ) */ I1
+     FROM T1 PARTITION( P1 ) LIMIT 1;
+I1          
+--------------
+0           
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 3; 파티션드 테이블인지 체크
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY HASH(I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2 ( I1 INTEGER, I2 INTEGER ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL;
+Create success.
+
+$P0> DROP INDEX IDX1;
+Drop success.
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T2 (I1) LOCAL;
+[ERR-31286 : cannot create a partitioned index in a non-partitioned table.]
+
+
+--###################################################################
+--+SECTOR 4; 유니크 인덱스 생성(프리픽스드 인덱스인지 체크)
+--###################################################################
+--###############################
+--+SECTOR 5; 유니크 제약 체크
+--###############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER,
+         I2   INTEGER
+     )
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO T1 VALUES( 35, 10 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 30, 15 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 20 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 20, 25 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 15, 30 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 10, 35 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 0, 5 );
+1 row inserted.
+
+$P0> CREATE UNIQUE INDEX IDX1
+     ON T1( I1 ) LOCAL;
+Create success.
+
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 35, 10 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 30, 15 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 25, 20 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 20, 25 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 15, 30 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 10, 35 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 5, 0 );
+[ERR-11058 : The row already exists in a unique index.]
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 0, 5 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> ALTER TABLE T1
+     ENABLE ROW MOVEMENT;
+Alter success.
+
+-- BUGBUG
+-- should be fail
+-- UPDATE T1 SET I1 = 20
+-- WHERE I1 = 30;
+
+--##############################
+--+SECTOR 6; 파티션 키 개수 = 인덱스 키 개수
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1) LOCAL;
+Create success.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1,I2,I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES( 350, 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 300, 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 250, 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 200, 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 150, 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 100, 0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 50,  0, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 0,   0, 0 );
+1 row inserted.
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1,I2,I3) LOCAL;
+Create success.
+
+-- BUGBUG
+-- Result: {0,50,100,150,200,250,300,350}
+$P0> SELECT /*+ INDEX ASC ( T1, IDX1 ) */ I1
+     FROM T1;
+I1          
+--------------
+0           
+50          
+100         
+150         
+350         
+250         
+300         
+200         
+8 rows selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1,I2,I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1,I2,I3) LOCAL;
+Create success.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1,I2,I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I3,I1,I2) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1,I2,I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1,I3,I2) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+--##############################
+--+SECTOR 7; 파티션 키 개수 > 인덱스 키 개수
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1, I2) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I3) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I2, I3) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+--##############################
+--+SECTOR 8; 파티션 키 개수 < 인덱스 키 개수
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1,I2) LOCAL;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1,I2)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1,I2,I3) LOCAL;
+Create success.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I3, I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I3, I1, I2) LOCAL;
+Create success.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I3, I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1, I2, I3) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+-- should be fail
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I3, I2, I1) LOCAL;
+[ERR-31283 : Unable to create a primary key or a unique key constraint in the local non-prefixed index.]
+
+
+--###################################################################
+--+SECTOR 9; 논프리픽스드 인덱스
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER,
+         I2   INTEGER
+     ) 
+     PARTITION BY HASH( I1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+$P0> INSERT INTO T1 VALUES( 35, 10 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 30, 15 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 20 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 20, 25 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 15, 30 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 10, 35 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 5, 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 0, 5 );
+1 row inserted.
+
+$P0> CREATE INDEX IDX1 
+     ON T1( I2 ) LOCAL;
+Create success.
+
+-- will be {0,30,10,15,20,25,35,5}
+$P0> SELECT /*+ INDEX ASC ( T1, IDX1 ) */ I2
+     FROM T1;
+I2          
+--------------
+0           
+30          
+10          
+15          
+20          
+5           
+25          
+35          
+8 rows selected.
+
+
+
+--###################################################################
+--+SECTOR 10; 인덱스의 데이터 타입 체크
+--###################################################################
+--##############################
+--+SECTOR 11; INTEGER
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1(I1, I2) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX2 ON T1(I2, I1) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX3 ON T1(I3, I2, I1) LOCAL;
+Create success.
+
+$P0> DROP INDEX IDX2;
+Drop success.
+$P0> CREATE INDEX IDX2 ON T1(I2, I1) LOCAL;
+Create success.
+
+$P0> DROP INDEX IDX1;
+Drop success.
+$P0> DROP INDEX IDX3;
+Drop success.
+
+-- should be success
+$P0> CREATE INDEX IDX3 ON T1(I1, I2) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1(I3, I2, I1) LOCAL;
+Create success.
+
+--##############################
+--+SECTOR 12; DATE
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 DATE, I2 DATE, I3 DATE )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1(I1, I2) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX2 ON T1(I2, I1) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX3 ON T1(I3, I2, I1) LOCAL;
+Create success.
+
+--##############################
+--+SECTOR 13; VARCHAR
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 VARCHAR(1000), I2 VARCHAR(10), I3 VARCHAR(10) )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1(I1, I2) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX2 ON T1(I2, I1) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX3 ON T1(I3, I2, I1) LOCAL;
+Create success.
+
+--##############################
+--+SECTOR 14; INTEGER + DATE + VARCHAR
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 DATE, I3 VARCHAR(1000) )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1(I1) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX2 ON T1(I2, I1) LOCAL;
+Create success.
+-- should be success
+$P0> CREATE INDEX IDX3 ON T1(I3, I1, I2) LOCAL;
+Create success.
+
+
+
+--###################################################################
+--+SECTOR 15; 파티션드 인덱스의 TBS 지정 여부
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY HASH(I1)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL TABLESPACE PDT_TBS;
+[ERR-31284 : cannot specify tablespace of partitioned index. 
+0001 : CREATE INDEX IDX1 ON T1 (I1) LOCAL TABLESPACE PDT_TBS
+                                                    ^      ^
+]
+
+
+
+--###################################################################
+--+SECTOR 16; 인덱스 파티션 검사
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1,
+       PARTITION IDX1_P2 ON P2,
+       PARTITION IDX1_P3 ON P3,
+       PARTITION IDX1_P4 ON P4 );
+Create success.
+
+$P0> DROP INDEX IDX2;
+[ERR-31014 : Index not found]
+-- should be success
+$P0> CREATE INDEX IDX2 ON T1 (I3, I2, I1) LOCAL
+     ( PARTITION IDX2_P1 ON P1,
+       PARTITION IDX2_P2 ON P2,
+       PARTITION IDX2_P3 ON P3,
+       PARTITION IDX2_P4 ON P4 );
+Create success.
+
+$P0> DROP INDEX IDX3;
+[ERR-31014 : Index not found]
+-- should be fail
+$P0> CREATE INDEX IDX3 ON T1 (I3, I2, I1) LOCAL
+     ( PARTITION IDX2_P1 ON P1,
+       PARTITION IDX2_P2 ON P2,
+       PARTITION IDX2_P3 ON P3,
+       PARTITION IDX2_P4 ON P4 );
+[ERR-31051 : Duplicate key columns in an index]
+
+$P0> DROP INDEX IDX3;
+[ERR-31014 : Index not found]
+-- should be success
+$P0> CREATE INDEX IDX3 ON T1 (I3, I1) LOCAL
+     ( PARTITION IDX3_P1 ON P1,
+       PARTITION IDX3_P2 ON P2,
+       PARTITION IDX3_P3 ON P3,
+       PARTITION IDX3_P4 ON P4 );
+Create success.
+
+--##############################
+--+SECTOR 17; 인덱스 파티션 이름 중복 검사
+--##############################
+-- should be fail
+$P0> CREATE INDEX IDX4 ON T1 (I1, I2) LOCAL
+     ( PARTITION IDX4_P1 ON P1,
+       PARTITION IDX4_P3 ON P2,
+       PARTITION IDX4_P3 ON P3,
+       PARTITION IDX4_P4 ON P4 );
+[ERR-3125D : Duplicate partition name 
+0004 :        PARTITION IDX4_P3 ON P3,
+                       ^      ^
+]
+
+--##############################
+--+SECTOR 18; 테이블 파티션 존재 여부 검사
+--##############################
+-- should be fail
+$P0> CREATE INDEX IDX4 ON T1 (I1, I2) LOCAL
+     ( PARTITION IDX4_P1 ON P1,
+       PARTITION IDX4_P2 ON P2,
+       PARTITION IDX4_P3 ON P5,
+       PARTITION IDX4_P4 ON P4 );
+[ERR-3125B : The table partition does not exist. 
+0004 :        PARTITION IDX4_P3 ON P5,
+                                  ^ ^
+]
+
+--##############################
+--+SECTOR 19; 테이블 파티션 이름 중복 검사
+--##############################
+-- should be fail
+$P0> CREATE INDEX IDX4 ON T1 (I1, I2) LOCAL
+     ( PARTITION IDX4_P1 ON P1,
+       PARTITION IDX4_P2 ON P2,
+       PARTITION IDX4_P3 ON P3,
+       PARTITION IDX4_P4 ON P2 );
+[ERR-3125D : Duplicate partition name 
+0005 :        PARTITION IDX4_P4 ON P2 )
+                                  ^ ^
+]
+
+--##############################
+--+SECTOR 20; 테이블스페이스 검사
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P2 ON P2,
+       PARTITION IDX1_P3 ON P3 TABLESPACE PDT_TBS3,
+       PARTITION IDX1_P4 ON P4 );
+Create success.
+
+-- Result: PDT_TBS2, PDT_TBS, PDT_TBS3, PDT_TBS5
+$P0> SELECT D.NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A, 
+          SYSTEM_.SYS_INDICES_ B, 
+          SYSTEM_.SYS_TABLES_ C, 
+          V$TABLESPACES D
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_ID = C.TABLE_ID AND
+           A.TBS_ID = D.ID AND
+           C.TABLE_NAME = 'T1'
+     ORDER BY A.INDEX_PARTITION_NAME ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS2                                  
+PDT_TBS                                   
+PDT_TBS3                                  
+PDT_TBS5                                  
+4 rows selected.
+
+
+$P0> DROP INDEX IDX1;
+Drop success.
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P2 ON P2,
+       PARTITION IDX1_P3 ON P3 TABLESPACE SYS_TBS_DISK_TEMP,
+       PARTITION IDX1_P4 ON P4 );
+[ERR-311DE : It is forbidden to create objects in a DICTIONARY, UNDO or TEMP tablespace.]
+
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1 TABLESPACE SYS_TBS_DISK_UNDO,
+       PARTITION IDX1_P2 ON P2,
+       PARTITION IDX1_P3 ON P3,
+       PARTITION IDX1_P4 ON P4 );
+[ERR-311DE : It is forbidden to create objects in a DICTIONARY, UNDO or TEMP tablespace.]
+
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P2 ON P2 TABLESPACE SYS_TBS_MEM_DATA,
+       PARTITION IDX1_P3 ON P3,
+       PARTITION IDX1_P4 ON P4 );
+[ERR-311EC : The type (memory/disk/volatile) of tablespace in which to create the index is not the same as the type of the table.]
+
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P2 ON P2 TABLESPACE ABCDEFG,
+       PARTITION IDX1_P3 ON P3,
+       PARTITION IDX1_P4 ON P4 );
+[ERR-1102A : Tablespace node not found ( Name : ABCDEFG )]
+
+--##############################
+--+SECTOR 21; 명시한 인덱스 파티션의 개수 체크
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P1 ON P1 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P2 ON P2,
+       PARTITION IDX1_P3 ON P3 TABLESPACE PDT_TBS3,
+       PARTITION IDX1_P4 ON P4,
+       PARTITION IDX1_P5 ON P5 );
+[ERR-3125B : The table partition does not exist. 
+0006 :        PARTITION IDX1_P5 ON P5 )
+                                  ^ ^
+]
+
+
+
+--###################################################################
+--+SECTOR 22; 명시한 인덱스 파티션 개수
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY HASH(I1, I2, I3)
+     ( PARTITION P1,
+       PARTITION P2,
+       PARTITION P3,
+       PARTITION P4 TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+--##############################
+--+SECTOR 23; 0개
+--##############################
+$P0> DROP INDEX IDX1;
+[ERR-31014 : Index not found]
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL;
+Create success.
+
+$P0> SELECT A.INDEX_PARTITION_NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A,
+          SYSTEM_.SYS_TABLES_ B
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_NAME='T1'
+     ORDER BY A.INDEX_PARTITION_ID;
+INDEX_PARTITION_NAME                      
+--------------------------------------------
+__SYS_PART_IDX_ID_1878                    
+__SYS_PART_IDX_ID_1879                    
+__SYS_PART_IDX_ID_1880                    
+__SYS_PART_IDX_ID_1881                    
+4 rows selected.
+
+-- Result: PDT_TBS, PDT_TBS, PDT_TBS, PDT_TBS5
+$P0> SELECT A.INDEX_PARTITION_NAME, D.PARTITION_NAME, E.NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A,
+          SYSTEM_.SYS_INDICES_ B,
+          SYSTEM_.SYS_TABLES_ C,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ D,
+          V$TABLESPACES E
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_ID = C.TABLE_ID AND
+           A.TABLE_PARTITION_ID = D.PARTITION_ID AND
+           A.TBS_ID = E.ID AND
+           C.TABLE_NAME = 'T1'
+     ORDER BY D.PARTITION_ID;
+INDEX_PARTITION_NAME                      
+--------------------------------------------
+PARTITION_NAME                            
+--------------------------------------------
+NAME                                      
+--------------------------------------------
+__SYS_PART_IDX_ID_1881                    
+P1                                        
+PDT_TBS                                   
+__SYS_PART_IDX_ID_1880                    
+P2                                        
+PDT_TBS                                   
+__SYS_PART_IDX_ID_1879                    
+P3                                        
+PDT_TBS                                   
+__SYS_PART_IDX_ID_1878                    
+P4                                        
+PDT_TBS5                                  
+4 rows selected.
+
+
+--##############################
+--+SECTOR 24; 0 ~ (테이블파티션 개수-1)
+--##############################
+$P0> DROP INDEX IDX1;
+Drop success.
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P2 ON P2 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P4 ON P4 TABLESPACE PDT_TBS3
+     );
+Create success.
+
+$P0> SELECT A.INDEX_PARTITION_NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A,
+          SYSTEM_.SYS_TABLES_ B
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_NAME='T1'
+     ORDER BY A.INDEX_PARTITION_ID;
+INDEX_PARTITION_NAME                      
+--------------------------------------------
+__SYS_PART_IDX_ID_1882                    
+__SYS_PART_IDX_ID_1883                    
+IDX1_P2                                   
+IDX1_P4                                   
+4 rows selected.
+
+-- Result: PDT_TBS, PDT_TBS2, PDT_TBS, PDT_TBS3
+$P0> SELECT A.INDEX_PARTITION_NAME, D.PARTITION_NAME, E.NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A,
+          SYSTEM_.SYS_INDICES_ B,
+          SYSTEM_.SYS_TABLES_ C,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ D,
+          V$TABLESPACES E
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_ID = C.TABLE_ID AND
+           A.TABLE_PARTITION_ID = D.PARTITION_ID AND
+           A.TBS_ID = E.ID AND
+           C.TABLE_NAME = 'T1'
+     ORDER BY D.PARTITION_ID;
+INDEX_PARTITION_NAME                      
+--------------------------------------------
+PARTITION_NAME                            
+--------------------------------------------
+NAME                                      
+--------------------------------------------
+__SYS_PART_IDX_ID_1883                    
+P1                                        
+PDT_TBS                                   
+IDX1_P2                                   
+P2                                        
+PDT_TBS2                                  
+__SYS_PART_IDX_ID_1882                    
+P3                                        
+PDT_TBS                                   
+IDX1_P4                                   
+P4                                        
+PDT_TBS3                                  
+4 rows selected.
+
+
+--##############################
+--+SECTOR 25; 테이블파티션 개수와 동일
+--##############################
+$P0> DROP INDEX IDX1;
+Drop success.
+-- should be success
+$P0> CREATE INDEX IDX1 ON T1 (I1) LOCAL
+     ( PARTITION IDX1_P4 ON P4,
+       PARTITION IDX1_P1 ON P1 TABLESPACE PDT_TBS2,
+       PARTITION IDX1_P2 ON P2 TABLESPACE PDT_TBS3,
+       PARTITION IDX1_P3 ON P3
+     );
+Create success.
+
+$P0> SELECT A.INDEX_PARTITION_NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A,
+          SYSTEM_.SYS_TABLES_ B
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_NAME='T1'
+     ORDER BY A.INDEX_PARTITION_ID;
+INDEX_PARTITION_NAME                      
+--------------------------------------------
+IDX1_P4                                   
+IDX1_P1                                   
+IDX1_P2                                   
+IDX1_P3                                   
+4 rows selected.
+
+-- Result: PDT_TBS2, PDT_TBS3, PDT_TBS, PDT_TBS5
+$P0> SELECT A.INDEX_PARTITION_NAME, D.PARTITION_NAME, E.NAME
+     FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A,
+          SYSTEM_.SYS_INDICES_ B,
+          SYSTEM_.SYS_TABLES_ C,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ D,
+          V$TABLESPACES E
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           B.TABLE_ID = C.TABLE_ID AND
+           A.TABLE_PARTITION_ID = D.PARTITION_ID AND
+           A.TBS_ID = E.ID AND
+           C.TABLE_NAME = 'T1'
+     ORDER BY D.PARTITION_ID;
+INDEX_PARTITION_NAME                      
+--------------------------------------------
+PARTITION_NAME                            
+--------------------------------------------
+NAME                                      
+--------------------------------------------
+IDX1_P1                                   
+P1                                        
+PDT_TBS2                                  
+IDX1_P2                                   
+P2                                        
+PDT_TBS3                                  
+IDX1_P3                                   
+P3                                        
+PDT_TBS                                   
+IDX1_P4                                   
+P4                                        
+PDT_TBS5                                  
+4 rows selected.
+
+
+
+--##################################################################
+--+SECTOR 26; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP INDEX IDX1;
+$P0> DROP INDEX IDX2;
+$P0> DROP INDEX IDX3;
+--+SKIP END; 
+

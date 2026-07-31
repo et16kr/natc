@@ -1,0 +1,137 @@
+PROJ-1624 Global Non-Partitioned Index
+
+[DDL]
+create index
+  prefix, non-prefix
+  options
+    tablespace
+    b-tree, r-tree
+    unique, non-unique
+  name length
+  encrypted type
+alter index
+  rebuild
+  rebuild partition (with tbs option)
+  persistent
+  aging
+  ttl option
+  alloc option
+  storage option
+  rename
+create table
+  options
+alter table
+  add column
+    global index
+  drop column
+    drop global index, alter global index
+  rename column
+add constraint
+  pk, uk, fk
+alter partition
+  add
+  coalesce
+  drop
+  merge
+  split
+  truncate
+truncate table
+drop index
+drop table
+drop constraint
+drop user
+drop tablespace
+DDL on global index table
+  alter, drop, truncate
+  privilege
+DML on global index table
+  privilege
+  select, dml
+DDL on global index table index
+  alter, drop
+
+[meta]
+global index
+  index type
+  system_.sys_indices_
+hidden global index table
+  schema
+    owner
+  system_.sys_tables_
+global index table index
+  schema
+    owner
+  system_.sys_indices_
+
+[design]
+plan
+  local index
+  global index
+filters
+  global index filter
+    key range, key filter
+  constant filter
+  subquery filter, nnf filter
+  filter
+global index filter and partition filter
+  pruned partition
+best access method
+  local index and global index
+    cardinality, index selectivity
+    access cost
+indexable predicate
+  =, !=, <, >, <=, >=, in
+  is null, is not null
+  like
+  equals
+join predicate
+host variable
+  sdf
+constraint
+  pk, uk, fk
+preserved order
+  order by, distinct
+  join
+hint
+  force global index
+  force local index
+
+[basic]
+select
+  select, select for update
+  indexable predicate
+  host variable
+DML
+  insert, update, delete, move
+    dpath insert
+    row movement
+    success, failure
+  indexable predicate
+  host variable
+  constraint
+
+[replication]
+create replication
+create index
+insert
+  dpath insert
+update
+delete
+sync
+
+[tool]
+isql
+  desc
+aexport
+
+[performance]
+local index
+  select, update, row-movement update, delete
+  1client, 4client, 8client, 16client
+global index
+  select, update, row-movement update, delete
+  1client, 4client, 8client, 16client
+
+[bugs]
+function-based global index
+rollup, cube (preserved order)

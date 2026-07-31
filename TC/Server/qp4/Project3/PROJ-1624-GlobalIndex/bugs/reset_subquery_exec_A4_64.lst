@@ -1,0 +1,150 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--##########################################################################
+--# BUG-31040
+--#     distinct 한 하나의 value 만 필요한 부분에 subquery 가 사용되었을 경우 서버 사망
+--##########################################################################
+
+--#####################################
+--# PREPARATION
+--#####################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE A;
+$P0> DROP TABLE B;
+$P0> DROP TABLE C;
+--+SKIP END; 
+
+$P0> CREATE TABLE A (A1 INTEGER);
+Create success.
+$P0> CREATE TABLE B (B1 INTEGER);
+Create success.
+$P0> CREATE TABLE C (C1 INTEGER)
+     partition by hash(c1)
+     (
+       partition p1,
+       partition p2
+     )
+     tablespace sys_tbs_disk_data;
+Create success.
+
+$P0> INSERT INTO A VALUES (1);
+1 row inserted.
+$P0> INSERT INTO B VALUES (1);
+1 row inserted.
+$P0> INSERT INTO C VALUES (1);
+1 row inserted.
+
+$P0> CREATE INDEX ADX ON A ( A1 );
+Create success.
+
+$P0> alter session set explain plan = on;
+Alter success.
+$P0> alter system set trclog_detail_predicate = 1;
+Alter success.
+
+--#####################################
+--+SECTOR 1; TEST
+--#####################################
+
+$P0> SELECT
+         (SELECT A1 FROM A
+          WHERE B.B1=A1 AND A1 IN (SELECT B1 FROM B)
+          LIMIT 1 )
+     FROM B;
+(SELECT A1 FROM A
+          WHERE B.B1=A1  
+---------------------------------------------
+1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+ ::SUB-QUERY BEGIN
+ PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+  SEMI-JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.A, INDEX: SYS.ADX, RANGE SCAN, ACCESS: 1, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, BUCKET_COUNT: 1024, ACCESS: 1, COST: BLOCKED )
+    SCAN ( TABLE: SYS.B $$1_$$VIEW1_$B, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+ ::SUB-QUERY END
+ SCAN ( TABLE: SYS.B, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT B1 FROM B ORDER BY
+         (SELECT A1 FROM A WHERE B.B1 = A1 
+          AND A1 IN (SELECT A1 FROM A)
+          LIMIT 1);
+B1          
+--------------
+1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.B, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT B1 FROM B GROUP BY B1 HAVING
+         B1 = (SELECT A1 FROM A WHERE B.B1 = A1 
+               AND A1 IN (SELECT C1 FROM C)
+               LIMIT 1);
+B1          
+--------------
+1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+ FILTER
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SEMI-JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.A, INDEX: SYS.ADX, RANGE SCAN, ACCESS: 1, COST: BLOCKED )
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+     PARTITION-COORDINATOR ( TABLE: SYS.C $$1_$$VIEW1_$C, PARTITION: 2/2, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+      SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  ::SUB-QUERY END
+  GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1024, ACCESS: 1, COST: BLOCKED )
+   SCAN ( TABLE: SYS.B, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT B1 FROM B WHERE 
+         3= (SELECT A1 FROM A WHERE B.B1 = A1 
+               AND A1 IN (SELECT C1 FROM C)
+               LIMIT 1);
+B1          
+--------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+ SCAN ( TABLE: SYS.B, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SEMI-JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.A, INDEX: SYS.ADX, RANGE SCAN, ACCESS: 1, COST: BLOCKED )
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+     PARTITION-COORDINATOR ( TABLE: SYS.C $$1_$$VIEW1_$C, PARTITION: 2/2, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+      SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+--#####################################
+--# FINALIZATION
+--#####################################
+
+$P0> DROP TABLE A;
+Drop success.
+$P0> DROP TABLE B;
+Drop success.
+$P0> DROP TABLE C;
+Drop success.
+
+$P0> alter session set explain plan = off;
+Alter success.
+$P0> alter system set trclog_detail_predicate = 0;
+Alter success.
+

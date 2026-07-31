@@ -1,0 +1,84 @@
+#####################################
+# Using Subquery
+#####################################
+
+
+DEF MAIN()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t3;
+SKIP END;
+
+create table t1 (no1 integer, cno integer, vv integer , primary key (cno))
+partition by range(no1)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+create index t1_idx on t1 (no1);
+
+insert into t1 values (1, 1, 100);
+insert into t1 values (1, 2, 100);
+insert into t1 values (3, 3, 500);
+insert into t1 values (4, 4, 500);
+
+create table t2 (cno integer, vv1 integer , primary key (cno) )
+partition by range(cno)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+insert into t2 values (1, 100);
+insert into t2 values (2, 100);
+insert into t2 values (3, 100);
+insert into t2 values (4, 100);
+
+create table t3 (cno integer, vv1 integer , primary key (cno) )
+partition by range(cno)
+(
+	partition p1 values less than('1'),
+	partition p2 values less than('3'),
+	partition p3 values less than('5'),
+	partition p4 values less than('7'),
+	partition p5 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+insert into t3 values (1, 100);
+insert into t3 values (3, 100);
+insert into t3 values (5, 100);
+
+select a.cno,
+             (select sum (vv1) from t2 where cno = a.cno) AA,
+             (select nvl(sum (vv1), 0) from t3 where cno = a.cno) BB
+from t1 a
+where a.no1 = 1
+group by a.cno; 
+
+select  sum(X.AA), SUM(X.BB)
+from
+(
+       	 	select a.cno, 
+                	(select sum (vv1) from t2 where cno = a.cno) AA, 
+                	(select nvl(sum (vv1), 0) from t3 where cno = a.cno) BB
+        	from t1 a
+        	where a.no1 = 1
+        	group by a.cno
+) X;
+
+
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t3;
+SKIP END;
+}

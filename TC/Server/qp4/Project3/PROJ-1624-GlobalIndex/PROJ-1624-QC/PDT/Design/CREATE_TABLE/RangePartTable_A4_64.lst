@@ -1,0 +1,2920 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# CREATE TABLE TEST
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T3 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+$P0> DROP TABLE T1 CASCADE;
+$P0> DROP USER YNKANG CASCADE;
+--+SKIP END; 
+$P0> CREATE USER YNKANG IDENTIFIED BY YNKANG DEFAULT TABLESPACE PDT_TBS3;
+Create success.
+$P0> GRANT ALL PRIVILEGES TO YNKANG;
+Grant success.
+
+$P0> ALTER SESSION SET DEFAULT_DATE_FORMAT='DD-MON-RRRR';
+Alter success.
+
+
+--###################################################################
+--+SECTOR 2; 파싱 검사
+--###################################################################
+
+--##############################
+--+SECTOR 3; 기본 파티션 개수 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES DEFAULT,
+       PARTITION P4 VALUES LESS THAN (300)
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES DEFAULT,
+       PARTITION P2 VALUES LESS THAN (100),
+       PARTITION P3 VALUES LESS THAN (200),
+       PARTITION P4 VALUES LESS THAN (300)
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     (
+       PARTITION P1 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300)
+     ) TABLESPACE PDT_TBS;
+[ERR-31263 : The number of default partitions must be one in a range or list partitioned table]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES DEFAULT,
+       PARTITION P4 VALUES LESS THAN (300),
+       PARTITION P5 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31263 : The number of default partitions must be one in a range or list partitioned table]
+
+--##############################
+--+SECTOR 4; MAXROWS 사용 유무 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) MAXROWS 1000 TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+0007 :      ) MAXROWS 1000 TABLESPACE PDT_TBS
+             ^      ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS MAXROWS 1000;
+[ERR-31001 : SQL syntax error 
+
+line 7: parse error
+     ) TABLESPACE PDT_TBS MAXROWS 1000
+                          ^     ^
+
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) MAXROWS 100,
+       PARTITION P2 VALUES LESS THAN (200) MAXROWS 100,
+       PARTITION P3 VALUES LESS THAN (300) MAXROWS 100,
+       PARTITION P4 VALUES DEFAULT MAXROWS 100
+     ) TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+
+line 3: parse error
+     ( PARTITION P1 VALUES LESS THAN (100) MAXROWS 100,
+                                           ^     ^
+
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) MAXROWS 100,
+       PARTITION P2 VALUES LESS THAN (200) MAXROWS 100,
+       PARTITION P3 VALUES LESS THAN (300) MAXROWS 100,
+       PARTITION P4 VALUES DEFAULT MAXROWS 100
+     ) MAXROWS 1000 TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+
+line 3: parse error
+     ( PARTITION P1 VALUES LESS THAN (100) MAXROWS 100,
+                                           ^     ^
+
+]
+
+
+
+--##################################################################
+--+SECTOR 5; 파티션 키 컬럼에 대한 검사
+--##################################################################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY RANGE (I3, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, NULL, NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 0, 0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 100, 100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150, 150, 150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 200, 200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250, 250, 250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 300, 300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350, 350, 350);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+--##############################
+--+SECTOR 6; 파티션 키 컬럼의 중복 체크
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+--should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY RANGE (I3, I1, I3)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31007 : Duplicate column name 
+0002 :      PARTITION BY RANGE (I3, I1, I3)
+                               ^ ^
+]
+
+--##############################
+--+SECTOR 7; 파티션 키 컬럼이 테이블에 존재하는 컬럼인지 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+--should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY RANGE (I3, I1, I4, I2 )
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31261 : Invalid partition key column name 
+0002 :      PARTITION BY RANGE (I3, I1, I4, I2 )
+                                       ^ ^
+]
+
+--##############################
+--+SECTOR 8; 파티션 키 컬럼의 데이터 타입이 대소 비교 가능한 타입인지 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIGINT, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIT(10), I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 BLOB, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31260 : Invalid partition key column type 
+0001 : CREATE TABLE T1 ( I1 BLOB, I2 INTEGER )
+                        ^ ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BYTE, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 CLOB, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31260 : Invalid partition key column type 
+0001 : CREATE TABLE T1 ( I1 CLOB, I2 INTEGER )
+                        ^ ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DOUBLE, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 FLOAT, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NIBBLE, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMBER, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 REAL, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 SMALLINT, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARBIT, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR, I2 INTEGER )
+     PARTITION BY RANGE (I2, I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+--##############################
+--+SECTOR 9; 파티션 키 컬럼 개수 체크
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( 
+         I1     INTEGER, 
+         I2     INTEGER,
+         I3     INTEGER, 
+         I4     INTEGER,
+         I5     INTEGER, 
+         I6     INTEGER,
+         I7     INTEGER, 
+         I8     INTEGER,
+         I9     INTEGER, 
+         I10    INTEGER,
+         I11    INTEGER, 
+         I12    INTEGER,
+         I13    INTEGER, 
+         I14    INTEGER,
+         I15    INTEGER, 
+         I16    INTEGER,
+         I17    INTEGER, 
+         I18    INTEGER,
+         I19    INTEGER, 
+         I20    INTEGER,
+         I21    INTEGER, 
+         I22    INTEGER,
+         I23    INTEGER, 
+         I24    INTEGER,
+         I25    INTEGER, 
+         I26    INTEGER,
+         I27    INTEGER, 
+         I28    INTEGER,
+         I29    INTEGER, 
+         I30    INTEGER,
+         I31    INTEGER, 
+         I32    INTEGER 
+     )
+     PARTITION BY RANGE 
+     (
+         I1 , 
+         I2 ,
+         I3 , 
+         I4 ,
+         I5 , 
+         I6 ,
+         I7 , 
+         I8 ,
+         I9 , 
+         I10,
+         I11, 
+         I12,
+         I13, 
+         I14,
+         I15, 
+         I16,
+         I17, 
+         I18,
+         I19, 
+         I20,
+         I21, 
+         I22,
+         I23, 
+         I24,
+         I25, 
+         I26,
+         I27, 
+         I28,
+         I29, 
+         I30,
+         I31, 
+         I32 
+     )
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail 
+$P0> CREATE TABLE T1 ( 
+         I1     INTEGER, 
+         I2     INTEGER,
+         I3     INTEGER, 
+         I4     INTEGER,
+         I5     INTEGER, 
+         I6     INTEGER,
+         I7     INTEGER, 
+         I8     INTEGER,
+         I9     INTEGER, 
+         I10    INTEGER,
+         I11    INTEGER, 
+         I12    INTEGER,
+         I13    INTEGER, 
+         I14    INTEGER,
+         I15    INTEGER, 
+         I16    INTEGER,
+         I17    INTEGER, 
+         I18    INTEGER,
+         I19    INTEGER, 
+         I20    INTEGER,
+         I21    INTEGER, 
+         I22    INTEGER,
+         I23    INTEGER, 
+         I24    INTEGER,
+         I25    INTEGER, 
+         I26    INTEGER,
+         I27    INTEGER, 
+         I28    INTEGER,
+         I29    INTEGER, 
+         I30    INTEGER,
+         I31    INTEGER, 
+         I32    INTEGER,
+         I33    INTEGER 
+     )
+     PARTITION BY RANGE 
+     (
+         I1 , 
+         I2 ,
+         I3 , 
+         I4 ,
+         I5 , 
+         I6 ,
+         I7 , 
+         I8 ,
+         I9 , 
+         I10,
+         I11, 
+         I12,
+         I13, 
+         I14,
+         I15, 
+         I16,
+         I17, 
+         I18,
+         I19, 
+         I20,
+         I21, 
+         I22,
+         I23, 
+         I24,
+         I25, 
+         I26,
+         I27, 
+         I28,
+         I29, 
+         I30,
+         I31, 
+         I32,
+         I33 
+     )
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31262 : Too many partition key columns]
+
+
+
+--##################################################################
+--+SECTOR 10; 각 파티션에 대한 검사
+--##################################################################
+--##############################
+--+SECTOR 11; 파티션 이름 중복 검사
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P4 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-3125D : Duplicate partition name 
+0006 :        PARTITION P4 VALUES DEFAULT
+                       ^ ^
+]
+
+--##############################
+--+SECTOR 12; 파티션의 TBS 검사
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- Result: PDT_TBS, PDT_TBS, PDT_TBS, PDT_TBS
+$P0> SELECT C.NAME
+     FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           A.TBS_ID = C.ID AND
+           B.TABLE_NAME = 'T1'
+     ORDER BY A.PARTITION_NAME ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS                                   
+PDT_TBS                                   
+PDT_TBS                                   
+PDT_TBS                                   
+4 rows selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- Result: PDT_TBS2, PDT_TBS3, PDT_TBS4, PDT_TBS
+$P0> SELECT C.NAME
+     FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           A.TBS_ID = C.ID AND
+           B.TABLE_NAME = 'T1'
+     ORDER BY A.PARTITION_NAME ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS2                                  
+PDT_TBS3                                  
+PDT_TBS4                                  
+PDT_TBS                                   
+4 rows selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- Result: PDT_TBS, PDT_TBS3, PDT_TBS, PDT_TBS
+$P0> SELECT C.NAME
+     FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           A.TBS_ID = C.ID AND
+           B.TABLE_NAME = 'T1'
+     ORDER BY A.PARTITION_NAME ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS                                   
+PDT_TBS3                                  
+PDT_TBS                                   
+PDT_TBS                                   
+4 rows selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CONNECT YNKANG/YNKANG;
+Connect success.
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS5,
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     );
+Create success.
+
+-- Result: PDT_TBS3, PDT_TBS5, PDT_TBS3, PDT_TBS3
+$P0> SELECT C.NAME
+     FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B, V$TABLESPACES C
+     WHERE A.TABLE_ID = B.TABLE_ID AND
+           A.TBS_ID = C.ID AND
+           B.TABLE_NAME = 'T1'
+     ORDER BY A.PARTITION_NAME ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS3                                  
+PDT_TBS5                                  
+PDT_TBS3                                  
+PDT_TBS3                                  
+4 rows selected.
+$P0> DROP TABLE T1;
+Drop success.
+$P0> CONNECT SYS/MANAGER;
+Connect success.
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE ABCDEFG,
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-1102A : Tablespace node not found ( Name : ABCDEFG )]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE SYS_TBS_DISK_UNDO,
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-311DE : It is forbidden to create objects in a DICTIONARY, UNDO or TEMP tablespace.]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE SYS_TBS_DISK_TEMP,
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-311DE : It is forbidden to create objects in a DICTIONARY, UNDO or TEMP tablespace.]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE SYS_TBS_MEM_DATA,
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31264 : Unable to create a partitioned table or partition in the memory tablespace.]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-31264 : Unable to create a partitioned table or partition in the memory tablespace.]
+
+
+--##############################
+--+SECTOR 13; 파티션의 LOB 컬럼의 TBS 검사
+--##############################
+--###############
+--# LOB STORE ( ... ) STORE AS ( ... ) 의 경우
+--###############
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS 
+                                         LOB(I2, I3) STORE AS ( TABLESPACE PDT_TBS2 ),
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 );
+Create success.
+
+-- Result: PDT_TBS
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P1';
+NAME                                      
+--------------------------------------------
+PDT_TBS                                   
+1 row selected.
+
+-- Result: PDT_TBS2, PDT_TBS2
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+           PART.PARTITION_ID = LOBS.PARTITION_ID AND
+           LOBS.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P1'
+     ORDER BY LOBS.COLUMN_ID ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS2                                  
+PDT_TBS2                                  
+2 rows selected.
+
+-- Result: PDT_TBS3
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P2';
+NAME                                      
+--------------------------------------------
+PDT_TBS3                                  
+1 row selected.
+
+-- Result: PDT_TBS3, PDT_TBS5
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+           PART.PARTITION_ID = LOBS.PARTITION_ID AND
+           LOBS.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P2'
+     ORDER BY LOBS.COLUMN_ID ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS3                                  
+PDT_TBS5                                  
+2 rows selected.
+
+-- Result: PDT_TBS4
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P3';
+NAME                                      
+--------------------------------------------
+PDT_TBS4                                  
+1 row selected.
+
+-- Result: PDT_TBS4, PDT_TBS5
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+           PART.PARTITION_ID = LOBS.PARTITION_ID AND
+           LOBS.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P3'
+     ORDER BY LOBS.COLUMN_ID ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS4                                  
+PDT_TBS5                                  
+2 rows selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS 
+                             LOB(I2, I3) STORE AS ( TABLESPACE SYS_TBS_MEM_DATA ),
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 );
+[ERR-31245 : Unable to create a LOB type column with the specified tablespace.]
+
+--###############
+--# LOB STORE STORE AS ( ... ) 의 경우
+--###############
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS 
+                                         LOB(I3) STORE AS ( TABLESPACE PDT_TBS2 ),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES DEFAULT LOB STORE AS ( TABLESPACE PDT_TBS3 )
+     ) TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 );
+Create success.
+
+-- Result: PDT_TBS
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P1';
+NAME                                      
+--------------------------------------------
+PDT_TBS                                   
+1 row selected.
+
+-- Result: PDT_TBS5, PDT_TBS2
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+           PART.PARTITION_ID = LOBS.PARTITION_ID AND
+           LOBS.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P1'
+     ORDER BY LOBS.COLUMN_ID ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS5                                  
+PDT_TBS2                                  
+2 rows selected.
+
+-- Result: PDT_TBS4
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P2';
+NAME                                      
+--------------------------------------------
+PDT_TBS4                                  
+1 row selected.
+
+-- Result: PDT_TBS5, PDT_TBS5
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+           PART.PARTITION_ID = LOBS.PARTITION_ID AND
+           LOBS.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P2'
+     ORDER BY LOBS.COLUMN_ID ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS5                                  
+PDT_TBS5                                  
+2 rows selected.
+
+-- Result: PDT_TBS4
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P3';
+NAME                                      
+--------------------------------------------
+PDT_TBS4                                  
+1 row selected.
+
+-- Result: PDT_TBS3, PDT_TBS3
+$P0> SELECT TBS.NAME
+     FROM SYSTEM_.SYS_TABLES_ TAB, SYSTEM_.SYS_PART_LOBS_ LOBS, SYSTEM_.SYS_TABLE_PARTITIONS_ PART, V$TABLESPACES TBS
+     WHERE TAB.TABLE_ID = LOBS.TABLE_ID AND
+           PART.PARTITION_ID = LOBS.PARTITION_ID AND
+           LOBS.TBS_ID = TBS.ID AND
+           TAB.TABLE_NAME = 'T1' AND
+           PART.PARTITION_NAME = 'P3'
+     ORDER BY LOBS.COLUMN_ID ASC;
+NAME                                      
+--------------------------------------------
+PDT_TBS3                                  
+PDT_TBS3                                  
+2 rows selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS 
+                                         LOB(I3) STORE AS ( TABLESPACE PDT_TBS2 ),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES DEFAULT LOB STORE AS ( TABLESPACE SYS_TBS_MEM_DATA )
+     ) TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 );
+[ERR-31245 : Unable to create a LOB type column with the specified tablespace.]
+
+
+
+--##################################################################
+--+SECTOR 14; 파티션 키 조건 값에 대한 검사
+--##################################################################
+--##############################
+--+SECTOR 15; 파티션 키 조건 값의 개수 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100, 100),
+       PARTITION P2 VALUES LESS THAN (200, 100),
+       PARTITION P3 VALUES LESS THAN (300, 100),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, NULL, NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 0, 0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 100, 100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150, 100, 150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 100, 200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250, 100, 250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 100, 300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350, 100, 350);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER, I3 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100, 100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300, 100, 100),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-3125E : A partition condition list contains too many elements]
+
+--##############################
+--+SECTOR 16; 파티션 키 조건 값의 길이 체크
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+-- test for 4001 characters (over 4000 character)
+$P0> CREATE TABLE T1 ( I1 VARCHAR(5000) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ('A'),
+       PARTITION P2 VALUES LESS THAN ('B'),
+       PARTITION P3 VALUES LESS THAN ('
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+     123456789012345678901234567890123456789012345678901234567'),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-3127B : The length of a partition condition value is too long]
+
+
+--##############################
+--+SECTOR 17; 파티션 키 조건 값 검사(상수)
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+-- integer: ~ 2147483647
+$P0> CREATE TABLE T1 ( I1 BIGINT )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (2147483648),
+       PARTITION P2 VALUES LESS THAN (3147483648),
+       PARTITION P3 VALUES LESS THAN (4147483648),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2147483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2947483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3147483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3947483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4147483648);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4947483648);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIT(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (BIT'1010101010'),
+       PARTITION P2 VALUES LESS THAN (BIT'1010101110'),
+       PARTITION P3 VALUES LESS THAN (BIT'1010111010'),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'0000000000');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101011');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101110');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010101111');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010111010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'1010111011');
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BYTE(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ('1010101010'),
+       PARTITION P2 VALUES LESS THAN ('1010101110'),
+       PARTITION P3 VALUES LESS THAN ('1010111010'),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('0000000000');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101011');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101110');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101111');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111011');
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE ( I1 )
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01', 'YYYY-MM-DD') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('2007-06-01', 'YYYY-MM-DD') ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-01-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-01', 'YYYY-MM-DD'));
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE ( I1 )
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('01-APR-2007') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('01-MAY-2007') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('01-JUN-2007') ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE ( I1 )
+     ( PARTITION P1 VALUES LESS THAN (SYSDATE),
+       PARTITION P2 VALUES LESS THAN (SYSDATE+1),
+       PARTITION P3 VALUES LESS THAN (SYSDATE+2),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31265 : Invalid partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN (SYSDATE),
+                                            ^      ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DOUBLE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (123.456),
+       PARTITION P2 VALUES LESS THAN (223.456),
+       PARTITION P3 VALUES LESS THAN (323.456),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 FLOAT )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (123.456),
+       PARTITION P2 VALUES LESS THAN (223.456),
+       PARTITION P3 VALUES LESS THAN (323.456),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NIBBLE(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ('1010101010'),
+       PARTITION P2 VALUES LESS THAN ('1010101110'),
+       PARTITION P3 VALUES LESS THAN ('1010111010'),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('0000000000');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101011');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101110');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010101111');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111010');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('1010111011');
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC)
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (123.456),
+       PARTITION P2 VALUES LESS THAN (223.456),
+       PARTITION P3 VALUES LESS THAN (323.456),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 REAL )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (123.456),
+       PARTITION P2 VALUES LESS THAN (223.456),
+       PARTITION P3 VALUES LESS THAN (323.456),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (123.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (193.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (223.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (293.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (323.456);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (393.456);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 SMALLINT)
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (150);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (250);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (350);
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ('AAAAA'),
+       PARTITION P2 VALUES LESS THAN ('BBBBB'),
+       PARTITION P3 VALUES LESS THAN ('CCCCC'),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('0');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('AAAAA');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('ABAAA');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('BBBBB');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('BCBBB');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('CCCCC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('CDCCC');
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 18; 파티션 키 조건 값 검사(내장 함수)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( ROUND(123.5)  ),
+       PARTITION P2 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( TO_CHAR('ABCDEFG') ),
+       PARTITION P2 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE ( I1 )
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01', 'YYYY-MM-DD') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('2007-06-01', 'YYYY-MM-DD') ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+--##############################
+--+SECTOR 19; 파티션 키 조건 값 검사(호스트 변수)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+$P0> VAR X INTEGER;
+$P0> EXEC :X := 100;
+Execute success.
+
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( :X ),
+       PARTITION P2 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31265 : Invalid partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN ( :X ),
+                                             ^ ^
+]
+
+--##############################
+--+SECTOR 20; 파티션 키 조건 값 검사(서브쿼리)
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( SELECT COUNT(*) FROM DUAL ),
+       PARTITION P2 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31001 : SQL syntax error 
+
+line 3: parse error
+     ( PARTITION P1 VALUES LESS THAN ( SELECT COUNT(*) FROM DUAL ),
+                                       ^    ^
+
+]
+
+--##############################
+--+SECTOR 21; 파티션 키 조건 값 검사(한계값 검사)
+--##############################
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (2147483647),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES( 2147483647 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 2147483648 );
+[ERR-21010 : Value overflow 
+0001 : INSERT INTO T1 VALUES( 2147483648 )
+                             ^         ^
+]
+
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P4 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (2147483647, 2147483647),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES( 2147483647, 2147483647 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 2147483648, 2147483648 );
+[ERR-21010 : Value overflow 
+0001 : INSERT INTO T1 VALUES( 2147483648, 2147483648 )
+                             ^         ^
+]
+
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P4 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+--##############################
+--+SECTOR 22; 파티션 키 조건 값 검사(NULL 값)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (NULL),
+       PARTITION P2 VALUES LESS THAN (100),
+       PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31265 : Invalid partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN (NULL),
+                                            ^   ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 VARCHAR(10) )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100, NULL),
+       PARTITION P2 VALUES LESS THAN (100, 'A'),
+       PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31265 : Invalid partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN (100, NULL),
+                                                 ^   ^
+]
+
+--##############################
+--+SECTOR 23; 파티션 키 조건 값 검사(날짜 포맷 변경 검사)
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01', 'YYYY-MM-DD') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('2007-06-01', 'YYYY-MM-DD') ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-01-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-01', 'YYYY-MM-DD'));
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+$P0> ALTER SESSION SET DEFAULT_DATE_FORMAT='YYYY-MM-DD';
+Alter success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-01-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-04-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-30', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-01', 'YYYY-MM-DD'));
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-01', 'YYYY-MM-DD'));
+1 row inserted.
+
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 4
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+-- result: 4
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+4                    
+1 row selected.
+-- result: 6
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+6                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('2007-06-01') ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> ALTER SESSION SET DEFAULT_DATE_FORMAT='DD-MON-RRRR';
+Alter success.
+
+--##############################
+--+SECTOR 24; 파티션 키 조건 값의 중복 검사
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100),
+       PARTITION P2 VALUES LESS THAN (200),
+       PARTITION P3 VALUES LESS THAN (200),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31266 : Duplicate partition key condition value : 
+0004 :        PARTITION P2 VALUES LESS THAN (200),
+                                            ^  ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ('ABC'),
+       PARTITION P2 VALUES LESS THAN ('DEF'),
+       PARTITION P3 VALUES LESS THAN ('ABC'),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31266 : Duplicate partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN ('ABC'),
+                                            ^    ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01', 'YYYY-MM-DD') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31266 : Duplicate partition key condition value : 
+0004 :        PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+                                            ^                                  ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01', 'YYYY-MM-DD') ),
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-05-01', 'YYYY-MM-DD') ),
+       PARTITION P3 VALUES LESS THAN (TO_DATE('01-APR-2007') ), 
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31266 : Duplicate partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-04-01', 'YYYY-MM-DD') ),
+                                            ^                                  ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (SYSDATE),
+       PARTITION P2 VALUES LESS THAN (SYSDATE),
+       PARTITION P3 VALUES LESS THAN (SYSDATE),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+[ERR-31265 : Invalid partition key condition value : 
+0003 :      ( PARTITION P1 VALUES LESS THAN (SYSDATE),
+                                            ^      ^
+]
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10), I2 DATE, I3 INTEGER )
+     PARTITION BY RANGE (I1, I2, I3)
+     ( PARTITION P1 VALUES LESS THAN ('AAA', TO_DATE('2007-04-01', 'YYYY-MM-DD'), 100),
+       PARTITION P2 VALUES LESS THAN ('BBB', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 200),
+       PARTITION P3 VALUES LESS THAN ('BBB', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 300),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES ( NULL, NULL, NULL );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( '000', TO_DATE('2007-01-01', 'YYYY-MM-DD'), 0 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 'AAA', TO_DATE('2007-04-01', 'YYYY-MM-DD'), 100 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 'AAA', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 100 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 'BBB', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 200 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 'BBB', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 250 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 'BBB', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 300 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 'BBB', TO_DATE('2007-05-30', 'YYYY-MM-DD'), 350 );
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+3                    
+1 row selected.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10), I2 DATE, I3 INTEGER )
+     PARTITION BY RANGE (I1, I2, I3)
+     ( PARTITION P1 VALUES LESS THAN ('AAA', TO_DATE('2007-04-01', 'YYYY-MM-DD'), 100),
+       PARTITION P2 VALUES LESS THAN ('BBB', TO_DATE('2007-05-01', 'YYYY-MM-DD'), 100),
+       PARTITION P3 VALUES LESS THAN ('CCC', TO_DATE('2007-04-01', 'YYYY-MM-DD'), 100),
+       PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+
+--#########################################
+--+SECTOR 25; 제약 사항 체크(유니크 키 체크)
+--#########################################
+--------------------------------
+-- 프리픽스드 인덱스 여부 체크
+--------------------------------
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER PRIMARY KEY,
+         I2   INTEGER
+     ) 
+     PARTITION BY RANGE( I2 )
+     (
+         PARTITION P1 VALUES LESS THAN ( 10 ),
+         PARTITION P2 VALUES LESS THAN ( 20 ),
+         PARTITION P3 VALUES LESS THAN ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER PRIMARY KEY,
+         I2   INTEGER
+     ) 
+     PARTITION BY RANGE( I1 )
+     (
+         PARTITION P1 VALUES LESS THAN ( 10 ),
+         PARTITION P2 VALUES LESS THAN ( 20 ),
+         PARTITION P3 VALUES LESS THAN ( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES( 5, 50 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 5, 50 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO T1 VALUES( 15, 150 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 16, 150 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 16, 150 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO T1 VALUES( 25, 250 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 26, 250 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 27, 250 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 27, 250 );
+[ERR-11058 : The row already exists in a unique index.]
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P3 );
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+--------------------------------
+-- 프리픽스드 인덱스 여부 체크
+--------------------------------
+$P0> DROP TABLE T1;
+Drop success.
+-- should be fail
+$P0> CREATE TABLE T1 
+     (
+         I1   INTEGER,
+         I2   INTEGER,
+         PRIMARY KEY(I1, I2)
+     ) 
+     PARTITION BY RANGE( I2, I1 )
+     (
+         PARTITION P1 VALUES LESS THAN ( 10, 100 ),
+         PARTITION P2 VALUES LESS THAN ( 20, 200 ),
+         PARTITION P3 VALUES LESS THAN ( 30, 300 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+
+$P0> DROP TABLE T1;
+Drop success.
+-- should be success
+$P0> CREATE TABLE T1 
+     (
+         I1   INTEGER,
+         I2   INTEGER,
+         PRIMARY KEY(I1, I2)
+     ) 
+     PARTITION BY RANGE( I1, I2 )
+     (
+         PARTITION P1 VALUES LESS THAN ( 10, 100 ),
+         PARTITION P2 VALUES LESS THAN ( 20, 200 ),
+         PARTITION P3 VALUES LESS THAN ( 30, 300 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES( 5, 50 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 5, 51 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 5, 50 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO T1 VALUES( 15, 150 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 15, 151 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 15, 152 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 15, 151 );
+[ERR-11058 : The row already exists in a unique index.]
+
+$P0> INSERT INTO T1 VALUES( 25, 250 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 251 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 252 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES( 25, 253 );
+1 row inserted.
+-- should be fail
+$P0> INSERT INTO T1 VALUES( 25, 252 );
+[ERR-11058 : The row already exists in a unique index.]
+
+-- result: 2
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+-- result: 3
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P2 );
+COUNT                
+-----------------------
+3                    
+1 row selected.
+-- result: 4
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P3 );
+COUNT                
+-----------------------
+4                    
+1 row selected.
+-- result: 0
+$P0> SELECT COUNT(*) FROM T1 PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--#########################################
+--+SECTOR 26; 제약 사항 체크(외래키 체크)
+--#########################################
+-- 단일 컬럼 파티셔닝
+$P0> DROP TABLE T3 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T3 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T2 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+$P0> CREATE TABLE T1
+     (
+         I1   INTEGER UNIQUE,
+         I2   INTEGER
+     ) 
+     PARTITION BY RANGE( I1 )
+     (
+         PARTITION P1 VALUES LESS THAN ( 100 ),
+         PARTITION P2 VALUES LESS THAN ( 200 ),
+         PARTITION P3 VALUES LESS THAN ( 300 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2
+     ( 
+         I1 INTEGER UNIQUE, 
+         I2 INTEGER 
+     );
+Create success.
+
+$P0> CREATE TABLE T3
+     (
+         I1   INTEGER UNIQUE,
+         I2   INTEGER
+     ) 
+     PARTITION BY RANGE( I1 )
+     (
+         PARTITION P1 VALUES LESS THAN ( 100 ),
+         PARTITION P2 VALUES LESS THAN ( 200 ),
+         PARTITION P3 VALUES LESS THAN ( 300 ),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+-- should be fail
+$P0> INSERT INTO T2 VALUES ( 100, 100 );
+[ERR-31077 : The parent record was not found for T2_FK.]
+
+$P0> INSERT INTO T1 VALUES ( 50, 100 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 100, 100 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 200, 100 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 300, 100 );
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T1 PARTITION (P4);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+-- should be fail
+$P0> INSERT INTO T3 VALUES ( 100, 100 );
+[ERR-31077 : The parent record was not found for T3_FK.]
+
+-- should be success
+$P0> INSERT INTO T2 VALUES ( 50, 100 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 100, 100 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 200, 100 );
+1 row inserted.
+$P0> INSERT INTO T2 VALUES ( 300, 100 );
+1 row inserted.
+
+-- result: 4
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+4                    
+1 row selected.
+
+
+$P0> INSERT INTO T3 VALUES ( 50, 100 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 100, 100 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 200, 100 );
+1 row inserted.
+$P0> INSERT INTO T3 VALUES ( 300, 100 );
+1 row inserted.
+
+-- result: 1
+$P0> SELECT COUNT(*) FROM T3 PARTITION (P1);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T3 PARTITION (P2);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T3 PARTITION (P3);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- result: 1
+$P0> SELECT COUNT(*) FROM T3 PARTITION (P4);
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+
+--##################################################################
+--+SECTOR 27; 메타 테이블 체크
+--##################################################################
+
+--+SYSTEM server kill;
+--+SYSTEM clean;
+--+SYSTEM server start;
+
+--+SYSTEM is -f INITIALIZE.sql;
+
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 DATE, I3 BLOB, I4 CLOB )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (100, TO_DATE('2007-04-01', 'YYYY-MM-DD') ) 
+                 TABLESPACE PDT_TBS LOB(I3, I4) STORE AS ( TABLESPACE PDT_TBS2 ),
+       PARTITION P2 VALUES LESS THAN (200, TO_DATE('2007-05-01', 'YYYY-MM-DD') ) 
+                 TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS4 LOB(I4) STORE AS ( TABLESPACE PDT_TBS5 );
+Create success.
+
+--##############################
+--+SECTOR 28; SYS_TABLES_
+--##############################
+$P0> SELECT TAB.TABLE_NAME, TAB.COLUMN_COUNT, TAB.IS_PARTITIONED
+     FROM SYSTEM_.SYS_TABLES_ TAB
+     WHERE TABLE_NAME='T1'
+     ORDER BY TABLE_ID;
+TABLE_NAME                                COLUMN_COUNT IS_PARTITIONED  
+---------------------------------------------------------------------------
+T1                                        4           T  
+1 row selected.
+
+--##############################
+--+SECTOR 29; SYS_PART_TABLES_
+--##############################
+$P0> SELECT A.*
+     FROM SYSTEM_.SYS_PART_TABLES_ A, SYSTEM_.SYS_TABLES_ B
+     WHERE A.TABLE_ID = B.TABLE_ID
+         AND B.TABLE_NAME='T1'
+     ORDER BY A.TABLE_ID;
+A.USER_ID   A.TABLE_ID  A.PARTITION_METHOD A.PARTITION_KEY_COUNT A.ROW_MOVEMENT  
+---------------------------------------------------------------------------------------
+2           105         0           2           F  
+1 row selected.
+
+--##############################
+--+SECTOR 30; SYS_TABLE_PARTITIONS_
+--##############################
+$P0> SELECT A.USER_ID, A.TABLE_ID, A.PARTITION_NAME, A.PARTITION_MIN_VALUE, 
+            A.PARTITION_MAX_VALUE, A.PARTITION_ORDER, A.TBS_ID
+     FROM SYSTEM_.SYS_TABLE_PARTITIONS_ A, SYSTEM_.SYS_TABLES_ B
+     WHERE A.TABLE_ID = B.TABLE_ID
+         AND B.TABLE_NAME='T1'
+     ORDER BY B.TABLE_ID, A.PARTITION_ID;
+USER_ID     TABLE_ID    PARTITION_NAME                            
+----------------------------------------------------------------------
+PARTITION_MIN_VALUE                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_MAX_VALUE                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_ORDER TBS_ID      
+-------------------------------
+2           105         P1                                        
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+100, TO_DATE('2007-04-01', 'YYYY-MM-DD')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+            5           
+2           105         P2                                        
+100, TO_DATE('2007-04-01', 'YYYY-MM-DD')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+200, TO_DATE('2007-05-01', 'YYYY-MM-DD')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+            7           
+2           105         P3                                        
+200, TO_DATE('2007-05-01', 'YYYY-MM-DD')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+            8           
+3 rows selected.
+
+--##############################
+--+SECTOR 31; SYS_PART_KEY_COLUMNS_
+--##############################
+$P0> SELECT A.PARTITION_OBJ_ID, A.OBJECT_TYPE, A.PART_COL_ORDER 
+     FROM SYSTEM_.SYS_PART_KEY_COLUMNS_ A, SYSTEM_.SYS_TABLES_ B
+     WHERE A.PARTITION_OBJ_ID = B.TABLE_ID
+         AND B.TABLE_NAME='T1'
+     ORDER BY A.PARTITION_OBJ_ID;
+PARTITION_OBJ_ID OBJECT_TYPE PART_COL_ORDER 
+------------------------------------------------
+105         0           1           
+105         0           0           
+2 rows selected.
+
+--##############################
+--+SECTOR 32; SYS_PART_LOBS_
+--##############################
+$P0> SELECT A.TABLE_ID, A.PARTITION_ID, A.TBS_ID 
+     FROM SYSTEM_.SYS_PART_LOBS_ A, SYSTEM_.SYS_TABLES_ B
+     WHERE A.TABLE_ID = B.TABLE_ID
+         AND B.TABLE_NAME='T1'
+     ORDER BY A.TABLE_ID, A.PARTITION_ID;
+TABLE_ID    PARTITION_ID TBS_ID      
+-----------------------------------------
+105         2           6           
+105         2           6           
+105         3           9           
+105         3           7           
+105         4           9           
+105         4           8           
+6 rows selected.
+
+
+--##################################################################
+--+SECTOR 33; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T3 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+$P0> DROP TABLE T1 CASCADE;
+$P0> DROP USER YNKANG CASCADE;
+--+SKIP END; 
+

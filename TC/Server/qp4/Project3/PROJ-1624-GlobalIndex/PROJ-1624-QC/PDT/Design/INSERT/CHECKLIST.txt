@@ -1,0 +1,49 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for INSERT
+
+#Description: 
+
+#CheckList
+    - 파티션 키 조건
+        - 단일 컬럼
+        - 멀티 컬럼
+
+    - INSERT DATA
+        - 데이터 타입
+            - INTEGER, BIGINT, SMALLINT
+            - BIT(10), BIT(1000)
+            - BLOB, CLOB
+            - BYTE(1000), NIBBLE(1000)
+            - CHAR(10), CHAR(1000)
+            - DATE
+            - DOUBLE, FLOAT, REAL
+            - NUMERIC
+            - VARBIT(10), VARBIT(1000)
+            - VARCHAR(10), VARCHAR(1000)
+
+        - 함수
+            - AVG
+            - ROUND
+            - CONCAT
+            - INSTRB
+            - MONTHS_BETWEEN
+
+        - TBS, LOB 컬럼의 TBS
+
+    - FOREIGN KEY
+        - 각 데이터 타입
+
+    - INSERT ... SELECT
+        - SELECT Table
+            - None-PT(Mem)
+            - None-PT(Disk)
+            - Range-PT
+            - List-PT
+            - Hash-PT
+        - INSERT Table
+            - None-PT(Mem)
+            - None-PT(Disk)
+            - Range-PT
+            - List-PT
+            - Hash-PT

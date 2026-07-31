@@ -1,0 +1,54 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# DROP CONSTRAINT
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 
+     (
+         I1 NUMERIC, 
+         I2 NUMERIC, 
+         I3 NUMERIC
+     ) 
+     PARTITION BY RANGE( I3 )
+     (
+         PARTITION P1 VALUES LESS THAN( 20 ),
+         PARTITION P2 VALUES LESS THAN( 40 ),
+         PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> INSERT INTO T1 VALUES ( NULL, NULL, NULL );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( NULL, NULL, NULL );
+1 row inserted.
+
+--#########################################
+--+SECTOR 2; DO JOB
+--#########################################
+
+-- should be success
+$P0> CREATE UNIQUE INDEX IDX_T1 ON T1 (I3 DESC);
+Create success.
+
+--###################################################################
+--+SECTOR 3; FINALIZATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+

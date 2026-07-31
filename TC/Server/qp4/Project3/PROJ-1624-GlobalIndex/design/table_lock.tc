@@ -1,0 +1,217 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop view v1;
+drop view v2;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+set linesize 200;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition t1_p1 values less than (6),
+  partition t1_pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+
+insert into t1 values ( 1, 1, 1 );
+insert into t1 values ( 2, 2, 2 );
+insert into t1 values ( 3, 3, 3 );
+insert into t1 values ( 4, 4, 4 );
+insert into t1 values ( 5, 5, 5 );
+insert into t1 values ( 6, 6, 6 );
+insert into t1 values ( 7, 7, 7 );
+insert into t1 values ( 8, 8, 8 );
+
+create index t1_idx2 on t1(i2);
+create index t1_idx3 on t1(i3);
+
+create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition t2_p1 values less than (6),
+  partition t2_pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+
+insert into t2 values ( 3, 3, 3 );
+insert into t2 values ( 4, 4, 4 );
+insert into t2 values ( 5, 5, 5 );
+insert into t2 values ( 6, 6, 6 );
+insert into t2 values ( 7, 7, 7 );
+insert into t2 values ( 8, 8, 8 );
+insert into t2 values ( 9, 9, 9 );
+insert into t2 values ( 10, 10, 10 );
+
+create index t2_idx2 on t2(i2);
+create index t2_idx3 on t2(i3);
+
+desc t1;
+desc t2;
+
+##################################
+# SECTOR; SELECT
+##################################
+
+create view v1 as
+  select cast(t.table_name || ',' || v.lock_desc || ',' || v.lock_cnt as varchar(50)) as lock_info
+  from system_.sys_tables_ t, v$lock v
+  where t.user_id = user_id() and t.table_oid = v.table_oid
+  order by t.table_name;
+
+create view v2 as
+  select cast(p.partition_name || ',' || v.lock_desc || ',' || v.lock_cnt as varchar(50)) as lock_info
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p, v$lock v
+  where t.user_id = user_id() and t.table_id = p.table_id and p.partition_oid = v.table_oid
+  order by p.partition_name;
+
+select to_char(i1) i1 from t1
+union all 
+select * from v1
+union all
+select * from v2;
+
+select to_char(i1) i1 from t1 where i2=1
+union all 
+select * from v1
+union all
+select * from v2;
+
+select to_char(i1) i1 from t1 where i3=1
+union all 
+select * from v1
+union all
+select * from v2;
+
+select to_char(i1) i1 from t1 where i2=1 and i3=1
+union all 
+select * from v1
+union all
+select * from v2;
+
+select to_char(t1.i1) i1 from t1, t2 where t1.i2=t2.i2
+union all 
+select * from v1
+union all
+select * from v2;
+
+select to_char(t1.i1) i1 from t1, t2 where t1.i3=t2.i3
+union all 
+select * from v1
+union all
+select * from v2;
+
+select to_char(t1.i1) i1 from t1, t2 where t1.i2=t2.i2 and t1.i3=t2.i3
+union all 
+select * from v1
+union all
+select * from v2;
+
+##################################
+# SECTOR; INSERT
+##################################
+
+alter session set autocommit = false;
+
+insert into t1 values ( 10, 10, 10 );
+
+select * from v1
+union all
+select * from v2;
+
+commit;
+alter session set autocommit = true;
+
+##################################
+# SECTOR; UPDATE
+##################################
+
+alter session set autocommit = false;
+
+update t1 set i1=11, i2=11, i3=11 where i1=10;
+
+select * from v1
+union all
+select * from v2;
+
+commit;
+alter session set autocommit = true;
+
+##################################
+# SECTOR; UPDATE ROW MOVEMENT
+##################################
+
+alter session set autocommit = false;
+
+update t1 set i1=0, i2=0, i3=0 where i1=11;
+
+select * from v1
+union all
+select * from v2;
+
+commit;
+alter session set autocommit = true;
+
+##################################
+# SECTOR; DELETE
+##################################
+
+alter session set autocommit = false;
+
+delete from t1 where i1=0;
+
+select * from v1
+union all
+select * from v2;
+
+commit;
+alter session set autocommit = true;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

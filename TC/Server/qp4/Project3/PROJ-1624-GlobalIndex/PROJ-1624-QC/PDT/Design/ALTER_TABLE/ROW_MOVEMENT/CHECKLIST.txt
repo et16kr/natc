@@ -1,0 +1,37 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for ALTER TABLE ... ENABLE/DISABLE ROW MOVEMENT
+
+#Description: 
+
+#CheckList
+    - 파티션드 테이블인지 체크
+
+    - 파티션드 테이블 종류
+        - 범위
+        - 해시
+        - 리스트
+
+    - 파티션 개수
+        - 1개
+        - 4개
+
+    - 파티션 키 조건
+        - 단일 컬럼
+        - 멀티 컬럼
+        - 데이터 타입
+            - INTEGER
+            - DATE
+            - VARCHAR
+
+    - 인덱스 유무
+        - 단일 인덱스
+        - 다중 인덱스
+
+    - LOB 컬럼
+
+    - UPDATE 조건
+        - 여러 파티션으로 분산되는 경우
+        - 한 파티션으로 몰리는 경우
+        - 현재 파티션에 그대로 있는 경우
+

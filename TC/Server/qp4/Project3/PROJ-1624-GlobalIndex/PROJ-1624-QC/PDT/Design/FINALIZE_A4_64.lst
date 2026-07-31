@@ -1,0 +1,38 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--######################################################
+-- clean up tablespace
+--######################################################
+
+$P0> DROP TABLESPACE PDT_TBS 
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+Drop success.
+
+$P0> DROP TABLESPACE PDT_TBS2
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+Drop success.
+
+$P0> DROP TABLESPACE PDT_TBS3
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+Drop success.
+
+$P0> DROP TABLESPACE PDT_TBS4
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+Drop success.
+
+$P0> DROP TABLESPACE PDT_TBS5
+     INCLUDING CONTENTS AND DATAFILES
+     CASCADE CONSTRAINTS;
+Drop success.
+
+$P0> DROP FUNCTION TO_DATE_FUNC;
+Drop success.
+

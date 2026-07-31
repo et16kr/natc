@@ -1,0 +1,577 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+Create success.
+$T0> create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; COLUMN CONSTRAINT
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer constraint t1_pk primary key,
+  i3 integer constraint t1_uk unique,
+  i4 integer constraint t1_nn not null
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     NOT NULL
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I2 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+No rows selected.
+
+$T0> create table t2
+( 
+  i1 integer, 
+  i2 integer constraint t2_pk primary key,
+  i3 integer constraint t2_fk references t1 (i3)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> set foreignkeys on;
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_PK                                    BTREE    UNIQUE        I2 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2
+
+[ FOREIGN KEYS ]                                                 
+------------------------------------------------------------------------------
+* T2_FK                                 * T1_UK                            
+( I3 )                            --->  SYS.T1 ( I3 )                      
+$T0> desc "$GIT_T2_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T2_PK                               BTREE    UNIQUE        I2 ASC
+$GIR_T2_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T2_PK" has no primary key
+
+[ FOREIGN KEYS ]                                                 
+------------------------------------------------------------------------------
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+No rows selected.
+$T0> set foreignkeys off;
+
+$T0> ##################################
+$T0> # SECTOR; TABLE CONSTRAINT
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer, 
+  i3 integer, 
+  i4 integer, 
+  i5 integer,
+  constraint t1_pk primary key (i2, i3),
+  constraint t1_uk unique (i4, i5)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC,
+                                                                I5 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I2 ASC,
+                                                                I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC,
+                                                                I5 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.I5   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+
+$T0> create table t2
+( 
+  i1 integer, 
+  i2 integer, 
+  i3 integer, 
+  i4 integer, 
+  i5 integer,
+  constraint t2_pk primary key (i2, i3),
+  constraint t2_fk foreign key (i4, i5) references t1 (i4, i5) on delete cascade
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> set foreignkeys on;
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC,
+                                                                I5 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I3
+
+[ FOREIGN KEYS ]                                                 
+------------------------------------------------------------------------------
+* T1_UK                                 * T2_FK                            
+( I4, I5 )                        <---  SYS.T2 ( I4, I5 )                  
+$T0> desc "$GIT_T2_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T2_PK                               BTREE    UNIQUE        I2 ASC,
+                                                                I3 ASC
+$GIR_T2_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T2_PK" has no primary key
+
+[ FOREIGN KEYS ]                                                 
+------------------------------------------------------------------------------
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+$T0> set foreignkeys off;
+
+$T0> ##################################
+$T0> # SECTOR; SORT ORDER
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer, 
+  i3 integer, 
+  i4 integer, 
+  i5 integer,
+  constraint t1_pk primary key (i2 desc, i3 asc),
+  constraint t1_uk unique (i4 asc, i5 desc)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 DESC,
+                                                                I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC,
+                                                                I5 DESC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I2 DESC,
+                                                                I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC,
+                                                                I5 DESC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.I5   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer, 
+  i3 integer, 
+  i4 integer, 
+  i5 integer,
+  constraint t1_pk primary key (i2 desc, i3 desc),
+  constraint t1_uk unique (i4 desc, i5 desc)
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 DESC,
+                                                                I3 DESC
+T1_UK                                    BTREE    UNIQUE        I4 DESC,
+                                                                I5 DESC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I2 DESC,
+                                                                I3 DESC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 DESC,
+                                                                I5 DESC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.I5   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; USING INDEX
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer, 
+  i3 integer, 
+  i4 integer, 
+  i5 integer,
+  constraint t1_pk primary key (i2, i3) using index tablespace data1 initrans 8 maxtrans 30,
+  constraint t1_uk unique (i4, i5) using index tablespace data2 initrans 16 maxtrans 58
+)
+partition by list(i1)
+(
+  partition p1 values (10, 11, 12),
+  partition p2 values (20, 21, 22),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+[ERR-312E9 : The MAXTRANS value must be between 0 and 50]
+
+$T0> desc t1;
+[ERR-91014 : The table (T1) does not exist.]
+$T0> desc "$GIT_T1_PK";
+[ERR-91014 : The table ($GIT_T1_PK) does not exist.]
+
+$T0> select * from "$_TEMP";
+[ERR-31031 : Table or view was not found : 
+0001 : select * from "$_TEMP"
+                     ^     ^
+]
+$T0> desc "$GIT_T1_UK";
+[ERR-91014 : The table ($GIT_T1_UK) does not exist.]
+
+$T0> select * from "$_TEMP";
+[ERR-31031 : Table or view was not found : 
+0001 : select * from "$_TEMP"
+                     ^     ^
+]
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+

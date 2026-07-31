@@ -1,0 +1,468 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; INDEX NAME
+$T0> ##################################
+
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than ('100'),
+  partition p2 values less than ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+
+
+$T0> # 33 byte
+$T0> create index i23456789012345678901234567890123 on t1(i3, i1);
+Create success.
+$T0> # 34 byte
+$T0> create index i234567890123456789012345678901234 on t1(i2, i1);
+Create success.
+$T0> # 35 byte
+$T0> create index i2345678901234567890123456789012345 on t1(i1);
+Create success.
+$T0> # 36 byte
+$T0> create index i23456789012345678901234567890123456 on t1(i2);
+Create success.
+$T0> # 37 byte
+$T0> create index i234567890123456789012345678901234567 on t1(i3);
+Create success.
+$T0> # 38 byte
+$T0> create index i2345678901234567890123456789012345678 on t1(i1, i2);
+Create success.
+$T0> # 39 byte
+$T0> create index i23456789012345678901234567890123456789 on t1(i2, i3);
+Create success.
+$T0> # 40 byte
+$T0> create index i234567890123456789012345678901234567890 on t1(i1, i3);
+Create success.
+$T0> # 41 byte
+$T0> create index i2345678901234567890123456789012345678901 on t1(i1, i2, i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+I23456789012345678901234567890123        BTREE                  I3 ASC,
+                                                                I1 ASC
+I234567890123456789012345678901234       BTREE                  I2 ASC,
+                                                                I1 ASC
+I2345678901234567890123456789012345      BTREE                  I1 ASC
+I23456789012345678901234567890123456     BTREE                  I2 ASC
+I234567890123456789012345678901234567    BTREE                  I3 ASC
+I2345678901234567890123456789012345678   BTREE                  I1 ASC,
+                                                                I2 ASC
+I23456789012345678901234567890123456789  BTREE                  I2 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567890 BTREE                  I1 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567... BTREE                  I1 ASC,
+                                                                I2 ASC,
+                                                                I3 ASC
+T1 has no primary key
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+
+
+$T0> # 33 byte
+$T0> create index i23456789012345678901234567890123 on t1(i3, i1);
+Create success.
+$T0> # 34 byte
+$T0> create index i234567890123456789012345678901234 on t1(i2, i1);
+Create success.
+$T0> # 35 byte
+$T0> create index i2345678901234567890123456789012345 on t1(i1);
+Create success.
+$T0> # 36 byte
+$T0> create index i23456789012345678901234567890123456 on t1(i2);
+Create success.
+$T0> # 37 byte
+$T0> create index i234567890123456789012345678901234567 on t1(i3);
+Create success.
+$T0> # 38 byte
+$T0> create index i2345678901234567890123456789012345678 on t1(i1, i2);
+Create success.
+$T0> # 39 byte
+$T0> create index i23456789012345678901234567890123456789 on t1(i2, i3);
+Create success.
+$T0> # 40 byte
+$T0> create index i234567890123456789012345678901234567890 on t1(i1, i3);
+Create success.
+$T0> # 41 byte
+$T0> create index i2345678901234567890123456789012345678901 on t1(i1, i2, i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+I23456789012345678901234567890123        BTREE                  I3 ASC,
+                                                                I1 ASC
+I234567890123456789012345678901234       BTREE                  I2 ASC,
+                                                                I1 ASC
+I2345678901234567890123456789012345      BTREE                  I1 ASC
+I23456789012345678901234567890123456     BTREE                  I2 ASC
+I234567890123456789012345678901234567    BTREE                  I3 ASC
+I2345678901234567890123456789012345678   BTREE                  I1 ASC,
+                                                                I2 ASC
+I23456789012345678901234567890123456789  BTREE                  I2 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567890 BTREE                  I1 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567... BTREE                  I1 ASC,
+                                                                I2 ASC,
+                                                                I3 ASC
+T1 has no primary key
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by list(i1)
+(
+  partition p1 values ('100'),
+  partition p2 values ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+
+
+$T0> # 33 byte
+$T0> create index i23456789012345678901234567890123 on t1(i3, i1);
+Create success.
+$T0> # 34 byte
+$T0> create index i234567890123456789012345678901234 on t1(i2, i1);
+Create success.
+$T0> # 35 byte
+$T0> create index i2345678901234567890123456789012345 on t1(i1);
+Create success.
+$T0> # 36 byte
+$T0> create index i23456789012345678901234567890123456 on t1(i2);
+Create success.
+$T0> # 37 byte
+$T0> create index i234567890123456789012345678901234567 on t1(i3);
+Create success.
+$T0> # 38 byte
+$T0> create index i2345678901234567890123456789012345678 on t1(i1, i2);
+Create success.
+$T0> # 39 byte
+$T0> create index i23456789012345678901234567890123456789 on t1(i2, i3);
+Create success.
+$T0> # 40 byte
+$T0> create index i234567890123456789012345678901234567890 on t1(i1, i3);
+Create success.
+$T0> # 41 byte
+$T0> create index i2345678901234567890123456789012345678901 on t1(i1, i2, i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+I23456789012345678901234567890123        BTREE                  I3 ASC,
+                                                                I1 ASC
+I234567890123456789012345678901234       BTREE                  I2 ASC,
+                                                                I1 ASC
+I2345678901234567890123456789012345      BTREE                  I1 ASC
+I23456789012345678901234567890123456     BTREE                  I2 ASC
+I234567890123456789012345678901234567    BTREE                  I3 ASC
+I2345678901234567890123456789012345678   BTREE                  I1 ASC,
+                                                                I2 ASC
+I23456789012345678901234567890123456789  BTREE                  I2 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567890 BTREE                  I1 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567... BTREE                  I1 ASC,
+                                                                I2 ASC,
+                                                                I3 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; INDEX NAME
+$T0> ##################################
+
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than ('100'),
+  partition p2 values less than ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+
+
+$T0> # 33 byte
+$T0> create index i23456789012345678901234567890123 on t1(i3, i1) local;
+Create success.
+$T0> # 34 byte
+$T0> create index i234567890123456789012345678901234 on t1(i2, i1) local;
+Create success.
+$T0> # 35 byte
+$T0> create index i2345678901234567890123456789012345 on t1(i1) local;
+Create success.
+$T0> # 36 byte
+$T0> create index i23456789012345678901234567890123456 on t1(i2) local;
+Create success.
+$T0> # 37 byte
+$T0> create index i234567890123456789012345678901234567 on t1(i3) local;
+Create success.
+$T0> # 38 byte
+$T0> create index i2345678901234567890123456789012345678 on t1(i1, i2) local;
+Create success.
+$T0> # 39 byte
+$T0> create index i23456789012345678901234567890123456789 on t1(i2, i3) local;
+Create success.
+$T0> # 40 byte
+$T0> create index i234567890123456789012345678901234567890 on t1(i1, i3) local;
+Create success.
+$T0> # 41 byte
+$T0> create index i2345678901234567890123456789012345678901 on t1(i1, i2, i3) local;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+I23456789012345678901234567890123        BTREE                  I3 ASC,
+                                                                I1 ASC
+I234567890123456789012345678901234       BTREE                  I2 ASC,
+                                                                I1 ASC
+I2345678901234567890123456789012345      BTREE                  I1 ASC
+I23456789012345678901234567890123456     BTREE                  I2 ASC
+I234567890123456789012345678901234567    BTREE                  I3 ASC
+I2345678901234567890123456789012345678   BTREE                  I1 ASC,
+                                                                I2 ASC
+I23456789012345678901234567890123456789  BTREE                  I2 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567890 BTREE                  I1 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567... BTREE                  I1 ASC,
+                                                                I2 ASC,
+                                                                I3 ASC
+T1 has no primary key
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+
+
+$T0> # 33 byte
+$T0> create index i23456789012345678901234567890123 on t1(i3, i1) local;
+Create success.
+$T0> # 34 byte
+$T0> create index i234567890123456789012345678901234 on t1(i2, i1) local;
+Create success.
+$T0> # 35 byte
+$T0> create index i2345678901234567890123456789012345 on t1(i1) local;
+Create success.
+$T0> # 36 byte
+$T0> create index i23456789012345678901234567890123456 on t1(i2) local;
+Create success.
+$T0> # 37 byte
+$T0> create index i234567890123456789012345678901234567 on t1(i3) local;
+Create success.
+$T0> # 38 byte
+$T0> create index i2345678901234567890123456789012345678 on t1(i1, i2) local;
+Create success.
+$T0> # 39 byte
+$T0> create index i23456789012345678901234567890123456789 on t1(i2, i3) local;
+Create success.
+$T0> # 40 byte
+$T0> create index i234567890123456789012345678901234567890 on t1(i1, i3) local;
+Create success.
+$T0> # 41 byte
+$T0> create index i2345678901234567890123456789012345678901 on t1(i1, i2, i3) local;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+I23456789012345678901234567890123        BTREE                  I3 ASC,
+                                                                I1 ASC
+I234567890123456789012345678901234       BTREE                  I2 ASC,
+                                                                I1 ASC
+I2345678901234567890123456789012345      BTREE                  I1 ASC
+I23456789012345678901234567890123456     BTREE                  I2 ASC
+I234567890123456789012345678901234567    BTREE                  I3 ASC
+I2345678901234567890123456789012345678   BTREE                  I1 ASC,
+                                                                I2 ASC
+I23456789012345678901234567890123456789  BTREE                  I2 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567890 BTREE                  I1 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567... BTREE                  I1 ASC,
+                                                                I2 ASC,
+                                                                I3 ASC
+T1 has no primary key
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by list(i1)
+(
+  partition p1 values ('100'),
+  partition p2 values ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+
+
+$T0> # 33 byte
+$T0> create index i23456789012345678901234567890123 on t1(i3, i1) local;
+Create success.
+$T0> # 34 byte
+$T0> create index i234567890123456789012345678901234 on t1(i2, i1) local;
+Create success.
+$T0> # 35 byte
+$T0> create index i2345678901234567890123456789012345 on t1(i1) local;
+Create success.
+$T0> # 36 byte
+$T0> create index i23456789012345678901234567890123456 on t1(i2) local;
+Create success.
+$T0> # 37 byte
+$T0> create index i234567890123456789012345678901234567 on t1(i3) local;
+Create success.
+$T0> # 38 byte
+$T0> create index i2345678901234567890123456789012345678 on t1(i1, i2) local;
+Create success.
+$T0> # 39 byte
+$T0> create index i23456789012345678901234567890123456789 on t1(i2, i3) local;
+Create success.
+$T0> # 40 byte
+$T0> create index i234567890123456789012345678901234567890 on t1(i1, i3) local;
+Create success.
+$T0> # 41 byte
+$T0> create index i2345678901234567890123456789012345678901 on t1(i1, i2, i3) local;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+I23456789012345678901234567890123        BTREE                  I3 ASC,
+                                                                I1 ASC
+I234567890123456789012345678901234       BTREE                  I2 ASC,
+                                                                I1 ASC
+I2345678901234567890123456789012345      BTREE                  I1 ASC
+I23456789012345678901234567890123456     BTREE                  I2 ASC
+I234567890123456789012345678901234567    BTREE                  I3 ASC
+I2345678901234567890123456789012345678   BTREE                  I1 ASC,
+                                                                I2 ASC
+I23456789012345678901234567890123456789  BTREE                  I2 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567890 BTREE                  I1 ASC,
+                                                                I3 ASC
+I234567890123456789012345678901234567... BTREE                  I1 ASC,
+                                                                I2 ASC,
+                                                                I3 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> SKIP END;
+

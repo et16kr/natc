@@ -1,0 +1,190 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+Create success.
+$T0> create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+Create success.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; RENAME COLUMN
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  constraint t1_pk primary key (i3) using index tablespace data1,
+  constraint t1_uk unique (i4)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values(1,2,3,4);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> insert into t1 values(10,20,30,40);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> insert into t1 values(15,25,35,45);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> insert into t1 values(17,27,37,47);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+$T0> insert into t1 values(19,29,39,49);
+1 row inserted.
+------------------------------------------------------------
+                 NO PLAN FOR INSERT SQL                     
+------------------------------------------------------------
+
+$T0> alter table t1 rename partition p1 to p1_new;
+Alter success.
+$T0> alter table t1 rename partition p2 to p2_new;
+Alter success.
+$T0> alter table t1 rename partition p3 to p3_new;
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : DATA1 ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+3           7827808              26978837069826       
+30          3527952              27253714976770       
+35          3527952              27253715042306       
+37          3527952              27253715107842       
+39          3527952              27253715173378       
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 24 )
+ SCAN ( TABLE: $_TEMP, FULL SCAN, ACCESS: 5, SELF_ID: 0 )
+------------------------------------------------------------
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+4           7827808              26978837069826       
+40          3527952              27253714976770       
+45          3527952              27253715042306       
+47          3527952              27253715107842       
+49          3527952              27253715173378       
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 24 )
+ SCAN ( TABLE: $_TEMP, FULL SCAN, ACCESS: 5, SELF_ID: 0 )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+

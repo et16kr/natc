@@ -1,0 +1,663 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Set Null Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; INITIALIZE
+$T0> ##################################
+
+
+$T0> MV -f "${ALTIBASE_HOME}/conf/aexport.properties" "${ALTIBASE_HOME}/conf/aexport.properties.org";
+$T0> CP "aexport.properties" "${ALTIBASE_HOME}/conf/aexport.properties";
+
+$T0> SKIP BEGIN;
+$T0> connect sys/manager;
+$T0> drop user user1 cascade;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> SKIP END;
+
+
+$T0> connect sys/manager;
+Connect success.
+
+$T0> create user user1 identified by user1 default tablespace sys_tbs_disk_data;
+Create success.
+$T0> connect user1/user1;
+Connect success.
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3 desc, i4);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i2 desc);
+Create success.
+
+$T0> create index t1_idx4 on t1(i4 desc, i3) local;
+Create success.
+$T0> create index t1_idx5 on t1(i4) local;
+Create success.
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition pd
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t2 add constraint t2_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t2 add constraint t2_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t2_idx1 on t2(i2);
+Create success.
+$T0> create index t2_idx2 on t2(i2, i3 desc, i4);
+Create success.
+$T0> create index t2_idx3 on t2(i3, i2 desc);
+Create success.
+
+$T0> create index t2_idx4 on t2(i4 desc, i3) local;
+Create success.
+$T0> create index t2_idx5 on t2(i4) local;
+Create success.
+
+$T0> create table t3
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t3 add constraint t3_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t3 add constraint t3_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t3_idx1 on t3(i2);
+Create success.
+$T0> create index t3_idx2 on t3(i2, i3 desc, i4);
+Create success.
+$T0> create index t3_idx3 on t3(i3, i2 desc);
+Create success.
+
+$T0> create index t3_idx4 on t3(i4 desc, i3) local;
+Create success.
+$T0> create index t3_idx5 on t3(i4) local;
+Create success.
+
+
+$T0> ##################################
+$T0> # SECTOR; EXPORT
+$T0> ##################################
+
+$T0> EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager -object user1.t1";
+$T0> P_WAIT PROC1;
+
+$T0> CAT "USER1_T1_CRT.sql";
+
+--############################
+--  "USER1"."T1"  
+--############################
+create table "T1"
+(
+    "I1" INTEGER not null,
+    "I2" INTEGER not null,
+    "I3" INTEGER,
+    "I4" INTEGER
+)
+PARTITION BY RANGE("I1")
+ (
+  PARTITION "P1" VALUES LESS THAN (20),
+  PARTITION "P2" VALUES LESS THAN (40),
+  PARTITION "P3" VALUES LESS THAN (60),
+  PARTITION "P4" VALUES LESS THAN (80),
+  PARTITION "PD" VALUES DEFAULT
+ )
+ tablespace "SYS_TBS_DISK_DATA"
+ pctfree 10
+ pctused 40 
+ storage ( initextents 1 nextextents 1 minextents 1 maxextents 4294967295 )
+ COMPRESSED LOGGING;
+
+alter table "T1" add constraint "T1_PK" primary key("I2","I1")  using index local  
+(
+    partition "__SYS_PART_IDX_ID_242" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_243" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_244" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_245" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_246" on P1 tablespace "SYS_TBS_DISK_DATA");
+
+alter table "T1" add constraint "T1_UK" unique("I3","I2","I1")  using index local  
+(
+    partition "__SYS_PART_IDX_ID_247" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_248" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_249" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_250" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_251" on P1 tablespace "SYS_TBS_DISK_DATA");
+
+create index "T1_IDX1" on "T1"("I2") tablespace "SYS_TBS_DISK_DATA";
+
+create index "T1_IDX2" on "T1"("I2","I3" DESC,"I4") tablespace "SYS_TBS_DISK_DATA";
+
+create index "T1_IDX3" on "T1"("I3","I2" DESC) tablespace "SYS_TBS_DISK_DATA";
+
+create  index "T1_IDX4" on "T1"("I4" DESC,"I3") LOCAL 
+(
+    partition "__SYS_PART_IDX_ID_252" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_253" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_254" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_255" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_256" on P1 tablespace "SYS_TBS_DISK_DATA") indextype is btree;
+
+create  index "T1_IDX5" on "T1"("I4") LOCAL 
+(
+    partition "__SYS_PART_IDX_ID_257" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_258" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_259" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_260" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_261" on P1 tablespace "SYS_TBS_DISK_DATA") indextype is btree;
+
+
+
+$T0> EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager -object user1.t2";
+$T0> P_WAIT PROC1;
+
+$T0> CAT "USER1_T2_CRT.sql";
+
+--############################
+--  "USER1"."T2"  
+--############################
+create table "T2"
+(
+    "I1" INTEGER not null,
+    "I2" INTEGER not null,
+    "I3" INTEGER,
+    "I4" INTEGER
+)
+PARTITION BY HASH("I1")
+ (
+  PARTITION "P1",
+  PARTITION "P2",
+  PARTITION "P3",
+  PARTITION "P4",
+  PARTITION "PD" )
+ tablespace "SYS_TBS_DISK_DATA"
+ pctfree 10
+ pctused 40 
+ storage ( initextents 1 nextextents 1 minextents 1 maxextents 4294967295 )
+ COMPRESSED LOGGING;
+
+alter table "T2" add constraint "T2_PK" primary key("I2","I1")  using index local  
+(
+    partition "__SYS_PART_IDX_ID_262" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_263" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_264" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_265" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_266" on P1 tablespace "SYS_TBS_DISK_DATA");
+
+alter table "T2" add constraint "T2_UK" unique("I3","I2","I1")  using index local  
+(
+    partition "__SYS_PART_IDX_ID_267" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_268" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_269" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_270" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_271" on P1 tablespace "SYS_TBS_DISK_DATA");
+
+create index "T2_IDX1" on "T2"("I2") tablespace "SYS_TBS_DISK_DATA";
+
+create index "T2_IDX2" on "T2"("I2","I3" DESC,"I4") tablespace "SYS_TBS_DISK_DATA";
+
+create index "T2_IDX3" on "T2"("I3","I2" DESC) tablespace "SYS_TBS_DISK_DATA";
+
+create  index "T2_IDX4" on "T2"("I4" DESC,"I3") LOCAL 
+(
+    partition "__SYS_PART_IDX_ID_272" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_273" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_274" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_275" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_276" on P1 tablespace "SYS_TBS_DISK_DATA") indextype is btree;
+
+create  index "T2_IDX5" on "T2"("I4") LOCAL 
+(
+    partition "__SYS_PART_IDX_ID_277" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_278" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_279" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_280" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_281" on P1 tablespace "SYS_TBS_DISK_DATA") indextype is btree;
+
+
+
+$T0> EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager -object user1.t3";
+$T0> P_WAIT PROC1;
+
+$T0> CAT "USER1_T3_CRT.sql";
+
+--############################
+--  "USER1"."T3"  
+--############################
+create table "T3"
+(
+    "I1" INTEGER not null,
+    "I2" INTEGER not null,
+    "I3" INTEGER,
+    "I4" INTEGER
+)
+PARTITION BY LIST("I1")
+ (
+  PARTITION "P1" VALUES (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+  PARTITION "P2" VALUES (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+  PARTITION "P3" VALUES (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+  PARTITION "P4" VALUES (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+  PARTITION "PD" VALUES DEFAULT
+ )
+ tablespace "SYS_TBS_DISK_DATA"
+ pctfree 10
+ pctused 40 
+ storage ( initextents 1 nextextents 1 minextents 1 maxextents 4294967295 )
+ COMPRESSED LOGGING;
+
+alter table "T3" add constraint "T3_PK" primary key("I2","I1")  using index local  
+(
+    partition "__SYS_PART_IDX_ID_282" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_283" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_284" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_285" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_286" on P1 tablespace "SYS_TBS_DISK_DATA");
+
+alter table "T3" add constraint "T3_UK" unique("I3","I2","I1")  using index local  
+(
+    partition "__SYS_PART_IDX_ID_287" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_288" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_289" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_290" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_291" on P1 tablespace "SYS_TBS_DISK_DATA");
+
+create index "T3_IDX1" on "T3"("I2") tablespace "SYS_TBS_DISK_DATA";
+
+create index "T3_IDX2" on "T3"("I2","I3" DESC,"I4") tablespace "SYS_TBS_DISK_DATA";
+
+create index "T3_IDX3" on "T3"("I3","I2" DESC) tablespace "SYS_TBS_DISK_DATA";
+
+create  index "T3_IDX4" on "T3"("I4" DESC,"I3") LOCAL 
+(
+    partition "__SYS_PART_IDX_ID_292" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_293" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_294" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_295" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_296" on P1 tablespace "SYS_TBS_DISK_DATA") indextype is btree;
+
+create  index "T3_IDX5" on "T3"("I4") LOCAL 
+(
+    partition "__SYS_PART_IDX_ID_297" on PD tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_298" on P4 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_299" on P3 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_300" on P2 tablespace "SYS_TBS_DISK_DATA",
+    partition "__SYS_PART_IDX_ID_301" on P1 tablespace "SYS_TBS_DISK_DATA") indextype is btree;
+
+
+
+$T0> ##################################
+$T0> # SECTOR; IMPORT
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> connect sys/manager;
+$T0> drop user user1 cascade;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> SKIP END;
+
+$T0> connect sys/manager;
+Connect success.
+
+$T0> EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f USER1_T1_CRT.sql";
+$T0> P_WAIT PROC1;
+
+$T0> EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f USER1_T2_CRT.sql";
+$T0> P_WAIT PROC1;
+
+$T0> EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f USER1_T3_CRT.sql";
+$T0> P_WAIT PROC1;
+
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T1_IDX1                                  BTREE                  I2 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 DESC
+T1_IDX4                                  BTREE                  I4 DESC,
+                                                                I3 ASC
+T1_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> desc "$GIT_T1_PK";
+[ERR-91014 : The table ($GIT_T1_PK) does not exist.]
+$T0> desc "$GIT_T1_UK";
+[ERR-91014 : The table ($GIT_T1_UK) does not exist.]
+$T0> desc "$GIT_T1_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T1_IDX1                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T1_IDX1                             BTREE                  I2 ASC
+"$GIT_T1_IDX1" has no primary key
+$T0> desc "$GIT_T1_IDX2";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T1_IDX2                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T1_IDX2                             BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+"$GIT_T1_IDX2" has no primary key
+$T0> desc "$GIT_T1_IDX3";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T1_IDX3                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T1_IDX3                             BTREE                  I3 ASC,
+                                                                I2 DESC
+"$GIT_T1_IDX3" has no primary key
+
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T2_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T2_IDX1                                  BTREE                  I2 ASC
+T2_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+T2_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 DESC
+T2_IDX4                                  BTREE                  I4 DESC,
+                                                                I3 ASC
+T2_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> desc "$GIT_T2_PK";
+[ERR-91014 : The table ($GIT_T2_PK) does not exist.]
+$T0> desc "$GIT_T2_UK";
+[ERR-91014 : The table ($GIT_T2_UK) does not exist.]
+$T0> desc "$GIT_T2_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T2_IDX1                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T2_IDX1                             BTREE                  I2 ASC
+"$GIT_T2_IDX1" has no primary key
+$T0> desc "$GIT_T2_IDX2";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T2_IDX2                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T2_IDX2                             BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+"$GIT_T2_IDX2" has no primary key
+$T0> desc "$GIT_T2_IDX3";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T2_IDX3                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T2_IDX3                             BTREE                  I3 ASC,
+                                                                I2 DESC
+"$GIT_T2_IDX3" has no primary key
+
+$T0> desc t3;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T3_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T3_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T3_IDX1                                  BTREE                  I2 ASC
+T3_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+T3_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 DESC
+T3_IDX4                                  BTREE                  I4 DESC,
+                                                                I3 ASC
+T3_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> desc "$GIT_T3_PK";
+[ERR-91014 : The table ($GIT_T3_PK) does not exist.]
+$T0> desc "$GIT_T3_UK";
+[ERR-91014 : The table ($GIT_T3_UK) does not exist.]
+$T0> desc "$GIT_T3_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T3_IDX1                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T3_IDX1                             BTREE                  I2 ASC
+"$GIT_T3_IDX1" has no primary key
+$T0> desc "$GIT_T3_IDX2";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T3_IDX2                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T3_IDX2                             BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+"$GIT_T3_IDX2" has no primary key
+$T0> desc "$GIT_T3_IDX3";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T3_IDX3                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T3_IDX3                             BTREE                  I3 ASC,
+                                                                I2 DESC
+"$GIT_T3_IDX3" has no primary key
+
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> connect sys/manager;
+$T0> drop user user1 cascade;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> SKIP END;
+
+$T0> RM "ALL_*" "USER1_*" "user1_*" "run_*";
+$T0> RM "${ALTIBASE_HOME}/conf/aexport.properties";
+$T0> MV -f "${ALTIBASE_HOME}/conf/aexport.properties.org" "${ALTIBASE_HOME}/conf/aexport.properties";
+

@@ -1,0 +1,65 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--##################################
+--+SECTOR 1; CHECK DUPLICATE INDEX COLUMN
+--##################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 INTEGER )
+     PARTITION BY RANGE(I1)
+     (
+         PARTITION P1 VALUES LESS THAN (100),
+         PARTITION P2 VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> CREATE UNIQUE INDEX IDX1 ON T1(I1);
+Create success.
+
+-- should be fail
+$P0> ALTER TABLE T1 ADD CONSTRAINT T1_CONST1 UNIQUE(I1);
+[ERR-31051 : Duplicate key columns in an index]
+
+
+
+$P0> CREATE TABLE T2 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY RANGE(I1, I2)
+     (
+         PARTITION P1 VALUES LESS THAN (100),
+         PARTITION P2 VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> CREATE UNIQUE INDEX IDX2 ON T2(I2, I1);
+Create success.
+
+-- should be success
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_CONST1 UNIQUE(I1);
+Alter success.
+
+-- should be success
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_CONST2 UNIQUE(I2);
+Alter success.
+
+-- should be success
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_CONST3 UNIQUE(I1, I2);
+Alter success.
+
+-- should be fail
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_CONST4 UNIQUE(I2, I1);
+[ERR-31051 : Duplicate key columns in an index]
+
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+--+SKIP END; 
+
+

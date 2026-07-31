@@ -1,0 +1,33 @@
+[2026/07/30 14:12:12] /data/et16/work/natc/TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/tool/atomic/atomic_test.tc:
+FINALIZE_T0> (9) make clean
+[2026/07/30 14:12:12] rm atomic_insert atomic_insert.cpp *.o core *.class *.res
+rm: cannot remove 'atomic_insert': No such file or directory
+rm: cannot remove 'atomic_insert.cpp': No such file or directory
+rm: cannot remove '*.o': No such file or directory
+rm: cannot remove 'core': No such file or directory
+rm: cannot remove '*.class': No such file or directory
+rm: cannot remove '*.res': No such file or directory
+make: [clean] Error 1 (ignored)
+
+[2026/07/30 14:12:12] /data/et16/work/natc/TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/tool/atomic/atomic_test.tc:
+MAIN_T0> (53) make all
+[2026/07/30 14:12:13] sesc -atc -t cpp atomic_insert.sc
+-----------------------------------------------------------------
+     Altibase C/C++ Precompiler. 
+     Release Version 8.2.0.0.0
+     Copyright 2000, ALTIBASE Corporation or its subsidiaries.
+     All Rights Reserved.
+-----------------------------------------------------------------
+g++ -D_GNU_SOURCE -D_GNU_SOURCE -W -Wall -pipe -D_POSIX_PTHREAD_SEMANTICS -D_POSIX_THREADS -D_POSIX_THREAD_SAFE_FUNCTIONS -D_REENTRANT -DPDL_HAS_AIO_CALLS -m64 -mtune=k8 -g -g -DDEBUG -fno-implicit-templates -Wno-deprecated -g -g -DDEBUG -fno-exceptions -fcheck-new -DPDL_NO_INLINE -DPDL_LACKS_PDL_TOKEN -DPDL_LACKS_PDL_OTHER -DACP_CFG_DEBUG -DACP_CFG_COMPILE_64BIT -DACP_CFG_COMPILE_BIT=64 -DACP_CFG_COMPILE_BIT_STR=64 -DCOMPILER_OPT_FLAGS="" -MMD -MP -c -Wno-narrowing -I/data/et16/work/altidev4/altibase_home/include -I. -I/data/et16/work/natc/include -I. -I/data/et16/work/altidev4/src/id/include -I/data/et16/work/altidev4/src/core/include -I/data/et16/work/altidev4/src/pd/include -I/data/et16/work/altidev4/src/pd/makeinclude -o atomic_insert.o atomic_insert.cpp
+g++ -Wl,-relax -Wl,--no-as-needed -L. -g -L/data/et16/work/altidev4/altibase_home/lib -L/data/et16/work/altidev4/altibase_home/lib -L. -o atomic_insert atomic_insert.o -lsesc -lid -lpd -lodbccli -ldl -lpthread -lcrypt -lrt -lstdc++
+rm atomic_insert.cpp
+
+[2026/07/30 14:12:13] /data/et16/work/natc/TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/tool/atomic/atomic_test.tc:
+FINALIZE_T0> (9) make clean
+[2026/07/30 14:12:13] rm atomic_insert atomic_insert.cpp *.o core *.class *.res
+rm: cannot remove 'atomic_insert.cpp': No such file or directory
+rm: cannot remove 'core': No such file or directory
+rm: cannot remove '*.class': No such file or directory
+rm: cannot remove '*.res': No such file or directory
+make: [clean] Error 1 (ignored)
+

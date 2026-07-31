@@ -1,0 +1,85 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> alter session set explain plan = off;
+$T0> alter system set trclog_detail_predicate = 0;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i4)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index idx1 on t1(i2);
+Create success.
+$T0> create index idx2 on t1(i3) local;
+Create success.
+$T0> create index idx3 on t1(i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+IDX1                                     BTREE                  I2 ASC
+IDX2                                     BTREE                  I3 ASC
+IDX3                                     BTREE                  I4 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; DROP TABLE
+$T0> ##################################
+
+$T0> drop table t1;
+Drop success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> alter session set explain plan = off;
+$T0> alter system set trclog_detail_predicate = 0;
+$T0> SKIP END;
+

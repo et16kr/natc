@@ -1,0 +1,34 @@
+############################################################################
+# SET UP three DB System
+############################################################################
+
+include stdFunc.i;
+
+DECLARE SERVER PROJ_1624_SERVER1 DB1;
+DECLARE SERVER PROJ_1624_SERVER2 DB2;
+
+DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+DEF MAIN()
+{
+    THREAD T1 C11
+    {
+        NODISPLAY ON;
+        CALL stdServerStop();
+        NODISPLAY OFF;
+    }
+
+    THREAD T2 C21
+    {
+        NODISPLAY ON;
+        CALL stdServerStop();
+        NODISPLAY OFF;
+    }
+
+    JOIN;
+
+    # TODO: SYSTEM @DB2 "echo y | shmutil -e";
+   RM -rf "./db1";
+   RM -rf "./db2";
+}

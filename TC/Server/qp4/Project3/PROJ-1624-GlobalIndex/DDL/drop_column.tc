@@ -1,0 +1,206 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop tablespace data1 including contents and datafiles;
+drop tablespace data2 including contents and datafiles;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t1;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; DROP COLUMN
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  constraint t1_pk primary key (i3),
+  constraint t1_uk unique (i4)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i1) local;
+
+alter table t1 drop column (i2);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  i5 integer,
+  i6 integer,
+  i7 integer,
+  i8 integer,
+  constraint t1_pk primary key (i3, i5),
+  constraint t1_uk unique (i6, i7)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i1) local;
+
+alter table t1 drop column (i2);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+alter table t1 drop column (i4, i8);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+##################################
+# SECTOR; DROP COLUMN WITH INDEX
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  i5 integer,
+  i6 integer,
+  i7 integer,
+  i8 integer,
+  constraint t1_pk primary key (i3, i5),
+  constraint t1_uk unique (i6, i7)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i1) local;
+
+alter table t1 drop column (i3, i5);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+alter table t1 drop column (i2);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+alter table t1 drop column (i6, i7);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+##################################
+# SECTOR; USING INDEX
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  i5 integer,
+  i6 integer,
+  i7 integer,
+  i8 integer,
+  constraint t1_pk primary key (i3, i5) using index tablespace data1,
+  constraint t1_uk unique (i6, i7) using index tablespace data2
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i1) local;
+
+alter table t1 drop column (i3, i5);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+alter table t1 drop column (i6, i7);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

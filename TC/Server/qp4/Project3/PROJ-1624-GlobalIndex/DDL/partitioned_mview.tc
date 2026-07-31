@@ -1,0 +1,118 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop materialized view m1;
+drop materialized view m2;
+drop tablespace data1 including contents and datafiles;
+drop tablespace data2 including contents and datafiles;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop materialized view m1;
+drop materialized view m2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values (1, 1, 1, 1);
+insert into t1 values (2, 2, 2, 2);
+insert into t1 values (3, 3, 3, 3);
+insert into t1 values (4, 4, 4, 4);
+insert into t1 values (5, 5, 5, 5);
+insert into t1 values (6, 6, 6, 6);
+insert into t1 values (7, 7, 7, 7);
+insert into t1 values (8, 8, 8, 8);
+insert into t1 values (9, 9, 9, 9);
+insert into t1 values (10, 10, 10, 10);
+
+##################################
+# SECTOR; CONSTRAINT
+##################################
+
+CALL DROP_TABLE();
+
+create materialized view m1(i1, i2, i3, i4)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition p2 values less than (10),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data
+as
+select i1, i2, i3, i4 from t1;
+
+alter table m1 add constraint m1_pk primary key (i2);
+alter table m1 add constraint m1_uk unique (i3, i4);
+
+desc m1;
+CALL DESC_INDEX( "M1_PK" );
+CALL DESC_INDEX( "M1_UK" );
+
+##################################
+# SECTOR; INDEX
+##################################
+
+CALL DROP_TABLE();
+
+create materialized view m1(i1, i2, i3, i4)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition p2 values less than (10),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data
+as
+select i1, i2, i3, i4 from t1;
+
+create index m1_idx1 on m1(i2);
+create index m1_idx2 on m1(i3 desc, i4);
+
+desc m1;
+CALL DESC_INDEX( "M1_IDX1" );
+CALL DESC_INDEX( "M1_IDX2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

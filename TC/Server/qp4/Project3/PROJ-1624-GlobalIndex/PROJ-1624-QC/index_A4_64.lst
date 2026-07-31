@@ -1,0 +1,666 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+$T0> #######################################################################
+$T0> # INDEX DDL TEST
+$T0> #######################################################################
+
+$T0> #######################################################################
+$T0> # SIMPLE INDEX DDL TEST
+$T0> #######################################################################
+
+$T0> ###################################
+$T0> #SECTOR; PREPARATION
+$T0> ###################################
+
+$T0> DROP INDEX T1_IDX;
+[ERR-31014 : Index not found]
+$T0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+$T0> CREATE TABLE T1 ( I INTEGER, J VARCHAR(10) )
+partition by range(I)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$T0> ###################################
+$T0> #SECTOR; WITHOUT DATA
+$T0> ###################################
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                 
+--------------------------------------------
+TABLE_NAME                                TABLE_TYPE  HIDDEN  
+------------------------------------------------------------------
+TBS_NAME                                  
+--------------------------------------------
+No rows selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                COLUMN_ORDER 
+----------------------------------------------------------
+COLUMN_NAME                               
+--------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+No rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                 
+--------------------------------------------
+INDEX_NAME                                INDEX_TYPE  IS_UNIQUE  
+---------------------------------------------------------------------
+TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------
+No rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                INDEX_COL_ORDER 
+-------------------------------------------------------------
+COLUMN_NAME                               SORT_ORDER  
+---------------------------------------------------------
+No rows selected.
+
+$T0> CREATE INDEX T1_IDX ON T1 (I);
+Create success.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                 
+--------------------------------------------
+TABLE_NAME                                TABLE_TYPE  HIDDEN  
+------------------------------------------------------------------
+TBS_NAME                                  
+--------------------------------------------
+SYS                                       
+$GIT_T1_IDX                               T  G  
+SYS_TBS_DISK_DATA                         
+1 row selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                COLUMN_ORDER 
+----------------------------------------------------------
+COLUMN_NAME                               
+--------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+$GIT_T1_IDX                               0           
+I                                         
+INTEGER                                   T  
+$GIT_T1_IDX                               1           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_T1_IDX                               2           
+$GIT_RID                                  
+BIGINT                                    T  
+3 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                 
+--------------------------------------------
+INDEX_NAME                                INDEX_TYPE  IS_UNIQUE  
+---------------------------------------------------------------------
+TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------
+SYS                                       
+$GIK_T1_IDX                               1           F  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_T1_IDX                               1           T  
+SYS_TBS_DISK_DATA                         F  
+2 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                INDEX_COL_ORDER 
+-------------------------------------------------------------
+COLUMN_NAME                               SORT_ORDER  
+---------------------------------------------------------
+$GIK_T1_IDX                               0           
+I                                         A  
+$GIR_T1_IDX                               0           
+$GIT_RID                                  A  
+2 rows selected.
+
+$T0> INSERT INTO T1 VALUES (1, 'AA');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES (2, 'BB');
+1 row inserted.
+
+$T0> CREATE UNIQUE INDEX T1_IDX2 ON T1 (J);
+Create success.
+$T0> INSERT INTO T1 VALUES (2, 'BB');
+[ERR-11058 : The row already exists in a unique index.]
+$T0> INSERT INTO T1 VALUES (2, 'CC');
+1 row inserted.
+$T0> SELECT * FROM T1;
+T1.I        T1.J        
+---------------------------
+1           AA          
+2           BB          
+2           CC          
+3 rows selected.
+
+$T0> ###################################
+$T0> #SECTOR; DROP INDEX
+$T0> ###################################
+
+$T0> DROP INDEX T1_IDX;
+Drop success.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                 
+--------------------------------------------
+TABLE_NAME                                TABLE_TYPE  HIDDEN  
+------------------------------------------------------------------
+TBS_NAME                                  
+--------------------------------------------
+SYS                                       
+$GIT_T1_IDX2                              T  G  
+SYS_TBS_DISK_DATA                         
+1 row selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                COLUMN_ORDER 
+----------------------------------------------------------
+COLUMN_NAME                               
+--------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+$GIT_T1_IDX2                              0           
+J                                         
+VARCHAR                                   T  
+$GIT_T1_IDX2                              1           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_T1_IDX2                              2           
+$GIT_RID                                  
+BIGINT                                    T  
+3 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                 
+--------------------------------------------
+INDEX_NAME                                INDEX_TYPE  IS_UNIQUE  
+---------------------------------------------------------------------
+TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------
+SYS                                       
+$GIK_T1_IDX2                              1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_T1_IDX2                              1           T  
+SYS_TBS_DISK_DATA                         F  
+2 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                INDEX_COL_ORDER 
+-------------------------------------------------------------
+COLUMN_NAME                               SORT_ORDER  
+---------------------------------------------------------
+$GIK_T1_IDX2                              0           
+J                                         A  
+$GIR_T1_IDX2                              0           
+$GIT_RID                                  A  
+2 rows selected.
+
+$T0> DELETE FROM T1 WHERE I = 1;
+1 row deleted.
+
+$T0> SELECT * FROM T1 ORDER BY I, J;
+T1.I        T1.J        
+---------------------------
+2           BB          
+2           CC          
+2 rows selected.
+
+$T0> ###################################
+$T0> #SECTOR; CREATE INDEX WITH DATA
+$T0> ###################################
+
+$T0> CREATE UNIQUE INDEX T1_IDX ON T1 (I);
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> INSERT INTO T1 VALUES (2, 'DD');
+1 row inserted.
+
+$T0> SELECT * FROM T1 ORDER BY I, J;
+T1.I        T1.J        
+---------------------------
+2           BB          
+2           CC          
+2           DD          
+3 rows selected.
+
+$T0> ###################################
+$T0> #SECTOR; FINALIZATION
+$T0> ###################################
+
+$T0> DROP TABLE T1;
+Drop success.
+
+$T0> #######################################################################
+$T0> # BTREE INDEX test
+$T0> #######################################################################
+
+$T0> ###################################
+$T0> #SECTOR; PREPARATION
+$T0> ###################################
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE T1;
+$T0> SKIP END;
+
+$T0> CREATE TABLE T1 (I1 CHAR(3), I2 CHAR(3), I3 CHAR(3))
+partition by list(i1)
+(
+	partition p1 values ('aaa','c'),
+	partition p2 values ('ddd','bbb'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$T0> INSERT INTO T1 VALUES ('aaa','aaa','aaa');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('bbb','b','b');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('c','c','c');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('ddd','d','d');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('ddd','e','e');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('ddd','f','f');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('a','a','a');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('e','e','e');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('c','a','c');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('f','f','f');
+1 row inserted.
+$T0> INSERT INTO T1 VALUES ('c','c','c');
+1 row inserted.
+
+$T0> SKIP BEGIN;
+$T0> DROP INDEX IDX1;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> #SECTOR; BTREE INDEX test ASC
+$T0> ###################################
+
+$T0> CREATE INDEX IDX1 ON T1 (I1 ASC);
+Create success.
+
+$T0> SELECT * FROM T1 WHERE I1 > 'b' AND I2 >= 'c';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+c    c    c    
+c    c    c    
+ddd  d    d    
+ddd  e    e    
+ddd  f    f    
+e    e    e    
+f    f    f    
+7 rows selected.
+$T0> SELECT * FROM T1 WHERE I2 >= 'c' AND I1 > 'b';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+c    c    c    
+c    c    c    
+ddd  d    d    
+ddd  e    e    
+ddd  f    f    
+e    e    e    
+f    f    f    
+7 rows selected.
+$T0> SELECT * FROM T1 WHERE I2 = 'd' AND I1 LIKE 'd%' AND I3 = 'd';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+ddd  d    d    
+1 row selected.
+$T0> SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' AND I1 = 'ddd';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+ddd  d    d    
+1 row selected.
+$T0> SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' OR I1 = 'ddd';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+ddd  d    d    
+ddd  e    e    
+ddd  f    f    
+3 rows selected.
+
+$T0> SKIP BEGIN;
+$T0> DROP INDEX IDX1;
+$T0> SKIP END;
+
+$T0> ###################################
+$T0> #SECTOR; BTREE INDEX test DESC
+$T0> ###################################
+
+$T0> CREATE INDEX IDX1 ON T1 (I1 DESC);
+Create success.
+
+$T0> SELECT * FROM T1 WHERE I1 > 'b' AND I2 >= 'c';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+f    f    f    
+e    e    e    
+ddd  d    d    
+ddd  e    e    
+ddd  f    f    
+c    c    c    
+c    c    c    
+7 rows selected.
+$T0> SELECT * FROM T1 WHERE I2 >= 'c' AND I1 > 'b';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+f    f    f    
+e    e    e    
+ddd  d    d    
+ddd  e    e    
+ddd  f    f    
+c    c    c    
+c    c    c    
+7 rows selected.
+$T0> SELECT * FROM T1 WHERE I2 = 'd' AND I1 LIKE 'd%' AND I3 = 'd';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+ddd  d    d    
+1 row selected.
+$T0> SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' AND I1 = 'ddd';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+ddd  d    d    
+1 row selected.
+$T0> SELECT * FROM T1 WHERE I1 LIKE 'd%' AND I2 = 'd' OR I1 = 'ddd';
+T1.I1  T1.I2  T1.I3  
+-------------------------
+ddd  d    d    
+ddd  e    e    
+ddd  f    f    
+3 rows selected.
+
+$T0> ###################################
+$T0> #SECTOR; FINALIZATION
+$T0> ###################################
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE T1;
+$T0> DROP INDEX IDX1;
+$T0> SKIP END;
+
+$T0> #######################################################################
+$T0> # CREATE INDEX 
+$T0> #######################################################################
+
+$T0> ###################################
+$T0> #SECTOR; PREPARATION
+$T0> ###################################
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE T1;
+$T0> DROP TABLE T2;
+$T0> DROP TABLE T3;
+$T0> SKIP END;
+
+$T0> CREATE TABLE T1 (I1 NUMERIC, I2 NUMERIC, I3 NUMERIC) 
+partition by range(i1)
+(
+	partition p1 values less than('15'),
+	partition p2 values less than('35'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE TABLE T2 (I4 NUMERIC, I5 NUMERIC, I6 NUMERIC)
+partition by range(i1)
+(
+	partition p1 values less than('15'),
+	partition p2 values less than('45'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31261 : Invalid partition key column name 
+0002 : partition by RANGE(I1)
+                         ^ ^
+]
+
+$T0> CREATE TABLE T3 (I6 NUMERIC, I7 NUMERIC, I8 NUMERIC)
+partition by range(i1)
+(
+	partition p1 values less than('25'),
+	partition p2 values less than('55'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-31261 : Invalid partition key column name 
+0002 : partition by RANGE(I1)
+                         ^ ^
+]
+
+
+$T0> INSERT INTO T1 VALUES (10,10,10);
+1 row inserted.
+$T0> INSERT INTO T1 VALUES (20,20,20);
+1 row inserted.
+$T0> INSERT INTO T1 VALUES (30,30,30);
+1 row inserted.
+$T0> INSERT INTO T2 VALUES (10,10,10);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T2 VALUES (10,10,10)
+                  ^ ^
+]
+$T0> INSERT INTO T2 VALUES (20,20,20);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T2 VALUES (20,20,20)
+                  ^ ^
+]
+$T0> INSERT INTO T2 VALUES (40,40,40);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T2 VALUES (40,40,40)
+                  ^ ^
+]
+$T0> INSERT INTO T3 VALUES (10,10,10);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T3 VALUES (10,10,10)
+                  ^ ^
+]
+$T0> INSERT INTO T3 VALUES (20,20,20);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T3 VALUES (20,20,20)
+                  ^ ^
+]
+$T0> INSERT INTO T3 VALUES (50,50,50);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T3 VALUES (50,50,50)
+                  ^ ^
+]
+
+$T0> SKIP BEGIN;
+$T0> DROP INDEX IDX1;
+$T0> DROP INDEX IDX2;
+$T0> DROP INDEX IDX3;
+$T0> DROP INDEX IDX4;
+$T0> DROP INDEX IDX5;
+$T0> DROP INDEX IDX6;
+$T0> DROP INDEX IDX7;
+$T0> DROP INDEX IDX8;
+$T0> DROP INDEX IDX9;
+$T0> SKIP END;
+
+$T0> ###################################
+$T0> #SECTOR; CREATE INDEX ASC
+$T0> ###################################
+
+$T0> CREATE INDEX idx1 ON t1 (i1 ASC);
+Create success.
+
+$T0> ###################################
+$T0> #SECTOR; CREATE INDEX ASC has already index
+$T0> ###################################
+
+$T0> CREATE INDEX idx2 ON t1 (i1 ASC) INDEXTYPE IS BTREE;
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX idx3 ON t1 (i2 ASC);
+Create success.
+$T0> CREATE INDEX idx4 ON t1 (i2 ASC) INDEXTYPE IS RTREE;
+[ERR-31237 : cannot create index in the data type.]
+$T0> CREATE INDEX idx5 ON t1 (i3 ASC);
+Create success.
+$T0> CREATE INDEX idx6 ON t1 (i3 ASC) INDEXTYPE IS BTREE;
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX idx7 ON t1 (i1 ASC, i2 ASC, i3 ASC);
+Create success.
+$T0> CREATE INDEX idx8 ON t1 (i1 ASC, i2 ASC, i3 ASC) INDEXTYPE IS BTREE;
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX idx9 ON t1 (i1 ASC, i2 ASC);
+Create success.
+
+$T0> SKIP BEGIN;
+$T0> DROP INDEX IDX1;
+$T0> DROP INDEX IDX2;
+$T0> DROP INDEX IDX3;
+$T0> DROP INDEX IDX4;
+$T0> DROP INDEX IDX5;
+$T0> DROP INDEX IDX6;
+$T0> DROP INDEX IDX7;
+$T0> DROP INDEX IDX8;
+$T0> DROP INDEX IDX9;
+$T0> DROP INDEX IDX10;
+$T0> DROP INDEX IDX11;
+$T0> DROP INDEX IDX12;
+$T0> DROP INDEX IDX13;
+$T0> DROP INDEX IDX14;
+$T0> SKIP END;
+
+$T0> ###################################
+$T0> #SECTOR; CREATE INDEX DESC 
+$T0> ###################################
+
+$T0> CREATE INDEX IDX1 ON T1 (I1 DESC);
+Create success.
+
+$T0> ###################################
+$T0> #SECTOR; CREATE INDEX DESC has already index & COLUMN ORDER
+$T0> ###################################
+
+$T0> CREATE INDEX IDX2 ON T1 (I1 DESC) INDEXTYPE IS BTREE;
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX3 ON T1 (I2 DESC);
+Create success.
+$T0> CREATE INDEX IDX4 ON T1 (I2 DESC) INDEXTYPE IS RTREE;
+[ERR-31237 : cannot create index in the data type.]
+$T0> CREATE INDEX IDX5 ON T1 (I3 DESC);
+Create success.
+$T0> CREATE INDEX IDX6 ON T1 (I3 DESC) INDEXTYPE IS BTREE;
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX7 ON T1 (I1 DESC, I2 DESC, I3 DESC);
+Create success.
+$T0> CREATE INDEX IDX8 ON T1 (I1 DESC, I2 DESC, I3 DESC) INDEXTYPE IS BTREE;
+[ERR-31051 : Duplicate key columns in an index]
+$T0> CREATE INDEX IDX9 ON T1 (I1 DESC, I3 DESC, I2 DESC);
+Create success.
+$T0> CREATE INDEX IDX10 ON T1 (I1 ASC, I3 DESC, I2 ASC);
+Create success.
+$T0> CREATE INDEX IDX11 ON T1 (I2 ASC);
+Create success.
+$T0> CREATE INDEX IDX12 ON T2 (I4 DESC, I4 ASC);
+[ERR-31007 : Duplicate column name 
+0001 : CREATE INDEX IDX12 ON T2 (I4 DESC, I4 ASC)
+                                         ^ ^
+]
+
+$T0> INSERT INTO T3 VALUES (NULL,NULL,NULL);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T3 VALUES (NULL,NULL,NULL)
+                  ^ ^
+]
+$T0> INSERT INTO T3 VALUES (NULL,NULL,NULL);
+[ERR-31031 : Table or view was not found : 
+0001 : INSERT INTO T3 VALUES (NULL,NULL,NULL)
+                  ^ ^
+]
+$T0> CREATE INDEX IDX13 ON T3 (I7 DESC);
+[ERR-31031 : Table or view was not found : 
+0001 : CREATE INDEX IDX13 ON T3 (I7 DESC)
+                            ^ ^
+]
+$T0> CREATE UNIQUE INDEX IDX14 ON T3 (I8 DESC);
+[ERR-31031 : Table or view was not found : 
+0001 : CREATE UNIQUE INDEX IDX14 ON T3 (I8 DESC)
+                                   ^ ^
+]
+
+$T0> ###################################
+$T0> #SECTOR; FINALIZATION
+$T0> ###################################
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE T1;
+$T0> DROP TABLE T2;
+$T0> DROP TABLE T3;
+$T0> DROP INDEX IDX1;
+$T0> DROP INDEX IDX2;
+$T0> DROP INDEX IDX3;
+$T0> DROP INDEX IDX4;
+$T0> DROP INDEX IDX5;
+$T0> DROP INDEX IDX6;
+$T0> DROP INDEX IDX7;
+$T0> DROP INDEX IDX8;
+$T0> DROP INDEX IDX9;
+$T0> DROP INDEX IDX10;
+$T0> DROP INDEX IDX11;
+$T0> DROP INDEX IDX12;
+$T0> DROP INDEX IDX13;
+$T0> DROP INDEX IDX14;
+$T0> SKIP END;
+

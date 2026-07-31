@@ -1,0 +1,1657 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# DELETE TEST
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+$P0> DROP TABLE T3 CASCADE;
+$P0> DROP TABLE T4 CASCADE;
+--+SKIP END; 
+
+
+
+--###################################################################
+--+SECTOR 2; 각 데이터 타입별 DELETE
+--###################################################################
+
+--##############################
+--+SECTOR 3; INTEGER, BIGINT, SMALLINT
+--##############################
+$P0> DROP TABLE T1;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER UNIQUE, I2 BIGINT , I3 SMALLINT )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 100, 100);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 110, 110);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 120, 120);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 130, 130);
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be {}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       T1.I2                T1.I3       
+-------------------------------------------------
+No rows selected.
+
+
+--##############################
+--+SECTOR 4; BIT(10), BIT(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 BIT(10), I2 BIT(1000) )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN ( BIT'100' ) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN ( BIT'110' ) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ( BIT'111' ) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, BIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'100', BIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'110', BIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (BIT'111', BIT'100');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be {}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+
+--##############################
+--+SECTOR 5; BLOB, CLOB
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( 100 ) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN ( 200 ) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ( 300 ) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1) WHERE I1 < 100;
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2) WHERE I1 < 200;
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3) WHERE I1 < 300;
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--##############################
+--+SECTOR 6; BYTE(1000), NIBBLE(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BYTE(1000), I3 NIBBLE(254) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( 100 ) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN ( 200 ) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ( 300 ) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 > 0;
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+T1.I3                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            
+ABC00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000  
+ABC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+1 row selected.
+
+
+--##############################
+--+SECTOR 7; CHAR(10), CHAR(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 CHAR(10), I2 CHAR(1000) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( '100' ) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN ( '200' ) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ( '300' ) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('100', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('200', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('300', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 > '000';
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            
+ABC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+1 row selected.
+
+
+--##############################
+--+SECTOR 8; DATE
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( TO_DATE('2007-05-05', 'YYYY-MM-DD') ) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN ( TO_DATE('2007-06-05', 'YYYY-MM-DD') ) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ( TO_DATE('2007-07-05', 'YYYY-MM-DD') ) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 > TO_DATE('2006-12-25', 'YYYY-MM-DD');
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1                
+-----------------------
+                     
+1 row selected.
+
+
+--##############################
+--+SECTOR 9; DOUBLE, FLOAT, REAL
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DOUBLE, I2 FLOAT, I3 REAL )
+     PARTITION BY RANGE (I1, I2, I3)
+     ( PARTITION P1 VALUES LESS THAN (100.5) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200.5) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300.5) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 100.5, 100.5);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100.5, 100.5, 100.5);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200.5, 100.5, 100.5);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300.5, 100.5, 100.5);
+1 row inserted.
+
+$P0> DELETE FROM T1 WHERE I1 = I1;
+3 rows deleted.
+
+-- should be 1
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1                  T1.I2       T1.I3         
+-----------------------------------------------------
+                       100.5       100.5         
+1 row selected.
+
+
+--##############################
+--+SECTOR 10; NUMERIC
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC(20, 5) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100.505) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200.505) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300.505) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100.505);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200.505);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300.505);
+1 row inserted.
+
+-- should be {100.505, 200.505, 300.505, NULL}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+100.505     
+200.505     
+300.505     
+            
+4 rows selected.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be 0
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+No rows selected.
+
+
+--##############################
+--+SECTOR 11; VARBIT(10), VARBIT(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARBIT(10), I2 VARBIT(1000) )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN (VARBIT'100') TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (VARBIT'110') TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (VARBIT'111') TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, VARBIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (VARBIT'100', VARBIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (VARBIT'110', VARBIT'100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (VARBIT'111', VARBIT'100');
+1 row inserted.
+
+-- should be {'100', '110', '111', NULL}
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+100         
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+110         
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+111         
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+            
+100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+4 rows selected.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be 0
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+
+--##############################
+--+SECTOR 12; VARCHAR(10), VARCHAR(1000)
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10), I2 VARCHAR(1000) )
+     PARTITION BY RANGE (I1, I2)
+     ( PARTITION P1 VALUES LESS THAN ('100') TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN ('200') TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ('300') TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, '100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('100', '100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('200', '100');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ('300', '100');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be 0
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       
+--------------
+T1.I2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+
+
+
+--###################################################################
+--+SECTOR 13; DATATYPE MIX
+--###################################################################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 FLOAT, I3 VARCHAR(1000) )
+     PARTITION BY RANGE (I1, I2, I3)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL,1.5, 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 2.5, 'DEF');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 3.5, 'GHI');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 4.5, 'JKL');
+1 row inserted.
+
+$P0> ALTER TABLE T1 ENABLE ROW MOVEMENT;
+Alter success.
+$P0> UPDATE T1 SET I1 = 999;
+4 rows updated.
+
+$P0> DELETE FROM T1;
+4 rows deleted.
+
+-- should be 0
+$P0> SELECT * FROM T1 ORDER BY I1;
+T1.I1       T1.I2       
+---------------------------
+T1.I3                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+
+--###################################################################
+--+SECTOR 14; LOB 컬럼에 INSERT
+--###################################################################
+
+--##############################
+--+SECTOR 15; BLOB, CLOB
+--##############################
+$P0> DROP TABLE T1;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN ( 100 ) TABLESPACE PDT_TBS2
+                             LOB (I2, I3) STORE AS ( TABLESPACE PDT_TBS3 ),
+       PARTITION P2 VALUES LESS THAN ( 200 ) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN ( 300 ) TABLESPACE PDT_TBS4
+                             LOB (I3) STORE AS ( TABLESPACE PDT_TBS2 ),
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO T1 VALUES (NULL, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC');
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (300, 'ABC', 'ABC');
+1 row inserted.
+
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+2 rows deleted.
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--##################################################################
+--+SECTOR 16; 외래키
+--##################################################################
+
+--##############################
+--+SECTOR 17; UNIQUE KEY: INTEGER
+--##############################
+
+$P0> DROP TABLE T4 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T4 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T2 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T3 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T3 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 INTEGER UNIQUE, I2 VARCHAR(1000), I3 VARCHAR(10), I4 BLOB )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2
+                             LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3
+                             LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE PDT_TBS4
+                             LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2 ( I1 INTEGER UNIQUE, I2 INTEGER )
+     PARTITION BY LIST (I1)
+     (
+         PARTITION P1 VALUES (50, 100),
+         PARTITION P2 VALUES (150, 200),
+         PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T3 ( I1 INTEGER UNIQUE, I2 INTEGER )
+     TABLESPACE PDT_TBS2;
+Create success.
+
+$P0> CREATE TABLE T4 ( I1 INTEGER, I2 INTEGER )
+     PARTITION BY HASH (I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3
+     ) TABLESPACE PDT_TBS3;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+-- self reference
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+
+-- should be fail
+$P0> INSERT INTO T3 VALUES (100, 100);
+[ERR-31077 : The parent record was not found for T3_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T2 VALUES (100, 100);
+[ERR-31077 : The parent record was not found for T2_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES (100, 100);
+[ERR-31077 : The parent record was not found for T4_T1_FK.]
+
+-- should be success
+$P0> INSERT INTO T1 VALUES (100, 'ABC', 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES (150, 'ABC', 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES (200, 'ABC', 'ABC', 'ABC');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T2 VALUES (100, 100);
+[ERR-31077 : The parent record was not found for T2_T3_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES (100, 100);
+[ERR-31077 : The parent record was not found for T4_T3_FK.]
+
+-- should be success
+$P0> INSERT INTO T3 VALUES (100, 100);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES (150, 150);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES (200, 200);
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T4 VALUES (100, 100);
+[ERR-31077 : The parent record was not found for T4_T2_FK.]
+
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (100, 150);
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (150, 200);
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (200, 100);
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+
+-- should be success
+$P0> INSERT INTO T2 VALUES (100, 100);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES (150, 150);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES (200, 200);
+1 row inserted.
+
+-- should be success
+$P0> INSERT INTO T4 VALUES (100, 100);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES (150, 150);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES (200, 200);
+1 row inserted.
+
+--##############################
+--+SECTOR 18; DELETE TEST
+--##############################
+-- should be fail
+$P0> DELETE FROM T1;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T1_FK]
+-- should be fail
+$P0> DELETE FROM T2;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T4_T2_FK]
+-- should be fail
+$P0> DELETE FROM T3;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T3_FK]
+
+-- should be success
+$P0> DELETE FROM T4;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T2;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T3;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T1;
+3 rows deleted.
+
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T3;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T4;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+$P0> DROP TABLE T4 CASCADE;
+Drop success.
+$P0> DROP TABLE T2 CASCADE;
+Drop success.
+$P0> DROP TABLE T3 CASCADE;
+Drop success.
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+
+--##############################
+--+SECTOR 19; UNIQUE KEY: VARCHAR(10)
+--##############################
+
+$P0> DROP TABLE T4 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T4 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T2 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T3 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T3 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T1 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1 CASCADE
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(10) UNIQUE, I2 VARCHAR(1000), I3 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2 ( I1 VARCHAR(10) UNIQUE, I2 VARCHAR(10) )
+     PARTITION BY LIST (I1)
+     (
+         PARTITION P1 VALUES (50, 100),
+         PARTITION P2 VALUES (150, 200),
+         PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T3 ( I1 VARCHAR(10) UNIQUE, I2 VARCHAR(10) )
+     TABLESPACE PDT_TBS2;
+Create success.
+
+$P0> CREATE TABLE T4 ( I1 VARCHAR(10), I2 VARCHAR(10) )
+     PARTITION BY HASH (I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3
+     ) TABLESPACE PDT_TBS3;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+-- self reference
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+
+-- should be fail
+$P0> INSERT INTO T3 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T3_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T2 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T2_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T4_T1_FK.]
+
+-- should be success
+$P0> INSERT INTO T1 VALUES ('100', 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES ('150', 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES ('200', 'ABC', 'ABC');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T2 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T2_T3_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T4_T3_FK.]
+
+-- should be success
+$P0> INSERT INTO T3 VALUES ('100', '100');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES ('150', '150');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES ('200', '200');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T4 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T4_T2_FK.]
+
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES ('100', '150');
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES ('150', '200');
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES ('200', '100');
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+
+-- should be success
+$P0> INSERT INTO T2 VALUES ('100', '100');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES ('150', '150');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES ('200', '200');
+1 row inserted.
+
+-- should be success
+$P0> INSERT INTO T4 VALUES ('100', '100');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES ('150', '150');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES ('200', '200');
+1 row inserted.
+
+
+--##############################
+--+SECTOR 20; DELETE TEST
+--##############################
+-- should be fail
+$P0> DELETE FROM T1;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T1_FK]
+-- should be fail
+$P0> DELETE FROM T2;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T4_T2_FK]
+-- should be fail
+$P0> DELETE FROM T3;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T3_FK]
+
+-- should be success
+$P0> DELETE FROM T4 PARTITION(P1);
+3 rows deleted.
+$P0> DELETE FROM T4 PARTITION(P2);
+No rows deleted.
+$P0> DELETE FROM T4 PARTITION(P3);
+No rows deleted.
+-- should be success
+$P0> DELETE FROM T2 PARTITION(P1);
+1 row deleted.
+$P0> DELETE FROM T2 PARTITION(P2);
+2 rows deleted.
+$P0> DELETE FROM T2 PARTITION(P3);
+No rows deleted.
+-- should be success
+$P0> DELETE FROM T3;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+No rows deleted.
+
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T3;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T4;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+$P0> DROP TABLE T4 CASCADE;
+Drop success.
+$P0> DROP TABLE T2 CASCADE;
+Drop success.
+$P0> DROP TABLE T3 CASCADE;
+Drop success.
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+
+--##############################
+--+SECTOR 21; UNIQUE KEY: VARCHAR(1000)
+--##############################
+
+$P0> DROP TABLE T4 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T4 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T2 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T3 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T3 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T1 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1 CASCADE
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 VARCHAR(1000) UNIQUE, I2 VARCHAR(1000), I3 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2 ( I1 VARCHAR(1000) UNIQUE, I2 VARCHAR(10) )
+     PARTITION BY LIST (I1)
+     (
+         PARTITION P1 VALUES (50, 100),
+         PARTITION P2 VALUES (150, 200),
+         PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T3 ( I1 VARCHAR(1000) UNIQUE, I2 VARCHAR(10) )
+     TABLESPACE PDT_TBS2;
+Create success.
+
+$P0> CREATE TABLE T4 ( I1 VARCHAR(1000), I2 VARCHAR(10) )
+     PARTITION BY HASH (I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3
+     ) TABLESPACE PDT_TBS3;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+-- self reference
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+
+-- should be fail
+$P0> INSERT INTO T3 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T3_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T2 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T2_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T4_T1_FK.]
+
+-- should be success
+$P0> INSERT INTO T1 VALUES ('100', 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES ('150', 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES ('200', 'ABC', 'ABC');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T2 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T2_T3_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T4_T3_FK.]
+
+-- should be success
+$P0> INSERT INTO T3 VALUES ('100', '100');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES ('150', '150');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES ('200', '200');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T4 VALUES ('100', '100');
+[ERR-31077 : The parent record was not found for T4_T2_FK.]
+
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES ('100', '150');
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES ('150', '200');
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES ('200', '100');
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+
+-- should be success
+$P0> INSERT INTO T2 VALUES ('100', '100');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES ('150', '150');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES ('200', '200');
+1 row inserted.
+
+-- should be success
+$P0> INSERT INTO T4 VALUES ('100', '100');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES ('150', '150');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES ('200', '200');
+1 row inserted.
+
+
+--##############################
+--+SECTOR 22; DELETE TEST
+--##############################
+-- should be fail
+$P0> DELETE FROM T1;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T1_FK]
+-- should be fail
+$P0> DELETE FROM T2;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T4_T2_FK]
+-- should be fail
+$P0> DELETE FROM T3;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T3_FK]
+
+-- should be success
+$P0> DELETE FROM T4 PARTITION(P1);
+3 rows deleted.
+$P0> DELETE FROM T4 PARTITION(P2);
+No rows deleted.
+$P0> DELETE FROM T4 PARTITION(P3);
+No rows deleted.
+-- should be success
+$P0> DELETE FROM T2 PARTITION(P1);
+1 row deleted.
+$P0> DELETE FROM T2 PARTITION(P2);
+2 rows deleted.
+$P0> DELETE FROM T2 PARTITION(P3);
+No rows deleted.
+-- should be success
+$P0> DELETE FROM T3;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+No rows deleted.
+
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T3;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T4;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> DROP TABLE T4 CASCADE;
+Drop success.
+$P0> DROP TABLE T2 CASCADE;
+Drop success.
+$P0> DROP TABLE T3 CASCADE;
+Drop success.
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+
+--##############################
+--+SECTOR 23; UNIQUE KEY: DATE
+--##############################
+
+$P0> DROP TABLE T4 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T4 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T2 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T3 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T3 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T1 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1 CASCADE
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 DATE UNIQUE, I2 VARCHAR(1000), I3 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (TO_DATE('2007-05-05', 'YYYY-MM-DD')) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (TO_DATE('2007-06-05', 'YYYY-MM-DD')) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (TO_DATE('2007-07-05', 'YYYY-MM-DD')) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2 ( I1 DATE UNIQUE, I2 DATE )
+     PARTITION BY LIST (I1)
+     (
+         PARTITION P1 VALUES (TO_DATE('2007-05-01', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') ),
+         PARTITION P2 VALUES (TO_DATE('2007-06-01', 'YYYY-MM-DD'), TO_DATE('2007-06-05', 'YYYY-MM-DD') ),
+         PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T3 ( I1 DATE UNIQUE, I2 DATE )
+     TABLESPACE PDT_TBS2;
+Create success.
+
+$P0> CREATE TABLE T4 ( I1 DATE, I2 DATE )
+     PARTITION BY HASH (I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3
+     ) TABLESPACE PDT_TBS3;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+-- self reference
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+
+-- should be fail
+$P0> INSERT INTO T3 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T3_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T2_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T4_T1_FK.]
+
+-- should be success
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), '123', '123');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD'), '123', '123');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD'), '123', '123');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T2_T3_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T4_T3_FK.]
+
+-- should be success
+$P0> INSERT INTO T3 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD'), TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD'), TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T4 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T4_T2_FK.]
+
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD'), TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+
+-- should be success
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD'), TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD'), TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+1 row inserted.
+
+-- should be success
+$P0> INSERT INTO T4 VALUES (TO_DATE('2007-05-05', 'YYYY-MM-DD'), TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES (TO_DATE('2007-06-05', 'YYYY-MM-DD'), TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES (TO_DATE('2007-07-05', 'YYYY-MM-DD'), TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+1 row inserted.
+
+
+--##############################
+--+SECTOR 24; DELETE TEST
+--##############################
+-- should be fail
+$P0> DELETE FROM T1;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T1_FK]
+-- should be fail
+$P0> DELETE FROM T2;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T4_T2_FK]
+-- should be fail
+$P0> DELETE FROM T3;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T3_FK]
+
+-- should be success
+$P0> DELETE FROM T4 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T4 PARTITION(P2);
+3 rows deleted.
+$P0> DELETE FROM T4 PARTITION(P3);
+No rows deleted.
+-- should be success
+$P0> DELETE FROM T2 PARTITION(P1);
+1 row deleted.
+$P0> DELETE FROM T2 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T2 PARTITION(P3);
+1 row deleted.
+-- should be success
+$P0> DELETE FROM T3;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+1 row deleted.
+
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T3;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T4;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+$P0> DROP TABLE T4 CASCADE;
+Drop success.
+$P0> DROP TABLE T2 CASCADE;
+Drop success.
+$P0> DROP TABLE T3 CASCADE;
+Drop success.
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+
+--##############################
+--+SECTOR 25; UNIQUE KEY: NUMERIC(10,5)
+--##############################
+
+$P0> DROP TABLE T4 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T4 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T2 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T2 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T3 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T3 CASCADE
+                 ^ ^
+]
+$P0> DROP TABLE T1 CASCADE;
+[ERR-31031 : Table or view was not found : 
+0001 : DROP TABLE T1 CASCADE
+                 ^ ^
+]
+
+-- should be success
+$P0> CREATE TABLE T1 ( I1 NUMERIC(10,5) UNIQUE, I2 VARCHAR(1000), I3 VARCHAR(10) )
+     PARTITION BY RANGE (I1)
+     ( PARTITION P1 VALUES LESS THAN (100.505) TABLESPACE PDT_TBS2,
+       PARTITION P2 VALUES LESS THAN (200.505) TABLESPACE PDT_TBS3,
+       PARTITION P3 VALUES LESS THAN (300.505) TABLESPACE PDT_TBS4,
+       PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T2 ( I1 NUMERIC(10,5) UNIQUE, I2 NUMERIC(10,5) )
+     PARTITION BY LIST (I1)
+     (
+         PARTITION P1 VALUES (50, 100),
+         PARTITION P2 VALUES (150, 200),
+         PARTITION P3 VALUES DEFAULT
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> CREATE TABLE T3 ( I1 NUMERIC(10,5) UNIQUE, I2 NUMERIC(10,5) )
+     TABLESPACE PDT_TBS2;
+Create success.
+
+$P0> CREATE TABLE T4 ( I1 NUMERIC(10,5), I2 NUMERIC(10,5) )
+     PARTITION BY HASH (I1)
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3
+     ) TABLESPACE PDT_TBS3;
+Create success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T3 ADD CONSTRAINT T3_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T1_FK FOREIGN KEY(I2) REFERENCES T1(I1);
+Alter success.
+
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T3_FK FOREIGN KEY(I2) REFERENCES T3(I1);
+Alter success.
+
+$P0> ALTER TABLE T4 ADD CONSTRAINT T4_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+-- self reference
+$P0> ALTER TABLE T2 ADD CONSTRAINT T2_T2_FK FOREIGN KEY(I2) REFERENCES T2(I1);
+Alter success.
+
+
+-- should be fail
+$P0> INSERT INTO T3 VALUES (100.505, 100.505);
+[ERR-31077 : The parent record was not found for T3_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T2 VALUES (100.505, 100.505);
+[ERR-31077 : The parent record was not found for T2_T1_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES (100.505, 100.505);
+[ERR-31077 : The parent record was not found for T4_T1_FK.]
+
+-- should be success
+$P0> INSERT INTO T1 VALUES (100.505, 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES (150.505, 'ABC', 'ABC');
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES (200.505, 'ABC', 'ABC');
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T2 VALUES (100.505, 100.505);
+[ERR-31077 : The parent record was not found for T2_T3_FK.]
+-- should be fail
+$P0> INSERT INTO T4 VALUES (100.505, 100.505);
+[ERR-31077 : The parent record was not found for T4_T3_FK.]
+
+-- should be success
+$P0> INSERT INTO T3 VALUES (100.505, 100.505);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES (150.505, 150.505);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T3 VALUES (200.505, 200.505);
+1 row inserted.
+
+-- should be fail
+$P0> INSERT INTO T4 VALUES (100.505, 100.505);
+[ERR-31077 : The parent record was not found for T4_T2_FK.]
+
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (100.505, 150.505);
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (150.505, 200.505);
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+-- should be fail(self ref.)
+$P0> INSERT INTO T2 VALUES (200.505, 100.505);
+[ERR-31077 : The parent record was not found for T2_T2_FK.]
+
+-- should be success
+$P0> INSERT INTO T2 VALUES (100.505, 100.505);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES (150.505, 150.505);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T2 VALUES (200.505, 200.505);
+1 row inserted.
+
+-- should be success
+$P0> INSERT INTO T4 VALUES (100.505, 100.505);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES (150.505, 150.505);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T4 VALUES (200.505, 200.505);
+1 row inserted.
+
+
+--##############################
+--+SECTOR 26; DELETE TEST
+--##############################
+-- should be fail
+$P0> DELETE FROM T1;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T1_FK]
+-- should be fail
+$P0> DELETE FROM T2;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T4_T2_FK]
+-- should be fail
+$P0> DELETE FROM T3;
+[ERR-31076 : Unable to modify records that have child records. Please check the referential constraints. T2_T3_FK]
+
+-- should be success
+$P0> DELETE FROM T4 PARTITION(P1);
+1 row deleted.
+$P0> DELETE FROM T4 PARTITION(P2);
+1 row deleted.
+$P0> DELETE FROM T4 PARTITION(P3);
+1 row deleted.
+-- should be success
+$P0> DELETE FROM T2 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T2 PARTITION(P2);
+No rows deleted.
+$P0> DELETE FROM T2 PARTITION(P3);
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T3;
+3 rows deleted.
+-- should be success
+$P0> DELETE FROM T1 PARTITION(P1);
+No rows deleted.
+$P0> DELETE FROM T1 PARTITION(P2);
+2 rows deleted.
+$P0> DELETE FROM T1 PARTITION(P3);
+1 row deleted.
+$P0> DELETE FROM T1 PARTITION(P4);
+No rows deleted.
+
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T2;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T3;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$P0> SELECT COUNT(*) FROM T4;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$P0> DROP TABLE T4 CASCADE;
+Drop success.
+$P0> DROP TABLE T2 CASCADE;
+Drop success.
+$P0> DROP TABLE T3 CASCADE;
+Drop success.
+$P0> DROP TABLE T1 CASCADE;
+Drop success.
+
+
+
+--##################################################################
+--+SECTOR 27; FINALIZATION
+--##################################################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1 CASCADE;
+$P0> DROP TABLE T2 CASCADE;
+$P0> DROP TABLE T3 CASCADE;
+$P0> DROP TABLE T4 CASCADE;
+--+SKIP END; 
+

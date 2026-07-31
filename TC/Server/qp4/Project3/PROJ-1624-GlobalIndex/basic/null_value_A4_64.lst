@@ -1,0 +1,263 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop function get_oid;
+$T0> drop procedure check_index;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I2 ASC
+T1 has no primary key
+$T0> desc "$GIT_T1_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_T1_IDX1                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_T1_IDX1                             BTREE                  I2 ASC
+"$GIT_T1_IDX1" has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; CREATE PROC
+$T0> ##################################
+
+$T0> create function get_oid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+Create success.
+
+$T0> create procedure check_index()
+as
+  type r1 is record( i1 integer, i2 integer, oid bigint, rid bigint, flag char(1) );
+  type a1 is table of r1;
+  v1 a1;
+  v2 a1;
+  v3 a1;
+  x1 a1;
+  y1 integer;
+begin
+  select i1, i2, get_oid('T1','P1'), cast(_prowid as bigint), 'N' bulk collect into v1 from t1 partition (p1);
+  select i1, i2, get_oid('T1','P2'), cast(_prowid as bigint), 'N' bulk collect into v2 from t1 partition (p2);
+  select i1, i2, get_oid('T1','P3'), cast(_prowid as bigint), 'N' bulk collect into v3 from t1 partition (p3);
+
+  select null, i2, "$GIT_OID", "$GIT_RID", 'N' bulk collect into x1 from "$GIT_T1_IDX1";
+
+  println( 'T1 record count=' || v1.count()+v2.count()+v3.count() );
+  for i in v1.first() .. v1.last() loop
+    y1 := 0;
+    for j in x1.first() .. x1.last() loop
+      if v1[i].rid = x1[j].rid then
+        y1 := 1;
+        x1[j].flag := 'E';
+        exit;
+      end if;
+    end loop;
+    if y1 = 0 then
+      println( 'P1(i1,i2,oid,rid)=(' || v1[i].i1 || ','  || v1[i].i2 || ',' || v1[i].oid || ',' || v1[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  for i in v2.first() .. v2.last() loop
+    y1 := 0;
+    for j in x1.first() .. x1.last() loop
+      if v2[i].rid = x1[j].rid then
+        y1 := 1;
+        x1[j].flag := 'E';
+        exit;
+      end if;
+    end loop;
+    if y1 = 0 then
+      println( 'P2(i1,i2,oid,rid)=(' || v2[i].i1 || ','  || v2[i].i2 || ','  || v2[i].oid || ',' || v2[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  for i in v3.first() .. v3.last() loop
+    y1 := 0;
+    for j in x1.first() .. x1.last() loop
+      if v3[i].rid = x1[j].rid then
+        y1 := 1;
+        x1[j].flag := 'E';
+        exit;
+      end if;
+    end loop;
+    if y1 = 0 then
+      println( 'P3(i1,i2,oid,rid)=(' || v3[i].i1 || ','  || v3[i].i2 || ','  || v3[i].oid || ',' || v3[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  println( '' );
+
+  println( '$GIT_T1_IDX1 record count=' || x1.count() );
+  for i in x1.first() .. x1.last() loop
+    if x1[i].flag = 'N' then
+      println( '(i2,oid,rid)=(' || x1[i].i2 || ','  || x1[i].oid || ',' || x1[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  println( '' );
+
+end;
+/
+Create success.
+
+$T0> exec check_index();
+T1 record count=0
+
+$GIT_T1_IDX1 record count=0
+
+Execute success.
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> insert into t1 values (1, null);
+1 row inserted.
+$T0> insert into t1 values (2, null);
+1 row inserted.
+$T0> insert into t1 values (3, null);
+1 row inserted.
+$T0> insert into t1 values (4, null);
+1 row inserted.
+
+$T0> exec check_index();
+T1 record count=4
+
+$GIT_T1_IDX1 record count=4
+
+Execute success.
+
+$T0> insert into t1 values (5, 5);
+1 row inserted.
+
+$T0> exec check_index();
+T1 record count=5
+
+$GIT_T1_IDX1 record count=5
+
+Execute success.
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> update t1 set i2=1 where i1=1;
+1 row updated.
+
+$T0> exec check_index();
+T1 record count=5
+
+$GIT_T1_IDX1 record count=5
+
+Execute success.
+
+$T0> update t1 set i2=null where i1=5;
+1 row updated.
+
+$T0> exec check_index();
+T1 record count=5
+
+$GIT_T1_IDX1 record count=5
+
+Execute success.
+
+$T0> ##################################
+$T0> # SECTOR; DELETE
+$T0> ##################################
+
+$T0> delete from t1 where i1=1;
+1 row deleted.
+
+$T0> exec check_index();
+T1 record count=4
+
+$GIT_T1_IDX1 record count=4
+
+Execute success.
+
+$T0> delete from t1 where i1=2;
+1 row deleted.
+
+$T0> exec check_index();
+T1 record count=3
+
+$GIT_T1_IDX1 record count=3
+
+Execute success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop function get_oid;
+$T0> drop procedure check_index;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+

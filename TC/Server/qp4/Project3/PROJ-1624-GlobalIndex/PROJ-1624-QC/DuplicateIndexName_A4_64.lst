@@ -1,0 +1,333 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+$T0> #######################################################################
+$T0> # Duplicate Index Name Test
+$T0> #######################################################################
+
+$T0> ###################################
+$T0> #SECTOR; PREPARATION
+$T0> ###################################
+
+$T0> ###################################
+$T0> # SECTOR; PR-6119
+$T0> ###################################
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE T1;
+$T0> DROP TABLE T2;
+$T0> DROP INDEX IDX1;
+$T0> SKIP END;
+
+$T0> create table t1 (i1 integer, i2 integer)
+partition by range(i1)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> create table t2 (i1 integer, i2 integer)
+partition by range(i2)
+(
+	partition p1 values less than('3'),
+	partition p2 values less than('7'),
+	partition p3 values default
+) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> alter table t1 add constraint pk_t1 primary key (i1, i2);
+Alter success.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                 
+--------------------------------------------
+TABLE_NAME                                TABLE_TYPE  HIDDEN  
+------------------------------------------------------------------
+TBS_NAME                                  
+--------------------------------------------
+SYS                                       
+$GIT_PK_T1                                T  G  
+SYS_TBS_DISK_DATA                         
+1 row selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                COLUMN_ORDER 
+----------------------------------------------------------
+COLUMN_NAME                               
+--------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+$GIT_PK_T1                                0           
+I1                                        
+INTEGER                                   T  
+$GIT_PK_T1                                1           
+I2                                        
+INTEGER                                   T  
+$GIT_PK_T1                                2           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_PK_T1                                3           
+$GIT_RID                                  
+BIGINT                                    T  
+4 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                 
+--------------------------------------------
+INDEX_NAME                                INDEX_TYPE  IS_UNIQUE  
+---------------------------------------------------------------------
+TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------
+SYS                                       
+$GIK_PK_T1                                1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_PK_T1                                1           T  
+SYS_TBS_DISK_DATA                         F  
+2 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                INDEX_COL_ORDER 
+-------------------------------------------------------------
+COLUMN_NAME                               SORT_ORDER  
+---------------------------------------------------------
+$GIK_PK_T1                                0           
+I1                                        A  
+$GIK_PK_T1                                1           
+I2                                        A  
+$GIR_PK_T1                                0           
+$GIT_RID                                  A  
+3 rows selected.
+
+$T0> create unique index idx1 on t1 (i1,i2);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> create unique index idx1 on t1 (i1);
+Create success.
+$T0> create unique index idx1 on t1 (i2);
+[ERR-3104C : Duplicate index name]
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                 
+--------------------------------------------
+TABLE_NAME                                TABLE_TYPE  HIDDEN  
+------------------------------------------------------------------
+TBS_NAME                                  
+--------------------------------------------
+SYS                                       
+$GIT_PK_T1                                T  G  
+SYS_TBS_DISK_DATA                         
+SYS                                       
+$GIT_IDX1                                 T  G  
+SYS_TBS_DISK_DATA                         
+2 rows selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                COLUMN_ORDER 
+----------------------------------------------------------
+COLUMN_NAME                               
+--------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+$GIT_PK_T1                                0           
+I1                                        
+INTEGER                                   T  
+$GIT_PK_T1                                1           
+I2                                        
+INTEGER                                   T  
+$GIT_PK_T1                                2           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_PK_T1                                3           
+$GIT_RID                                  
+BIGINT                                    T  
+$GIT_IDX1                                 0           
+I1                                        
+INTEGER                                   F  
+$GIT_IDX1                                 1           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_IDX1                                 2           
+$GIT_RID                                  
+BIGINT                                    T  
+7 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                 
+--------------------------------------------
+INDEX_NAME                                INDEX_TYPE  IS_UNIQUE  
+---------------------------------------------------------------------
+TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------
+SYS                                       
+$GIK_PK_T1                                1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_PK_T1                                1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIK_IDX1                                 1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_IDX1                                 1           T  
+SYS_TBS_DISK_DATA                         F  
+4 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                INDEX_COL_ORDER 
+-------------------------------------------------------------
+COLUMN_NAME                               SORT_ORDER  
+---------------------------------------------------------
+$GIK_PK_T1                                0           
+I1                                        A  
+$GIK_PK_T1                                1           
+I2                                        A  
+$GIR_PK_T1                                0           
+$GIT_RID                                  A  
+$GIK_IDX1                                 0           
+I1                                        A  
+$GIR_IDX1                                 0           
+$GIT_RID                                  A  
+5 rows selected.
+
+$T0> alter table t2 add constraint pk_t1 primary key (i1, i2);
+[ERR-31046 : Duplicate constraint name : 
+0001 : alter table T2 add constraint PK_T1 primary key (I1, I2)
+                                    ^    ^
+]
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                 
+--------------------------------------------
+TABLE_NAME                                TABLE_TYPE  HIDDEN  
+------------------------------------------------------------------
+TBS_NAME                                  
+--------------------------------------------
+SYS                                       
+$GIT_PK_T1                                T  G  
+SYS_TBS_DISK_DATA                         
+SYS                                       
+$GIT_IDX1                                 T  G  
+SYS_TBS_DISK_DATA                         
+2 rows selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                COLUMN_ORDER 
+----------------------------------------------------------
+COLUMN_NAME                               
+--------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+$GIT_PK_T1                                0           
+I1                                        
+INTEGER                                   T  
+$GIT_PK_T1                                1           
+I2                                        
+INTEGER                                   T  
+$GIT_PK_T1                                2           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_PK_T1                                3           
+$GIT_RID                                  
+BIGINT                                    T  
+$GIT_IDX1                                 0           
+I1                                        
+INTEGER                                   F  
+$GIT_IDX1                                 1           
+$GIT_OID                                  
+BIGINT                                    T  
+$GIT_IDX1                                 2           
+$GIT_RID                                  
+BIGINT                                    T  
+7 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                 
+--------------------------------------------
+INDEX_NAME                                INDEX_TYPE  IS_UNIQUE  
+---------------------------------------------------------------------
+TBS_NAME                                  IS_PARTITIONED  
+-------------------------------------------------------------
+SYS                                       
+$GIK_PK_T1                                1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_PK_T1                                1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIK_IDX1                                 1           T  
+SYS_TBS_DISK_DATA                         F  
+SYS                                       
+$GIR_IDX1                                 1           T  
+SYS_TBS_DISK_DATA                         F  
+4 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                INDEX_COL_ORDER 
+-------------------------------------------------------------
+COLUMN_NAME                               SORT_ORDER  
+---------------------------------------------------------
+$GIK_PK_T1                                0           
+I1                                        A  
+$GIK_PK_T1                                1           
+I2                                        A  
+$GIR_PK_T1                                0           
+$GIT_RID                                  A  
+$GIK_IDX1                                 0           
+I1                                        A  
+$GIR_IDX1                                 0           
+$GIT_RID                                  A  
+5 rows selected.
+
+
+$T0> ###################################
+$T0> #SECTOR; FINALIZATION
+$T0> ###################################
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE T1;
+$T0> DROP TABLE T2;
+$T0> DROP INDEX IDX1;
+$T0> SKIP END;
+

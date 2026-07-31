@@ -1,0 +1,72 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for CREATE TABLE
+
+#Description: 파티션드 테이블에서 새로 생긴 구문에 대해서만 테스트한다.
+#             기존 구문과의 호환 테스트는 Legacy 테스트에서 한다.
+
+#CheckList
+    - 파싱 검사
+        - 기본 파티션 개수 체크
+        - MAXROWS 사용 유무 체크
+        - ROW MOVEMENT 사용 유무 검사
+
+    - 파티션 키 컬럼에 대한 검사
+        - 파티션 키 컬럼의 중복 체크
+        - 파티션 키 컬럼이 테이블에 존재하는 컬럼인지 체크
+        - 파티션 키 컬럼의 데이터 타입이 대소 비교 가능한 타입인지 체크
+        - 파티션 키 컬럼 개수 체크
+
+    - 각 파티션에 대한 검사
+        - 파티션 이름 중복 검사
+        - 파티션의 TBS 검사
+            - TBS 명시한 경우
+                - SM에서 존재하는 TBS인지 체크
+                - UNDO 또는 TEMP TBS인지 체크
+                - MEMORY TBS인지 체크
+            - TBS 명시하지 않은 경우
+                - 파티션드 테이블의 TBS를 따르는지 체크
+            - DISK TBS인지 체크
+        - 파티션의 LOB 컬럼의 TBS 검사
+            - 파티션드 테이블의 LOB 컬럼을 검사하는 경우
+                - LOB STORE AS ( ... )의 경우
+                - LOB ( col_list ) STORE AS ( ... )의 경우
+                - MEMORY TBS인지 체크
+            - 파티션의 LOB 컬럼을 검사하는 경우
+                - LOB 컬럼에 대한 TBS 지정이 없는 경우
+                    - LOB STORE AS ( ... )의 경우
+                    - LOB ( col_list ) STORE AS ( ... )의 경우
+                - LOB 컬럼에 대한 TBS 지정이 있는 경우
+                    - LOB STORE AS ( ... )의 경우
+                    - LOB ( col_list ) STORE AS ( ... )의 경우
+                - MEMORY TBS인지 체크
+
+    - 파티션 키 조건 값에 대한 검사
+        - 파티션 키 조건 값의 개수 체크
+        - 파티션 키 조건 값의 길이 체크
+            - '(single quote) 검사
+        - 파티션 키 조건 값 검사
+            - 단일 키 컬럼, 다중 키 컬럼
+            - 상수
+                - 데이터 타입에 따른 검사(+한계값 검사)
+                - 컬럼 타입과 맞지 않는 파티션 키 값
+            - 내장 함수
+            - 호스트 변수
+            - 서브쿼리
+            - NULL
+            - 날짜포맷 변경 검사
+        - 파티션 키 조건 값의 중복검사
+            - 상수
+            - 단일 키 컬럼, 다중 키 컬럼
+
+    - 제약 사항 체크
+        - 유니크키
+            - 프리픽스드 인덱스 여부 체크
+        - 외래키
+
+    - 메타 테이블 체크
+        - SYS_TABLES_
+        - SYS_PART_TABLES_
+        - SYS_TABLE_PARTITIONS_
+        - SYS_PART_KEY_COLUMNS_
+        - SYS_PART_LOBS_

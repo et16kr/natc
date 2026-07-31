@@ -1,0 +1,53 @@
+#Subject: PROJ-1502 PARTITIONED DISK TABLE
+
+#Object: Test for ALTER TABLE ... SPLIT PARTITION
+
+#Description: 
+
+#CheckList
+    - 문법 체크
+
+    - 파티션드 테이블인지 체크
+
+    - SrcPart 파티션 이름 체크
+
+    - SrcPart의 파티션 키 조건
+        - 단일 컬럼
+        - 멀티 컬럼
+        - 데이터 타입
+            - INTEGER
+            - DATE
+            - VARCHAR
+
+    - DstPart1과 DstPart2의 TBS 체크
+
+    - DstPart1과 DstPart2의 LOB 컬럼의 TBS 체크
+
+    - 파티션 분할 기준 값 체크
+        - 개수 체크
+        - 길이 체크
+        - SrcPart에 속하는지 체크
+
+    - DstPart1, DstPart2의 이름이 같은지 체크
+
+    - Split Type
+        - Left In-place Split
+            - DstPart2의 이름과 같은 이름의 파티션이 있는지 체크
+        - Right In-place Split
+            - DstPart1의 이름과 같은 이름의 파티션이 있는지 체크
+        - Out-place Split
+            - SrcPart와 DstPart1의 이름이 같을 경우
+            - SrcPart와 DstPart2의 이름이 같을 경우
+            - DstPart1 또는 DstPart2의 이름과 같은 이름의 파티션이 있는지 체크
+
+    - SrcPart의 타입에 따른 분할
+        - 가장 작은 파티션
+        - 중간 파티션
+        - 기본 파티션
+        - 분할 후, SrcPart, DstPart1, DstPart2의 
+          PARTITION_MIN_VALUE, PARTITION_MAX_VALUE 체크
+        - 분할 후, 데이터가 정확히 이동했는지 체크
+
+    - SrcPart에 인덱스 유무
+        - 단일 인덱스
+        - 다중 인덱스

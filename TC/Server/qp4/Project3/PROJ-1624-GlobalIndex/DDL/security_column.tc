@@ -1,0 +1,105 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+SKIP END;
+}
+
+DEF START_SECURITY()
+{
+SQL BEGIN;
+alter system set security_module_name = 'altibase';
+alter system set security_ecc_policy_name = 'double';
+alter system start security;
+SQL END;
+}
+
+DEF STOP_SECURITY()
+{
+SQL BEGIN;
+alter system stop security;
+SQL END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL START_SECURITY();
+
+CALL PREPARE();
+
+##################################
+# SECTOR; SECURITY COLUMN
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 varchar(5), 
+  i2 varchar(5) encrypt using 'shift',
+  i3 varchar(5) encrypt using 'reverse'
+)
+partition by range(i1)
+(
+  partition p1 values less than ('b'),
+  partition p2 values less than ('e'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values ('a', 'abc', 'bcd');
+insert into t1 values ('d', 'abcd', 'bcde');
+insert into t1 values ('g', 'abcde', 'bcdef');
+
+create index idx1 on t1(i2);
+create index idx2 on t1(i3 desc);
+create unique index idx3 on t1(i3 desc, i2 asc);
+
+desc t1;
+CALL DESC_INDEX( "IDX1" );
+CALL DESC_INDEX( "IDX2" );
+CALL DESC_INDEX( "IDX3" );
+
+alter session set explain plan = on;
+
+select * from t1;
+select /*+index(t1, idx1)*/ * from t1;
+select /*+index(t1, idx2)*/ * from t1;
+select /*+index(t1, idx3)*/ * from t1;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+
+CALL STOP_SECURITY();
+}

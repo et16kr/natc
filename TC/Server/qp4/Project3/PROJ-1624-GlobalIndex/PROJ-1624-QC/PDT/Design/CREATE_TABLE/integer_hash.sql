@@ -1,0 +1,407 @@
+--######################################################
+-- CREATE HASH PARTITIONED DISK TABLE 
+-- PARTITION KEY : INTEGER
+--######################################################
+
+--###################################
+--+SECTOR; INTIALIZE
+--###################################
+
+--+SKIP BEGIN;
+DROP TABLE PDT;
+DROP PROCEDURE PROC_INSERT;
+--+SKIP END;
+
+--#########################################
+--+SECTOR; DO JOB #1 (1. Basic Test)
+--#########################################
+
+------------------------------------------
+-- 1.1 단일 컬럼 파티션닝
+------------------------------------------
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT VALUES( 0, 0 );
+INSERT INTO PDT VALUES( 1, 0 );
+INSERT INTO PDT VALUES( 2, 0 );
+INSERT INTO PDT VALUES( 3, 0 );
+INSERT INTO PDT VALUES( 4, 0 );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+------------------------------------------
+-- 1.2 다중 컬럼 파티셔닝
+------------------------------------------
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1, F2 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT VALUES( 0, 1 );
+INSERT INTO PDT VALUES( 1, 2 );
+INSERT INTO PDT VALUES( 2, 3 );
+INSERT INTO PDT VALUES( 3, 4 );
+INSERT INTO PDT VALUES( 4, 5 );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+
+--#########################################
+--+SECTOR; DO JOB #2 (2. Validation Test)
+--#########################################
+
+------------------------------------------
+-- 2.1 파티션 키 컬럼 개수 체크
+------------------------------------------
+-- should be success
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER,
+    F3   INTEGER,
+    F4   INTEGER,
+    F5   INTEGER,
+    F6   INTEGER,
+    F7   INTEGER,
+    F8   INTEGER,
+    F9   INTEGER,
+    F10  INTEGER,
+    F11  INTEGER,
+    F12  INTEGER,
+    F13  INTEGER,
+    F14  INTEGER,
+    F15  INTEGER,
+    F16  INTEGER,
+    F17  INTEGER,
+    F18  INTEGER,
+    F19  INTEGER,
+    F20  INTEGER,
+    F21  INTEGER,
+    F22  INTEGER,
+    F23  INTEGER,
+    F24  INTEGER,
+    F25  INTEGER,
+    F26  INTEGER,
+    F27  INTEGER,
+    F28  INTEGER,
+    F29  INTEGER,
+    F30  INTEGER,
+    F31  INTEGER,
+    F32  INTEGER,
+    F33  INTEGER
+) 
+PARTITION BY HASH(  F1, F2, F3, F4, F5, F6, F7, F8, F9,F10,
+                    F11,F12,F13,F14,F15,F16,F17,F18,F19,F20,
+                    F21,F22,F23,F24,F25,F26,F27,F28,F29,F30,
+                    F31,F32 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+-- should be fail
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER,
+    F3   INTEGER,
+    F4   INTEGER,
+    F5   INTEGER,
+    F6   INTEGER,
+    F7   INTEGER,
+    F8   INTEGER,
+    F9   INTEGER,
+    F10  INTEGER,
+    F11  INTEGER,
+    F12  INTEGER,
+    F13  INTEGER,
+    F14  INTEGER,
+    F15  INTEGER,
+    F16  INTEGER,
+    F17  INTEGER,
+    F18  INTEGER,
+    F19  INTEGER,
+    F20  INTEGER,
+    F21  INTEGER,
+    F22  INTEGER,
+    F23  INTEGER,
+    F24  INTEGER,
+    F25  INTEGER,
+    F26  INTEGER,
+    F27  INTEGER,
+    F28  INTEGER,
+    F29  INTEGER,
+    F30  INTEGER,
+    F31  INTEGER,
+    F32  INTEGER,
+    F33  INTEGER
+) 
+PARTITION BY HASH(  F1, F2, F3, F4, F5, F6, F7, F8, F9,F10,
+                    F11,F12,F13,F14,F15,F16,F17,F18,F19,F20,
+                    F21,F22,F23,F24,F25,F26,F27,F28,F29,F30,
+                    F31,F32,F33 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+------------------------------------------
+-- 2.2 메모리 테이블스페이스 검사
+------------------------------------------
+-- should be fail
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE SYS_TBS_MEM_DATA;
+
+------------------------------------------
+-- 2.3 파티션 키 컬럼 중복 검사
+------------------------------------------
+-- should be fail
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1, F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+    
+------------------------------------------
+-- 2.4 파티션 이름 중복 검사
+------------------------------------------
+-- should be fail
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1, F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P1
+) TABLESPACE PDT_TBS;
+
+
+--#########################################
+--+SECTOR; DO JOB #3 (3. Execution Test)
+--#########################################
+
+------------------------------------------
+-- 3.1 Unique key
+------------------------------------------
+-- 단일 컬럼 파티셔닝
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER PRIMARY KEY,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT VALUES( 0, 1 );
+-- should be fail
+INSERT INTO PDT VALUES( 0, 2 );
+
+INSERT INTO PDT VALUES( 1, 1 );
+INSERT INTO PDT VALUES( 2, 1 );
+INSERT INTO PDT VALUES( 3, 1 );
+INSERT INTO PDT VALUES( 4, 1 );
+INSERT INTO PDT VALUES( 5, 1 );
+INSERT INTO PDT VALUES( 6, 1 );
+INSERT INTO PDT VALUES( 7, 1 );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+-- 다중 컬럼 파티셔닝
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER,
+    PRIMARY KEY(F1, F2)
+) 
+PARTITION BY HASH( F1, F2 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT VALUES( 0, 1 );
+INSERT INTO PDT VALUES( 0, 2 );
+INSERT INTO PDT VALUES( 1, 1 );
+INSERT INTO PDT VALUES( 2, 1 );
+INSERT INTO PDT VALUES( 3, 1 );
+INSERT INTO PDT VALUES( 4, 1 );
+INSERT INTO PDT VALUES( 5, 1 );
+INSERT INTO PDT VALUES( 6, 1 );
+INSERT INTO PDT VALUES( 7, 1 );
+-- should be fail
+INSERT INTO PDT VALUES( 1, 1 );
+INSERT INTO PDT VALUES( 2, 1 );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+------------------------------------------
+-- 3.2 NULL
+------------------------------------------
+-- 단일 컬럼 파티셔닝
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT VALUES( 0, 0 );
+INSERT INTO PDT VALUES( 1, 0 );
+INSERT INTO PDT VALUES( 2, 0 );
+INSERT INTO PDT VALUES( 3, 0 );
+INSERT INTO PDT VALUES( NULL, 0 );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+-- 다중 컬럼 파티셔닝
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1, F2 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+INSERT INTO PDT VALUES( 0, 0 );
+INSERT INTO PDT VALUES( 1, 0 );
+INSERT INTO PDT VALUES( 2, 0 );
+INSERT INTO PDT VALUES( 3, 0 );
+INSERT INTO PDT VALUES( NULL, 0 );
+INSERT INTO PDT VALUES( 0, NULL );
+INSERT INTO PDT VALUES( NULL, NULL );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+------------------------------------------
+-- 3.3 DISTIBUTION
+------------------------------------------
+DROP TABLE PDT;
+CREATE TABLE PDT
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+
+CREATE OR REPLACE PROCEDURE PROC_INSERT( FROM_IDX IN INTEGER,
+                                         TO_IDX   IN INTEGER ) 
+AS
+BEGIN
+    FOR I IN FROM_IDX .. TO_IDX LOOP
+        INSERT INTO PDT VALUES ( I, I );
+    END LOOP;
+END;
+/
+
+EXECUTE PROC_INSERT( 1, 10000 );
+
+SELECT COUNT(*) FROM PDT PARTITION( P1 );
+SELECT COUNT(*) FROM PDT PARTITION( P2 );
+SELECT COUNT(*) FROM PDT PARTITION( P3 );
+SELECT COUNT(*) FROM PDT PARTITION( P4 );
+
+
+--###################################
+--+SECTOR; FINALIZE
+--###################################
+
+--+SKIP BEGIN;
+DROP TABLE PDT;
+DROP PROCEDURE PROC_INSERT;
+--+SKIP END;

@@ -1,0 +1,72 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ############################################################################
+$T0> #Replication Environment Setting
+$T0> ############################################################################
+
+$T0> ############################################################################
+$T0> # SET UP three DB System
+$T0> ############################################################################
+
+
+$T0> DECLARE SERVER PROJ_1624_SERVER1 DB1;
+$T0> DECLARE SERVER PROJ_1624_SERVER2 DB2;
+
+$T0> DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+$T0> DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+$T0> SET_ENV ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+
+$T0> THREAD T11 C11
+$T0> THREAD T21 C21
+$T0> join;
+$T11> --########################################
+$T11> --# Set Up DB 1
+$T11> --########################################
+
+$T11> SET_ENV @DB1 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+$T11> RM -rf "db1";
+
+$T11> MKDIR "db1";
+$T11> MKDIR "db1/conf";
+$T11> MKDIR "db1/dbs";
+$T11> MKDIR "db1/logs";
+$T11> MKDIR "db1/trc";
+$T11> MKDIR "db1/arch_logs";
+
+$T11> CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+$T11> CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+$T11> CP -r "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+$T11> CP -r "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+$T11> # CP -r "${ALTIBASE_HOME_C0}/dlib" "db1/dlib";
+
+$T21> --########################################
+$T21> --# Set Up DB 2
+$T21> --########################################
+
+$T21> SET_ENV @DB2 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+$T21> RM -rf "db2";
+
+$T21> MKDIR "db2";
+$T21> MKDIR "db2/conf";
+$T21> MKDIR "db2/dbs";
+$T21> MKDIR "db2/logs";
+$T21> MKDIR "db2/trc";
+$T21> MKDIR "db2/arch_logs";
+
+$T21> CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+$T21> CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+$T21> CP "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+$T21> CP "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+$T21> # CP -r "${ALTIBASE_HOME_C0}/dlib" "db2/dlib";
+
+

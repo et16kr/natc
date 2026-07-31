@@ -1,0 +1,187 @@
+###########################################################################
+# Set Null Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+SQL BEGIN;
+connect sys/manager;
+drop user user1 cascade;
+SQL END;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+SQL BEGIN;
+
+connect sys/manager;
+
+create user user1 identified by user1 default tablespace sys_tbs_disk_data;
+connect user1/user1;
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+alter table t1 add constraint t1_pk primary key (i2, i1);
+alter table t1 add constraint t1_uk unique (i3, i2, i1);
+
+create index t1_idx1 on t1(i2);
+create index t1_idx2 on t1(i2, i3 desc, i4);
+create index t1_idx3 on t1(i3, i2 desc);
+
+create index t1_idx4 on t1(i4 desc, i3) local;
+create index t1_idx5 on t1(i4) local;
+
+create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition pd
+)
+tablespace sys_tbs_disk_data;
+
+alter table t2 add constraint t2_pk primary key (i2, i1);
+alter table t2 add constraint t2_uk unique (i3, i2, i1);
+
+create index t2_idx1 on t2(i2);
+create index t2_idx2 on t2(i2, i3 desc, i4);
+create index t2_idx3 on t2(i3, i2 desc);
+
+create index t2_idx4 on t2(i4 desc, i3) local;
+create index t2_idx5 on t2(i4) local;
+
+create table t3
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+alter table t3 add constraint t3_pk primary key (i2, i1);
+alter table t3 add constraint t3_uk unique (i3, i2, i1);
+
+create index t3_idx1 on t3(i2);
+create index t3_idx2 on t3(i2, i3 desc, i4);
+create index t3_idx3 on t3(i3, i2 desc);
+
+create index t3_idx4 on t3(i4 desc, i3) local;
+create index t3_idx5 on t3(i4) local;
+
+SQL END;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; INITIALIZE
+##################################
+
+$ALTIBASE_HOME;
+
+MV -f "${ALTIBASE_HOME}/conf/aexport.properties" "${ALTIBASE_HOME}/conf/aexport.properties.org";
+CP "aexport.properties" "${ALTIBASE_HOME}/conf/aexport.properties";
+
+CALL PREPARE();
+
+##################################
+# SECTOR; EXPORT
+##################################
+
+EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager";
+P_WAIT PROC1;
+
+CAT "ALL_CRT_TBL.sql";
+CAT "ALL_CRT_INDEX.sql";
+CAT "ALL_CRT_USER.sql";
+
+##################################
+# SECTOR; IMPORT
+##################################
+
+CALL FINALIZE();
+
+connect sys/manager;
+
+EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f ALL_CRT_USER.sql";
+P_WAIT PROC1;
+
+EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f ALL_CRT_TBL.sql";
+P_WAIT PROC1;
+
+EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f ALL_CRT_INDEX.sql";
+P_WAIT PROC1;
+
+SQL BEGIN;
+
+connect user1/altibase;
+
+desc t1;
+desc "$GIT_T1_PK";
+desc "$GIT_T1_UK";
+desc "$GIT_T1_IDX1";
+desc "$GIT_T1_IDX2";
+desc "$GIT_T1_IDX3";
+
+desc t2;
+desc "$GIT_T2_PK";
+desc "$GIT_T2_UK";
+desc "$GIT_T2_IDX1";
+desc "$GIT_T2_IDX2";
+desc "$GIT_T2_IDX3";
+
+desc t3;
+desc "$GIT_T3_PK";
+desc "$GIT_T3_UK";
+desc "$GIT_T3_IDX1";
+desc "$GIT_T3_IDX2";
+desc "$GIT_T3_IDX3";
+
+SQL END;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+
+RM "ALL_*" "USER1_*" "user1_*" "run_*";
+RM "${ALTIBASE_HOME}/conf/aexport.properties";
+MV -f "${ALTIBASE_HOME}/conf/aexport.properties.org" "${ALTIBASE_HOME}/conf/aexport.properties";
+}

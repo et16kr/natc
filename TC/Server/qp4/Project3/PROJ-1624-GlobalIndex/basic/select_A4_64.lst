@@ -1,0 +1,3861 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; RANGE PARTITION
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> create index t1_idx1 on t1(i2, i3);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3 desc);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I2 ASC,
+                                                                I3 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC
+T1 has no primary key
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i2, i3;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i2, i3 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+2           0           2           1           
+1           0           1           1           
+5           1           2           1           
+4           1           1           1           
+3           1           0           1           
+8           2           2           1           
+7           2           1           1           
+6           2           0           1           
+11          3           2           1           
+10          3           1           1           
+9           3           0           1           
+14          4           2           1           
+13          4           1           1           
+12          4           0           1           
+17          5           2           1           
+16          5           1           1           
+15          5           0           1           
+20          6           2           1           
+19          6           1           1           
+18          6           0           1           
+23          7           2           1           
+22          7           1           1           
+21          7           0           1           
+26          8           2           1           
+25          8           1           1           
+24          8           0           1           
+29          9           2           1           
+28          9           1           1           
+27          9           0           1           
+32          10          2           1           
+31          10          1           1           
+30          10          0           1           
+35          11          2           1           
+34          11          1           1           
+33          11          0           1           
+38          12          2           1           
+37          12          1           1           
+36          12          0           1           
+41          13          2           1           
+40          13          1           1           
+39          13          0           1           
+44          14          2           1           
+43          14          1           1           
+42          14          0           1           
+47          15          2           1           
+46          15          1           1           
+45          15          0           1           
+50          16          2           1           
+49          16          1           1           
+48          16          0           1           
+53          17          2           1           
+52          17          1           1           
+51          17          0           1           
+56          18          2           1           
+55          18          1           1           
+54          18          0           1           
+59          19          2           1           
+58          19          1           1           
+57          19          0           1           
+62          20          2           1           
+61          20          1           1           
+60          20          0           1           
+65          21          2           1           
+64          21          1           1           
+63          21          0           1           
+68          22          2           1           
+67          22          1           1           
+66          22          0           1           
+71          23          2           1           
+70          23          1           1           
+69          23          0           1           
+74          24          2           1           
+73          24          1           1           
+72          24          0           1           
+77          25          2           1           
+76          25          1           1           
+75          25          0           1           
+80          26          2           1           
+79          26          1           1           
+78          26          0           1           
+83          27          2           1           
+82          27          1           1           
+81          27          0           1           
+86          28          2           1           
+85          28          1           1           
+84          28          0           1           
+89          29          2           1           
+88          29          1           1           
+87          29          0           1           
+92          30          2           1           
+91          30          1           1           
+90          30          0           1           
+95          31          2           1           
+94          31          1           1           
+93          31          0           1           
+98          32          2           1           
+97          32          1           1           
+96          32          0           1           
+100         33          1           1           
+99          33          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX2, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1 where i2 = 10 and i3 = 1 and i4 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 10
+    OR
+     I3 = 1
+   [ FILTER ]
+   I4 = 1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1 where i2 >= 20 and i3 = 1 and i4 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 >= 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 >= 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 14, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 >= 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I3 = 1
+   [ FILTER ]
+   I4 = 1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; HOST VARIABLE
+$T0> ##################################
+
+$T0> var v2 integer;
+$T0> var v3 integer;
+$T0> var v4 integer;
+
+$T0> exec :v2 := 10;
+Execute success.
+$T0> exec :v3 := 1;
+Execute success.
+$T0> exec :v4 := 1;
+Execute success.
+
+$T0> prepare select * from t1 where i2 = :v2 and i3 = :v3 and i4 = :v4;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 = :v2
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t1 where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 = :v2
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t1 where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+   [ VARIABLE KEY ]
+   OR
+    AND
+     I2 = :v2
+     I3 = :v3
+   [ FILTER ]
+   I4 = :v4
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> exec :v2 := 20;
+Execute success.
+
+$T0> prepare select * from t1 where i2 >= :v2 and i3 = :v3 and i4 = :v4;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 >= :v2
+  [ VARIABLE KEY FILTER ]
+  OR
+   AND
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t1 where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 >= :v2
+  [ VARIABLE KEY FILTER ]
+  OR
+   AND
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t1 where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 14, COST: BLOCKED )
+   [ VARIABLE KEY ]
+   OR
+    AND
+     I2 >= :v2
+   [ VARIABLE KEY FILTER ]
+   OR
+    AND
+     I3 = :v3
+   [ FILTER ]
+   I4 = :v4
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; SELECT FOR UPDATE
+$T0> ##################################
+
+$T0> select * from t1 for update;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i2, i3 for update;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i2, i3 desc for update;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+2           0           2           1           
+1           0           1           1           
+5           1           2           1           
+4           1           1           1           
+3           1           0           1           
+8           2           2           1           
+7           2           1           1           
+6           2           0           1           
+11          3           2           1           
+10          3           1           1           
+9           3           0           1           
+14          4           2           1           
+13          4           1           1           
+12          4           0           1           
+17          5           2           1           
+16          5           1           1           
+15          5           0           1           
+20          6           2           1           
+19          6           1           1           
+18          6           0           1           
+23          7           2           1           
+22          7           1           1           
+21          7           0           1           
+26          8           2           1           
+25          8           1           1           
+24          8           0           1           
+29          9           2           1           
+28          9           1           1           
+27          9           0           1           
+32          10          2           1           
+31          10          1           1           
+30          10          0           1           
+35          11          2           1           
+34          11          1           1           
+33          11          0           1           
+38          12          2           1           
+37          12          1           1           
+36          12          0           1           
+41          13          2           1           
+40          13          1           1           
+39          13          0           1           
+44          14          2           1           
+43          14          1           1           
+42          14          0           1           
+47          15          2           1           
+46          15          1           1           
+45          15          0           1           
+50          16          2           1           
+49          16          1           1           
+48          16          0           1           
+53          17          2           1           
+52          17          1           1           
+51          17          0           1           
+56          18          2           1           
+55          18          1           1           
+54          18          0           1           
+59          19          2           1           
+58          19          1           1           
+57          19          0           1           
+62          20          2           1           
+61          20          1           1           
+60          20          0           1           
+65          21          2           1           
+64          21          1           1           
+63          21          0           1           
+68          22          2           1           
+67          22          1           1           
+66          22          0           1           
+71          23          2           1           
+70          23          1           1           
+69          23          0           1           
+74          24          2           1           
+73          24          1           1           
+72          24          0           1           
+77          25          2           1           
+76          25          1           1           
+75          25          0           1           
+80          26          2           1           
+79          26          1           1           
+78          26          0           1           
+83          27          2           1           
+82          27          1           1           
+81          27          0           1           
+86          28          2           1           
+85          28          1           1           
+84          28          0           1           
+89          29          2           1           
+88          29          1           1           
+87          29          0           1           
+92          30          2           1           
+91          30          1           1           
+90          30          0           1           
+95          31          2           1           
+94          31          1           1           
+93          31          0           1           
+98          32          2           1           
+97          32          1           1           
+96          32          0           1           
+100         33          1           1           
+99          33          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX2, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1 where i2 = 10 and i3 = 1 and i4 = 1 for update;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 for update;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc for update;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 10
+    OR
+     I3 = 1
+   [ FILTER ]
+   I4 = 1
+   SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; HASH PARTITION
+$T0> ##################################
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition p5
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> create index t2_idx1 on t2(i2, i3);
+Create success.
+$T0> create index t2_idx2 on t2(i2, i3 desc);
+Create success.
+
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_IDX1                                  BTREE                  I2 ASC,
+                                                                I3 ASC
+T2_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC
+T2 has no primary key
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> select * from t2;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+5           1           2           1           
+9           3           0           1           
+12          4           0           1           
+14          4           2           1           
+18          6           0           1           
+23          7           2           1           
+27          9           0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+45          15          0           1           
+48          16          0           1           
+56          18          2           1           
+57          19          0           1           
+66          22          0           1           
+86          28          2           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+1           0           1           1           
+3           1           0           1           
+13          4           1           1           
+21          7           0           1           
+30          10          0           1           
+40          13          1           1           
+51          17          0           1           
+52          17          1           1           
+58          19          1           1           
+69          23          0           1           
+71          23          2           1           
+76          25          1           1           
+85          28          1           1           
+87          29          0           1           
+92          30          2           1           
+97          32          1           1           
+98          32          2           1           
+4           1           1           1           
+8           2           2           1           
+17          5           2           1           
+25          8           1           1           
+26          8           2           1           
+35          11          2           1           
+46          15          1           1           
+49          16          1           1           
+53          17          2           1           
+61          20          1           1           
+62          20          2           1           
+64          21          1           1           
+65          21          2           1           
+68          22          2           1           
+73          24          1           1           
+77          25          2           1           
+80          26          2           1           
+83          27          2           1           
+84          28          0           1           
+90          30          0           1           
+93          31          0           1           
+2           0           2           1           
+6           2           0           1           
+7           2           1           1           
+10          3           1           1           
+11          3           2           1           
+16          5           1           1           
+22          7           1           1           
+28          9           1           1           
+29          9           2           1           
+36          12          0           1           
+37          12          1           1           
+39          13          0           1           
+42          14          0           1           
+44          14          2           1           
+50          16          2           1           
+59          19          2           1           
+63          21          0           1           
+70          23          1           1           
+74          24          2           1           
+75          25          0           1           
+79          26          1           1           
+81          27          0           1           
+99          33          0           1           
+15          5           0           1           
+19          6           1           1           
+20          6           2           1           
+24          8           0           1           
+34          11          1           1           
+38          12          2           1           
+41          13          2           1           
+43          14          1           1           
+47          15          2           1           
+54          18          0           1           
+55          18          1           1           
+60          20          0           1           
+67          22          1           1           
+72          24          0           1           
+78          26          0           1           
+82          27          1           1           
+89          29          2           1           
+95          31          2           1           
+96          32          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 order by i2, i3;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 order by i2, i3 desc;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+2           0           2           1           
+1           0           1           1           
+5           1           2           1           
+4           1           1           1           
+3           1           0           1           
+8           2           2           1           
+7           2           1           1           
+6           2           0           1           
+11          3           2           1           
+10          3           1           1           
+9           3           0           1           
+14          4           2           1           
+13          4           1           1           
+12          4           0           1           
+17          5           2           1           
+16          5           1           1           
+15          5           0           1           
+20          6           2           1           
+19          6           1           1           
+18          6           0           1           
+23          7           2           1           
+22          7           1           1           
+21          7           0           1           
+26          8           2           1           
+25          8           1           1           
+24          8           0           1           
+29          9           2           1           
+28          9           1           1           
+27          9           0           1           
+32          10          2           1           
+31          10          1           1           
+30          10          0           1           
+35          11          2           1           
+34          11          1           1           
+33          11          0           1           
+38          12          2           1           
+37          12          1           1           
+36          12          0           1           
+41          13          2           1           
+40          13          1           1           
+39          13          0           1           
+44          14          2           1           
+43          14          1           1           
+42          14          0           1           
+47          15          2           1           
+46          15          1           1           
+45          15          0           1           
+50          16          2           1           
+49          16          1           1           
+48          16          0           1           
+53          17          2           1           
+52          17          1           1           
+51          17          0           1           
+56          18          2           1           
+55          18          1           1           
+54          18          0           1           
+59          19          2           1           
+58          19          1           1           
+57          19          0           1           
+62          20          2           1           
+61          20          1           1           
+60          20          0           1           
+65          21          2           1           
+64          21          1           1           
+63          21          0           1           
+68          22          2           1           
+67          22          1           1           
+66          22          0           1           
+71          23          2           1           
+70          23          1           1           
+69          23          0           1           
+74          24          2           1           
+73          24          1           1           
+72          24          0           1           
+77          25          2           1           
+76          25          1           1           
+75          25          0           1           
+80          26          2           1           
+79          26          1           1           
+78          26          0           1           
+83          27          2           1           
+82          27          1           1           
+81          27          0           1           
+86          28          2           1           
+85          28          1           1           
+84          28          0           1           
+89          29          2           1           
+88          29          1           1           
+87          29          0           1           
+92          30          2           1           
+91          30          1           1           
+90          30          0           1           
+95          31          2           1           
+94          31          1           1           
+93          31          0           1           
+98          32          2           1           
+97          32          1           1           
+96          32          0           1           
+100         33          1           1           
+99          33          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX2, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t2 where i2 = 10 and i3 = 1 and i4 = 1;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 10
+    OR
+     I3 = 1
+   [ FILTER ]
+   I4 = 1
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t2 where i2 >= 20 and i3 = 1 and i4 = 1;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 >= 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 >= 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 14, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 >= 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I3 = 1
+   [ FILTER ]
+   I4 = 1
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; HOST VARIABLE
+$T0> ##################################
+
+$T0> var v2 integer;
+$T0> var v3 integer;
+$T0> var v4 integer;
+
+$T0> exec :v2 := 10;
+Execute success.
+$T0> exec :v3 := 1;
+Execute success.
+$T0> exec :v4 := 1;
+Execute success.
+
+$T0> prepare select * from t2 where i2 = :v2 and i3 = :v3 and i4 = :v4;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 = :v2
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t2 where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 = :v2
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t2 where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+   [ VARIABLE KEY ]
+   OR
+    AND
+     I2 = :v2
+     I3 = :v3
+   [ FILTER ]
+   I4 = :v4
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> exec :v2 := 20;
+Execute success.
+
+$T0> prepare select * from t2 where i2 >= :v2 and i3 = :v3 and i4 = :v4;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 >= :v2
+  [ VARIABLE KEY FILTER ]
+  OR
+   AND
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t2 where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 14, COST: BLOCKED )
+  [ VARIABLE KEY ]
+  OR
+   AND
+    I2 >= :v2
+  [ VARIABLE KEY FILTER ]
+  OR
+   AND
+    I3 = :v3
+  [ FILTER ]
+  I4 = :v4
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> prepare select * from t2 where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 14, COST: BLOCKED )
+   [ VARIABLE KEY ]
+   OR
+    AND
+     I2 >= :v2
+   [ VARIABLE KEY FILTER ]
+   OR
+    AND
+     I3 = :v3
+   [ FILTER ]
+   I4 = :v4
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; SELECT FOR UPDATE
+$T0> ##################################
+
+$T0> select * from t2 for update;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+5           1           2           1           
+9           3           0           1           
+12          4           0           1           
+14          4           2           1           
+18          6           0           1           
+23          7           2           1           
+27          9           0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+45          15          0           1           
+48          16          0           1           
+56          18          2           1           
+57          19          0           1           
+66          22          0           1           
+86          28          2           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+1           0           1           1           
+3           1           0           1           
+13          4           1           1           
+21          7           0           1           
+30          10          0           1           
+40          13          1           1           
+51          17          0           1           
+52          17          1           1           
+58          19          1           1           
+69          23          0           1           
+71          23          2           1           
+76          25          1           1           
+85          28          1           1           
+87          29          0           1           
+92          30          2           1           
+97          32          1           1           
+98          32          2           1           
+4           1           1           1           
+8           2           2           1           
+17          5           2           1           
+25          8           1           1           
+26          8           2           1           
+35          11          2           1           
+46          15          1           1           
+49          16          1           1           
+53          17          2           1           
+61          20          1           1           
+62          20          2           1           
+64          21          1           1           
+65          21          2           1           
+68          22          2           1           
+73          24          1           1           
+77          25          2           1           
+80          26          2           1           
+83          27          2           1           
+84          28          0           1           
+90          30          0           1           
+93          31          0           1           
+2           0           2           1           
+6           2           0           1           
+7           2           1           1           
+10          3           1           1           
+11          3           2           1           
+16          5           1           1           
+22          7           1           1           
+28          9           1           1           
+29          9           2           1           
+36          12          0           1           
+37          12          1           1           
+39          13          0           1           
+42          14          0           1           
+44          14          2           1           
+50          16          2           1           
+59          19          2           1           
+63          21          0           1           
+70          23          1           1           
+74          24          2           1           
+75          25          0           1           
+79          26          1           1           
+81          27          0           1           
+99          33          0           1           
+15          5           0           1           
+19          6           1           1           
+20          6           2           1           
+24          8           0           1           
+34          11          1           1           
+38          12          2           1           
+41          13          2           1           
+43          14          1           1           
+47          15          2           1           
+54          18          0           1           
+55          18          1           1           
+60          20          0           1           
+67          22          1           1           
+72          24          0           1           
+78          26          0           1           
+82          27          1           1           
+89          29          2           1           
+95          31          2           1           
+96          32          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: P5, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 order by i2, i3 for update;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 order by i2, i3 desc for update;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+2           0           2           1           
+1           0           1           1           
+5           1           2           1           
+4           1           1           1           
+3           1           0           1           
+8           2           2           1           
+7           2           1           1           
+6           2           0           1           
+11          3           2           1           
+10          3           1           1           
+9           3           0           1           
+14          4           2           1           
+13          4           1           1           
+12          4           0           1           
+17          5           2           1           
+16          5           1           1           
+15          5           0           1           
+20          6           2           1           
+19          6           1           1           
+18          6           0           1           
+23          7           2           1           
+22          7           1           1           
+21          7           0           1           
+26          8           2           1           
+25          8           1           1           
+24          8           0           1           
+29          9           2           1           
+28          9           1           1           
+27          9           0           1           
+32          10          2           1           
+31          10          1           1           
+30          10          0           1           
+35          11          2           1           
+34          11          1           1           
+33          11          0           1           
+38          12          2           1           
+37          12          1           1           
+36          12          0           1           
+41          13          2           1           
+40          13          1           1           
+39          13          0           1           
+44          14          2           1           
+43          14          1           1           
+42          14          0           1           
+47          15          2           1           
+46          15          1           1           
+45          15          0           1           
+50          16          2           1           
+49          16          1           1           
+48          16          0           1           
+53          17          2           1           
+52          17          1           1           
+51          17          0           1           
+56          18          2           1           
+55          18          1           1           
+54          18          0           1           
+59          19          2           1           
+58          19          1           1           
+57          19          0           1           
+62          20          2           1           
+61          20          1           1           
+60          20          0           1           
+65          21          2           1           
+64          21          1           1           
+63          21          0           1           
+68          22          2           1           
+67          22          1           1           
+66          22          0           1           
+71          23          2           1           
+70          23          1           1           
+69          23          0           1           
+74          24          2           1           
+73          24          1           1           
+72          24          0           1           
+77          25          2           1           
+76          25          1           1           
+75          25          0           1           
+80          26          2           1           
+79          26          1           1           
+78          26          0           1           
+83          27          2           1           
+82          27          1           1           
+81          27          0           1           
+86          28          2           1           
+85          28          1           1           
+84          28          0           1           
+89          29          2           1           
+88          29          1           1           
+87          29          0           1           
+92          30          2           1           
+91          30          1           1           
+90          30          0           1           
+95          31          2           1           
+94          31          1           1           
+93          31          0           1           
+98          32          2           1           
+97          32          1           1           
+96          32          0           1           
+100         33          1           1           
+99          33          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX2, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t2 where i2 = 10 and i3 = 1 and i4 = 1 for update;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 for update;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 10
+   OR
+    I3 = 1
+  [ FILTER ]
+  I4 = 1
+  SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc for update;
+T2.I1       T2.I2       T2.I3       T2.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 5/5, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 10
+    OR
+     I3 = 1
+   [ FILTER ]
+   I4 = 1
+   SCAN ( PARTITION: P5, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; LIST PARTITION
+$T0> ##################################
+
+$T0> create table t3
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t3 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> create index t3_idx1 on t1(i2, i3);
+[ERR-31051 : Duplicate key columns in an index]
+$T0> create index t3_idx2 on t1(i2, i3 desc);
+[ERR-31051 : Duplicate key columns in an index]
+
+$T0> desc t3;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+T3 has no index
+T3 has no primary key
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> select * from t3;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+5           1           2           1           
+10          3           1           1           
+15          5           0           1           
+20          6           2           1           
+25          8           1           1           
+30          10          0           1           
+35          11          2           1           
+40          13          1           1           
+45          15          0           1           
+50          16          2           1           
+55          18          1           1           
+60          20          0           1           
+65          21          2           1           
+70          23          1           1           
+75          25          0           1           
+80          26          2           1           
+85          28          1           1           
+90          30          0           1           
+95          31          2           1           
+100         33          1           1           
+4           1           1           1           
+9           3           0           1           
+14          4           2           1           
+19          6           1           1           
+24          8           0           1           
+29          9           2           1           
+34          11          1           1           
+39          13          0           1           
+44          14          2           1           
+49          16          1           1           
+54          18          0           1           
+59          19          2           1           
+64          21          1           1           
+69          23          0           1           
+74          24          2           1           
+79          26          1           1           
+84          28          0           1           
+89          29          2           1           
+94          31          1           1           
+99          33          0           1           
+3           1           0           1           
+8           2           2           1           
+13          4           1           1           
+18          6           0           1           
+23          7           2           1           
+28          9           1           1           
+33          11          0           1           
+38          12          2           1           
+43          14          1           1           
+48          16          0           1           
+53          17          2           1           
+58          19          1           1           
+63          21          0           1           
+68          22          2           1           
+73          24          1           1           
+78          26          0           1           
+83          27          2           1           
+88          29          1           1           
+93          31          0           1           
+98          32          2           1           
+2           0           2           1           
+7           2           1           1           
+12          4           0           1           
+17          5           2           1           
+22          7           1           1           
+27          9           0           1           
+32          10          2           1           
+37          12          1           1           
+42          14          0           1           
+47          15          2           1           
+52          17          1           1           
+57          19          0           1           
+62          20          2           1           
+67          22          1           1           
+72          24          0           1           
+77          25          2           1           
+82          27          1           1           
+87          29          0           1           
+92          30          2           1           
+97          32          1           1           
+1           0           1           1           
+6           2           0           1           
+11          3           2           1           
+16          5           1           1           
+21          7           0           1           
+26          8           2           1           
+31          10          1           1           
+36          12          0           1           
+41          13          2           1           
+46          15          1           1           
+51          17          0           1           
+56          18          2           1           
+61          20          1           1           
+66          22          0           1           
+71          23          2           1           
+76          25          1           1           
+81          27          0           1           
+86          28          2           1           
+91          30          1           1           
+96          32          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t3 order by i2, i3;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 100, DISK_PAGE_COUNT: BLOCKED, ACCESS: 100, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t3 order by i2, i3 desc;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+2           0           2           1           
+1           0           1           1           
+5           1           2           1           
+4           1           1           1           
+3           1           0           1           
+8           2           2           1           
+7           2           1           1           
+6           2           0           1           
+11          3           2           1           
+10          3           1           1           
+9           3           0           1           
+14          4           2           1           
+13          4           1           1           
+12          4           0           1           
+17          5           2           1           
+16          5           1           1           
+15          5           0           1           
+20          6           2           1           
+19          6           1           1           
+18          6           0           1           
+23          7           2           1           
+22          7           1           1           
+21          7           0           1           
+26          8           2           1           
+25          8           1           1           
+24          8           0           1           
+29          9           2           1           
+28          9           1           1           
+27          9           0           1           
+32          10          2           1           
+31          10          1           1           
+30          10          0           1           
+35          11          2           1           
+34          11          1           1           
+33          11          0           1           
+38          12          2           1           
+37          12          1           1           
+36          12          0           1           
+41          13          2           1           
+40          13          1           1           
+39          13          0           1           
+44          14          2           1           
+43          14          1           1           
+42          14          0           1           
+47          15          2           1           
+46          15          1           1           
+45          15          0           1           
+50          16          2           1           
+49          16          1           1           
+48          16          0           1           
+53          17          2           1           
+52          17          1           1           
+51          17          0           1           
+56          18          2           1           
+55          18          1           1           
+54          18          0           1           
+59          19          2           1           
+58          19          1           1           
+57          19          0           1           
+62          20          2           1           
+61          20          1           1           
+60          20          0           1           
+65          21          2           1           
+64          21          1           1           
+63          21          0           1           
+68          22          2           1           
+67          22          1           1           
+66          22          0           1           
+71          23          2           1           
+70          23          1           1           
+69          23          0           1           
+74          24          2           1           
+73          24          1           1           
+72          24          0           1           
+77          25          2           1           
+76          25          1           1           
+75          25          0           1           
+80          26          2           1           
+79          26          1           1           
+78          26          0           1           
+83          27          2           1           
+82          27          1           1           
+81          27          0           1           
+86          28          2           1           
+85          28          1           1           
+84          28          0           1           
+89          29          2           1           
+88          29          1           1           
+87          29          0           1           
+92          30          2           1           
+91          30          1           1           
+90          30          0           1           
+95          31          2           1           
+94          31          1           1           
+93          31          0           1           
+98          32          2           1           
+97          32          1           1           
+96          32          0           1           
+100         33          1           1           
+99          33          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 100, DISK_PAGE_COUNT: BLOCKED, ACCESS: 100, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t3 where i2 = 10 and i3 = 1 and i4 = 1;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+------------------------------------------------------------
+$T0> select * from t3 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+------------------------------------------------------------
+$T0> select * from t3 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+------------------------------------------------------------
+
+$T0> select * from t3 where i2 >= 20 and i3 = 1 and i4 = 1;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+70          23          1           1           
+85          28          1           1           
+100         33          1           1           
+64          21          1           1           
+79          26          1           1           
+94          31          1           1           
+73          24          1           1           
+88          29          1           1           
+67          22          1           1           
+82          27          1           1           
+97          32          1           1           
+61          20          1           1           
+76          25          1           1           
+91          30          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 14, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 >= 20
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 >= 20
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 >= 20
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 >= 20
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 >= 20
+------------------------------------------------------------
+$T0> select * from t3 where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 14, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+------------------------------------------------------------
+$T0> select * from t3 where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 14, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 >= 20
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; HOST VARIABLE
+$T0> ##################################
+
+$T0> var v2 integer;
+$T0> var v3 integer;
+$T0> var v4 integer;
+
+$T0> exec :v2 := 10;
+Execute success.
+$T0> exec :v3 := 1;
+Execute success.
+$T0> exec :v4 := 1;
+Execute success.
+
+$T0> prepare select * from t3 where i2 = :v2 and i3 = :v3 and i4 = :v4;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 = :v2
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 = :v2
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 = :v2
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 = :v2
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 = :v2
+------------------------------------------------------------
+$T0> prepare select * from t3 where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+------------------------------------------------------------
+$T0> prepare select * from t3 where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 = :v2
+------------------------------------------------------------
+
+$T0> exec :v2 := 20;
+Execute success.
+
+$T0> prepare select * from t3 where i2 >= :v2 and i3 = :v3 and i4 = :v4;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+70          23          1           1           
+85          28          1           1           
+100         33          1           1           
+64          21          1           1           
+79          26          1           1           
+94          31          1           1           
+73          24          1           1           
+88          29          1           1           
+67          22          1           1           
+82          27          1           1           
+97          32          1           1           
+61          20          1           1           
+76          25          1           1           
+91          30          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 14, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 >= :v2
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 >= :v2
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 >= :v2
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 >= :v2
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = :v4
+    I3 = :v3
+    I2 >= :v2
+------------------------------------------------------------
+$T0> prepare select * from t3 where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 14, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+------------------------------------------------------------
+$T0> prepare select * from t3 where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+61          20          1           1           
+64          21          1           1           
+67          22          1           1           
+70          23          1           1           
+73          24          1           1           
+76          25          1           1           
+79          26          1           1           
+82          27          1           1           
+85          28          1           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+97          32          1           1           
+100         33          1           1           
+14 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 14, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 14, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = :v4
+     I3 = :v3
+     I2 >= :v2
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; SELECT FOR UPDATE
+$T0> ##################################
+
+$T0> select * from t3 for update;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+5           1           2           1           
+10          3           1           1           
+15          5           0           1           
+20          6           2           1           
+25          8           1           1           
+30          10          0           1           
+35          11          2           1           
+40          13          1           1           
+45          15          0           1           
+50          16          2           1           
+55          18          1           1           
+60          20          0           1           
+65          21          2           1           
+70          23          1           1           
+75          25          0           1           
+80          26          2           1           
+85          28          1           1           
+90          30          0           1           
+95          31          2           1           
+100         33          1           1           
+4           1           1           1           
+9           3           0           1           
+14          4           2           1           
+19          6           1           1           
+24          8           0           1           
+29          9           2           1           
+34          11          1           1           
+39          13          0           1           
+44          14          2           1           
+49          16          1           1           
+54          18          0           1           
+59          19          2           1           
+64          21          1           1           
+69          23          0           1           
+74          24          2           1           
+79          26          1           1           
+84          28          0           1           
+89          29          2           1           
+94          31          1           1           
+99          33          0           1           
+3           1           0           1           
+8           2           2           1           
+13          4           1           1           
+18          6           0           1           
+23          7           2           1           
+28          9           1           1           
+33          11          0           1           
+38          12          2           1           
+43          14          1           1           
+48          16          0           1           
+53          17          2           1           
+58          19          1           1           
+63          21          0           1           
+68          22          2           1           
+73          24          1           1           
+78          26          0           1           
+83          27          2           1           
+88          29          1           1           
+93          31          0           1           
+98          32          2           1           
+2           0           2           1           
+7           2           1           1           
+12          4           0           1           
+17          5           2           1           
+22          7           1           1           
+27          9           0           1           
+32          10          2           1           
+37          12          1           1           
+42          14          0           1           
+47          15          2           1           
+52          17          1           1           
+57          19          0           1           
+62          20          2           1           
+67          22          1           1           
+72          24          0           1           
+77          25          2           1           
+82          27          1           1           
+87          29          0           1           
+92          30          2           1           
+97          32          1           1           
+1           0           1           1           
+6           2           0           1           
+11          3           2           1           
+16          5           1           1           
+21          7           0           1           
+26          8           2           1           
+31          10          1           1           
+36          12          0           1           
+41          13          2           1           
+46          15          1           1           
+51          17          0           1           
+56          18          2           1           
+61          20          1           1           
+66          22          0           1           
+71          23          2           1           
+76          25          1           1           
+81          27          0           1           
+86          28          2           1           
+91          30          1           1           
+96          32          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t3 order by i2, i3 for update;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           1           
+3           1           0           1           
+4           1           1           1           
+5           1           2           1           
+6           2           0           1           
+7           2           1           1           
+8           2           2           1           
+9           3           0           1           
+10          3           1           1           
+11          3           2           1           
+12          4           0           1           
+13          4           1           1           
+14          4           2           1           
+15          5           0           1           
+16          5           1           1           
+17          5           2           1           
+18          6           0           1           
+19          6           1           1           
+20          6           2           1           
+21          7           0           1           
+22          7           1           1           
+23          7           2           1           
+24          8           0           1           
+25          8           1           1           
+26          8           2           1           
+27          9           0           1           
+28          9           1           1           
+29          9           2           1           
+30          10          0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+34          11          1           1           
+35          11          2           1           
+36          12          0           1           
+37          12          1           1           
+38          12          2           1           
+39          13          0           1           
+40          13          1           1           
+41          13          2           1           
+42          14          0           1           
+43          14          1           1           
+44          14          2           1           
+45          15          0           1           
+46          15          1           1           
+47          15          2           1           
+48          16          0           1           
+49          16          1           1           
+50          16          2           1           
+51          17          0           1           
+52          17          1           1           
+53          17          2           1           
+54          18          0           1           
+55          18          1           1           
+56          18          2           1           
+57          19          0           1           
+58          19          1           1           
+59          19          2           1           
+60          20          0           1           
+61          20          1           1           
+62          20          2           1           
+63          21          0           1           
+64          21          1           1           
+65          21          2           1           
+66          22          0           1           
+67          22          1           1           
+68          22          2           1           
+69          23          0           1           
+70          23          1           1           
+71          23          2           1           
+72          24          0           1           
+73          24          1           1           
+74          24          2           1           
+75          25          0           1           
+76          25          1           1           
+77          25          2           1           
+78          26          0           1           
+79          26          1           1           
+80          26          2           1           
+81          27          0           1           
+82          27          1           1           
+83          27          2           1           
+84          28          0           1           
+85          28          1           1           
+86          28          2           1           
+87          29          0           1           
+88          29          1           1           
+89          29          2           1           
+90          30          0           1           
+91          30          1           1           
+92          30          2           1           
+93          31          0           1           
+94          31          1           1           
+95          31          2           1           
+96          32          0           1           
+97          32          1           1           
+98          32          2           1           
+99          33          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 100, DISK_PAGE_COUNT: BLOCKED, ACCESS: 100, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t3 order by i2, i3 desc for update;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+2           0           2           1           
+1           0           1           1           
+5           1           2           1           
+4           1           1           1           
+3           1           0           1           
+8           2           2           1           
+7           2           1           1           
+6           2           0           1           
+11          3           2           1           
+10          3           1           1           
+9           3           0           1           
+14          4           2           1           
+13          4           1           1           
+12          4           0           1           
+17          5           2           1           
+16          5           1           1           
+15          5           0           1           
+20          6           2           1           
+19          6           1           1           
+18          6           0           1           
+23          7           2           1           
+22          7           1           1           
+21          7           0           1           
+26          8           2           1           
+25          8           1           1           
+24          8           0           1           
+29          9           2           1           
+28          9           1           1           
+27          9           0           1           
+32          10          2           1           
+31          10          1           1           
+30          10          0           1           
+35          11          2           1           
+34          11          1           1           
+33          11          0           1           
+38          12          2           1           
+37          12          1           1           
+36          12          0           1           
+41          13          2           1           
+40          13          1           1           
+39          13          0           1           
+44          14          2           1           
+43          14          1           1           
+42          14          0           1           
+47          15          2           1           
+46          15          1           1           
+45          15          0           1           
+50          16          2           1           
+49          16          1           1           
+48          16          0           1           
+53          17          2           1           
+52          17          1           1           
+51          17          0           1           
+56          18          2           1           
+55          18          1           1           
+54          18          0           1           
+59          19          2           1           
+58          19          1           1           
+57          19          0           1           
+62          20          2           1           
+61          20          1           1           
+60          20          0           1           
+65          21          2           1           
+64          21          1           1           
+63          21          0           1           
+68          22          2           1           
+67          22          1           1           
+66          22          0           1           
+71          23          2           1           
+70          23          1           1           
+69          23          0           1           
+74          24          2           1           
+73          24          1           1           
+72          24          0           1           
+77          25          2           1           
+76          25          1           1           
+75          25          0           1           
+80          26          2           1           
+79          26          1           1           
+78          26          0           1           
+83          27          2           1           
+82          27          1           1           
+81          27          0           1           
+86          28          2           1           
+85          28          1           1           
+84          28          0           1           
+89          29          2           1           
+88          29          1           1           
+87          29          0           1           
+92          30          2           1           
+91          30          1           1           
+90          30          0           1           
+95          31          2           1           
+94          31          1           1           
+93          31          0           1           
+98          32          2           1           
+97          32          1           1           
+96          32          0           1           
+100         33          1           1           
+99          33          0           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 100, DISK_PAGE_COUNT: BLOCKED, ACCESS: 100, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t3 where i2 = 10 and i3 = 1 and i4 = 1 for update;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I4 = 1
+    I3 = 1
+    I2 = 10
+------------------------------------------------------------
+$T0> select * from t3 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 for update;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+------------------------------------------------------------
+$T0> select * from t3 where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc for update;
+T3.I1       T3.I2       T3.I3       T3.I4       
+-----------------------------------------------------
+31          10          1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 5/5, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    AND
+     I4 = 1
+     I3 = 1
+     I2 = 10
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

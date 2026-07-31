@@ -1,0 +1,171 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop function get_pid;
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create function get_pid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+}
+
+DEF CHECK_GLOBAL_INDEX()
+{
+###################################
+# create index t1_pk;
+###################################
+
+alter session set explain plan = off;
+
+# should be no rows
+select a.*, b.*
+from 
+(
+  select nvl(i1,-1000) i1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i1,-1000) i1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i1,-1000) i1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_PK"
+) b 
+on a.i1 = b.i1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+
+###################################
+# create index t1_idx1;
+###################################
+
+# should be no rows
+select a.*, b.*
+from 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P1') pid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P2') pid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P3') pid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','P4') pid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(t1_idx1$idx1,-1000) h1, get_pid('T1','PD') pid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(t1_idx1$idx1,-1000) h1, "$GIT_OID", "$GIT_RID" from "$GIT_T1_IDX1" 
+) b 
+on a.h1 = b.h1 and a.pid = b."$GIT_OID" and a.rid = b."$GIT_RID"
+where a.rid is null or b."$GIT_RID" is null;
+
+alter session set explain plan = on;
+
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i4)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+
+alter table t1 add constraint t1_pk primary key (i1);
+create index t1_idx1 on t1( i1+i2 );
+
+desc t1;
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; INSERT
+##################################
+
+insert into t1 select level, level/3, mod(level,3), level from dual connect by level <= 100;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; SELECT
+##################################
+
+select * from t1 where i1 + i2 <= 10;
+
+##################################
+# SECTOR; INSERT
+##################################
+
+update t1 set i2 = i2+1;
+
+CALL CHECK_GLOBAL_INDEX();
+
+update t1 set i2 = i2+1, i4 = i4+10;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; INSERT
+##################################
+
+delete from t1 where i3 = 2;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

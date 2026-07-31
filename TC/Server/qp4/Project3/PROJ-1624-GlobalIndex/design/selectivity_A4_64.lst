@@ -1,0 +1,592 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter session set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer,
+  i5 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (50),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index t1_idx2 on t1(i2) local;
+Create success.
+$T0> create index t1_idx3 on t1(i3) local;
+Create success.
+$T0> create index t1_idx4 on t1(i4);
+Create success.
+$T0> create index t1_idx5 on t1(i5);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC
+T1_IDX4                                  BTREE                  I4 ASC
+T1_IDX5                                  BTREE                  I5 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 30
+$T0> # idx3: i3, local index, ndv = 20
+$T0> # idx4: i4, global index, ndv = 20
+$T0> # idx5: i5, global index, ndv = 20
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+30                   
+20                   
+20                   
+20                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX4, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER ]
+  AND
+   I2 = 1
+   I5 = 1
+   I3 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 20
+$T0> # idx3: i3, local index, ndv = 30
+$T0> # idx4: i4, global index, ndv = 20
+$T0> # idx5: i5, global index, ndv = 20
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+20                   
+30                   
+20                   
+20                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX4, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER ]
+  AND
+   I3 = 1
+   I5 = 1
+   I2 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 20
+$T0> # idx3: i3, local index, ndv = 20
+$T0> # idx4: i4, global index, ndv = 30
+$T0> # idx5: i5, global index, ndv = 20
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+20                   
+20                   
+30                   
+20                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX4, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER ]
+  AND
+   I5 = 1
+   I3 = 1
+   I2 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 20
+$T0> # idx3: i3, local index, ndv = 20
+$T0> # idx4: i4, global index, ndv = 20
+$T0> # idx5: i5, global index, ndv = 30
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+20                   
+20                   
+20                   
+30                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX5, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I5 = 1
+  [ FILTER ]
+  AND
+   I4 = 1
+   I3 = 1
+   I2 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 30
+$T0> # idx3: i3, local index, ndv = 30
+$T0> # idx4: i4, global index, ndv = 20
+$T0> # idx5: i5, global index, ndv = 20
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+30                   
+30                   
+20                   
+20                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX4, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER ]
+  AND
+   I3 = 1
+   I2 = 1
+   I5 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 20
+$T0> # idx3: i3, local index, ndv = 20
+$T0> # idx4: i4, global index, ndv = 30
+$T0> # idx5: i5, global index, ndv = 30
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+20                   
+20                   
+30                   
+30                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX4, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER ]
+  AND
+   I5 = 1
+   I3 = 1
+   I2 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 30
+$T0> # idx3: i3, local index, ndv = 20
+$T0> # idx4: i4, global index, ndv = 30
+$T0> # idx5: i5, global index, ndv = 20
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+30                   
+20                   
+30                   
+20                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX4, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER ]
+  AND
+   I2 = 1
+   I5 = 1
+   I3 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; BEST ACCESS METHOD
+$T0> ##################################
+
+$T0> # idx2: i2, local index, ndv = 20
+$T0> # idx3: i3, local index, ndv = 30
+$T0> # idx4: i4, global index, ndv = 20
+$T0> # idx5: i5, global index, ndv = 30
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+20                   
+30                   
+20                   
+30                   
+5 rows selected.
+
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX5, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I5 = 1
+  [ FILTER ]
+  AND
+   I3 = 1
+   I4 = 1
+   I2 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter session set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

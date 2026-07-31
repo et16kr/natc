@@ -1,0 +1,275 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###################################################################
+--# ALTER TABLE ... DROP COLUMN
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1
+     ( I1 INTEGER, I2 CLOB DEFAULT 'DEFAULT', I3 INTEGER,  I4 BLOB, I5 INTEGER )
+     PARTITION BY RANGE (I1, I3, I5)
+     (
+         PARTITION P1 VALUES LESS THAN (2),
+         PARTITION P2 VALUES LESS THAN (3),
+         PARTITION P3 VALUES LESS THAN (4),
+         PARTITION P4 VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> CREATE INDEX IDX1 ON T1(I1, I3);
+Create success.
+
+$P0> CREATE INDEX IDX2 ON T1(I3);
+Create success.
+
+$P0> CREATE INDEX IDX3 ON T1(I1) LOCAL
+     (
+         PARTITION IDX1_P3 ON P3,
+         PARTITION IDX1_P4 ON P4
+     );
+Create success.
+
+$P0> INSERT INTO T1 VALUES ( 1, 'CLOB1', 1, 'FF', 1 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 2, 'CLOB2', 2, 'FFFF', 2 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 3, 'CLOB3', 3, 'FFFFFF', 3 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 4, 'CLOB4', 4, 'FFFFFFFF', 4 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 5, 'CLOB5', 5, 'FFFFFFFFFF', 5 );
+1 row inserted.
+
+-- should be 5
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+5                    
+1 row selected.
+
+
+-- should be 12
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_PART_KEY_COLUMNS_ PARTKEY,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+          SYSTEM_.SYS_TABLES_ TAB
+     WHERE PART.TABLE_ID = TAB.TABLE_ID AND
+           TAB.TABLE_NAME='T1';
+COUNT                
+-----------------------
+24                   
+1 row selected.
+
+-- should be 8
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_PART_LOBS_ LOBS,
+          SYSTEM_.SYS_TABLES_ TAB
+     WHERE LOBS.TABLE_ID = TAB.TABLE_ID AND
+           TAB.TABLE_NAME='T1';
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+--#########################################################################
+--+SECTOR 2; VALIDATION
+--#########################################################################
+---------------------------------------------------
+-- DROP PARTITIONING KEY
+---------------------------------------------------
+-- should be fail
+$P0> ALTER TABLE T1 DROP COLUMN I1;
+[ERR-31271 : Cannot drop partitioning key]
+
+-- should be fail
+$P0> ALTER TABLE T1 DROP COLUMN I3;
+[ERR-31271 : Cannot drop partitioning key]
+
+-- should be fail
+$P0> ALTER TABLE T1 DROP COLUMN I5;
+[ERR-31271 : Cannot drop partitioning key]
+
+
+
+--#########################################################################
+--+SECTOR 3; EXECUTION
+--#########################################################################
+$P0> ALTER TABLE T1 DROP COLUMN I2;
+Alter success.
+
+$P0> INSERT INTO T1 VALUES ( 1, 1, 'FF', 1 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 2, 2, 'FFFF', 2 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 3, 3, 'FFFFFF', 3 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 4, 4, 'FFFFFFFF', 4 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 5, 5, 'FFFFFFFFFF', 5 );
+1 row inserted.
+
+-- should be 10
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+---------------------------------------------------
+-- SYS_PART_KEY_COLUMNS_
+---------------------------------------------------
+-- should be 12
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_TABLES_ TAB,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+          SYSTEM_.SYS_PART_KEY_COLUMNS_ PARTKEY
+     WHERE TAB.TABLE_NAME='T1' AND
+           TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TABLE_ID = PARTKEY.PARTITION_OBJ_ID;
+COUNT                
+-----------------------
+12                   
+1 row selected.
+
+---------------------------------------------------
+-- SYS_PART_LOBS_
+---------------------------------------------------
+-- should be 4
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_PART_LOBS_ LOBS,
+          SYSTEM_.SYS_TABLES_ TAB
+     WHERE LOBS.TABLE_ID = TAB.TABLE_ID AND
+           TAB.TABLE_NAME='T1';
+COUNT                
+-----------------------
+4                    
+1 row selected.
+
+
+$P0> ALTER TABLE T1 DROP COLUMN I4;
+Alter success.
+
+$P0> INSERT INTO T1 VALUES ( 1, 1, 1 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 2, 2, 2 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 3, 3, 3 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 4, 4, 4 );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 5, 5, 5 );
+1 row inserted.
+
+-- should be 15
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+15                   
+1 row selected.
+
+---------------------------------------------------
+-- SYS_PART_KEY_COLUMNS_
+---------------------------------------------------
+-- should be 12
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_TABLES_ TAB,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+          SYSTEM_.SYS_PART_KEY_COLUMNS_ PARTKEY
+     WHERE TAB.TABLE_NAME='T1' AND
+           TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TABLE_ID = PARTKEY.PARTITION_OBJ_ID;
+COUNT                
+-----------------------
+12                   
+1 row selected.
+
+---------------------------------------------------
+-- SYS_PART_LOBS_
+---------------------------------------------------
+-- should be 0
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_PART_LOBS_ LOBS,
+          SYSTEM_.SYS_TABLES_ TAB
+     WHERE LOBS.TABLE_ID = TAB.TABLE_ID AND
+           TAB.TABLE_NAME='T1';
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+$P0> ALTER TABLE T1 ADD COLUMN( I2 BLOB, I4 CLOB );
+Alter success.
+
+$P0> INSERT INTO T1 VALUES ( 1, 1, 1, 'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 2, 2, 2, 'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 3, 3, 3, 'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 4, 4, 4, 'ABC', 'DEF' );
+1 row inserted.
+$P0> INSERT INTO T1 VALUES ( 5, 5, 5, 'ABC', 'DEF' );
+1 row inserted.
+
+-- should be 20
+$P0> SELECT COUNT(*) FROM T1;
+COUNT                
+-----------------------
+20                   
+1 row selected.
+
+
+---------------------------------------------------
+-- SYS_PART_KEY_COLUMNS_
+---------------------------------------------------
+-- should be 12
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_TABLES_ TAB,
+          SYSTEM_.SYS_TABLE_PARTITIONS_ PART,
+          SYSTEM_.SYS_PART_KEY_COLUMNS_ PARTKEY
+     WHERE TAB.TABLE_NAME='T1' AND
+           TAB.TABLE_ID = PART.TABLE_ID AND
+           PART.TABLE_ID = PARTKEY.PARTITION_OBJ_ID;
+COUNT                
+-----------------------
+12                   
+1 row selected.
+
+---------------------------------------------------
+-- SYS_PART_LOBS_
+---------------------------------------------------
+-- should be 8
+$P0> SELECT COUNT(*)
+     FROM SYSTEM_.SYS_PART_LOBS_ LOBS,
+          SYSTEM_.SYS_TABLES_ TAB
+     WHERE LOBS.TABLE_ID = TAB.TABLE_ID AND
+           TAB.TABLE_NAME='T1';
+COUNT                
+-----------------------
+8                    
+1 row selected.
+
+
+
+--###################################################################
+--+SECTOR 4; FINALIZATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+

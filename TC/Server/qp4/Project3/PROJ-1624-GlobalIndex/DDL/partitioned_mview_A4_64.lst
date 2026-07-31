@@ -1,0 +1,284 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop materialized view m1;
+$T0> drop materialized view m2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+Create success.
+$T0> create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+Create success.
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values (1, 1, 1, 1);
+1 row inserted.
+$T0> insert into t1 values (2, 2, 2, 2);
+1 row inserted.
+$T0> insert into t1 values (3, 3, 3, 3);
+1 row inserted.
+$T0> insert into t1 values (4, 4, 4, 4);
+1 row inserted.
+$T0> insert into t1 values (5, 5, 5, 5);
+1 row inserted.
+$T0> insert into t1 values (6, 6, 6, 6);
+1 row inserted.
+$T0> insert into t1 values (7, 7, 7, 7);
+1 row inserted.
+$T0> insert into t1 values (8, 8, 8, 8);
+1 row inserted.
+$T0> insert into t1 values (9, 9, 9, 9);
+1 row inserted.
+$T0> insert into t1 values (10, 10, 10, 10);
+1 row inserted.
+
+$T0> ##################################
+$T0> # SECTOR; CONSTRAINT
+$T0> ##################################
+
+
+$T0> create materialized view m1(i1, i2, i3, i4)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition p2 values less than (10),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data
+as
+select i1, i2, i3, i4 from t1;
+Create success.
+
+$T0> alter table m1 add constraint m1_pk primary key (i2);
+Alter success.
+$T0> alter table m1 add constraint m1_uk unique (i3, i4);
+Alter success.
+
+$T0> desc m1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+M1_PK                                    BTREE    UNIQUE        I2 ASC
+M1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2
+$T0> desc "$GIT_M1_PK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_M1_PK                               BTREE    UNIQUE        I2 ASC
+$GIR_M1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_M1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+5           0                    0                    
+6           0                    0                    
+7           0                    0                    
+8           0                    0                    
+9           0                    0                    
+1           0                    0                    
+2           0                    0                    
+3           0                    0                    
+4           0                    0                    
+10 rows selected.
+$T0> desc "$GIT_M1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_M1_UK                               BTREE    UNIQUE        I3 ASC,
+                                                                I4 ASC
+$GIR_M1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_M1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+5           5           0                    0                    
+6           6           0                    0                    
+7           7           0                    0                    
+8           8           0                    0                    
+9           9           0                    0                    
+1           1           0                    0                    
+2           2           0                    0                    
+3           3           0                    0                    
+4           4           0                    0                    
+10 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; INDEX
+$T0> ##################################
+
+
+$T0> create materialized view m1(i1, i2, i3, i4)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition p2 values less than (10),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data
+as
+select i1, i2, i3, i4 from t1;
+Create success.
+
+$T0> create index m1_idx1 on m1(i2);
+Create success.
+$T0> create index m1_idx2 on m1(i3 desc, i4);
+Create success.
+
+$T0> desc m1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+M1_IDX1                                  BTREE                  I2 ASC
+M1_IDX2                                  BTREE                  I3 DESC,
+                                                                I4 ASC
+M1 has no primary key
+$T0> desc "$GIT_M1_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_M1_IDX1                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_M1_IDX1                             BTREE                  I2 ASC
+"$GIT_M1_IDX1" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+10          0                    0                    
+5           0                    0                    
+6           0                    0                    
+7           0                    0                    
+8           0                    0                    
+9           0                    0                    
+1           0                    0                    
+2           0                    0                    
+3           0                    0                    
+4           0                    0                    
+10 rows selected.
+$T0> desc "$GIT_M1_IDX2";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_M1_IDX2                             BTREE    UNIQUE        $GIT_RID ASC
+$GIK_M1_IDX2                             BTREE                  I3 DESC,
+                                                                I4 ASC
+"$GIT_M1_IDX2" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+10          10          0                    0                    
+5           5           0                    0                    
+6           6           0                    0                    
+7           7           0                    0                    
+8           8           0                    0                    
+9           9           0                    0                    
+1           1           0                    0                    
+2           2           0                    0                    
+3           3           0                    0                    
+4           4           0                    0                    
+10 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop materialized view m1;
+$T0> drop materialized view m2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+

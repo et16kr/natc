@@ -1,0 +1,210 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop function get_oid;
+drop procedure check_index;
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF CHECK_INDEX()
+{
+
+select a.*, b.*
+from 
+(
+  select nvl(i2,-1000) i2, get_oid('T1','P1') oid, cast(_prowid as bigint) rid from t1 partition (p1)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P2') oid, cast(_prowid as bigint) rid from t1 partition (p2)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P3') oid, cast(_prowid as bigint) rid from t1 partition (p3)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','P4') oid, cast(_prowid as bigint) rid from t1 partition (p4)
+  union all
+  select nvl(i2,-1000) i2, get_oid('T1','PD') oid, cast(_prowid as bigint) rid from t1 partition (pd)
+) a 
+full outer join 
+(
+  select nvl(i2,-1000) i2, "$GIT_OID" oid, "$GIT_RID" rid from "$GIT_T1_IDX1"
+) b 
+on a.i2 = b.i2 and a.oid = b.oid and a.rid = b.rid
+where a.rid is null or b.rid is null;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+
+create index t1_idx1 on t1(i2);
+
+desc t1;
+desc "$GIT_T1_IDX1";
+
+##################################
+# SECTOR; CREATE PROC
+##################################
+
+create function get_oid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+
+create procedure check_index()
+as
+  type r1 is record( i1 integer, i2 integer, oid bigint, rid bigint, flag char(1) );
+  type a1 is table of r1;
+  v1 a1;
+  v2 a1;
+  v3 a1;
+  x1 a1;
+  y1 integer;
+begin
+  select i1, i2, get_oid('T1','P1'), cast(_prowid as bigint), 'N' bulk collect into v1 from t1 partition (p1);
+  select i1, i2, get_oid('T1','P2'), cast(_prowid as bigint), 'N' bulk collect into v2 from t1 partition (p2);
+  select i1, i2, get_oid('T1','P3'), cast(_prowid as bigint), 'N' bulk collect into v3 from t1 partition (p3);
+
+  select null, i2, "$GIT_OID", "$GIT_RID", 'N' bulk collect into x1 from "$GIT_T1_IDX1";
+
+  println( 'T1 record count=' || v1.count()+v2.count()+v3.count() );
+  for i in v1.first() .. v1.last() loop
+    y1 := 0;
+    for j in x1.first() .. x1.last() loop
+      if v1[i].rid = x1[j].rid then
+        y1 := 1;
+        x1[j].flag := 'E';
+        exit;
+      end if;
+    end loop;
+    if y1 = 0 then
+      println( 'P1(i1,i2,oid,rid)=(' || v1[i].i1 || ','  || v1[i].i2 || ',' || v1[i].oid || ',' || v1[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  for i in v2.first() .. v2.last() loop
+    y1 := 0;
+    for j in x1.first() .. x1.last() loop
+      if v2[i].rid = x1[j].rid then
+        y1 := 1;
+        x1[j].flag := 'E';
+        exit;
+      end if;
+    end loop;
+    if y1 = 0 then
+      println( 'P2(i1,i2,oid,rid)=(' || v2[i].i1 || ','  || v2[i].i2 || ','  || v2[i].oid || ',' || v2[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  for i in v3.first() .. v3.last() loop
+    y1 := 0;
+    for j in x1.first() .. x1.last() loop
+      if v3[i].rid = x1[j].rid then
+        y1 := 1;
+        x1[j].flag := 'E';
+        exit;
+      end if;
+    end loop;
+    if y1 = 0 then
+      println( 'P3(i1,i2,oid,rid)=(' || v3[i].i1 || ','  || v3[i].i2 || ','  || v3[i].oid || ',' || v3[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  println( '' );
+
+  println( '$GIT_T1_IDX1 record count=' || x1.count() );
+  for i in x1.first() .. x1.last() loop
+    if x1[i].flag = 'N' then
+      println( '(i2,oid,rid)=(' || x1[i].i2 || ','  || x1[i].oid || ',' || x1[i].rid || ') --> not exist' );
+    end if;
+  end loop;
+  println( '' );
+
+end;
+/
+
+exec check_index();
+
+##################################
+# SECTOR; INSERT
+##################################
+
+insert into t1 values (1, null);
+insert into t1 values (2, null);
+insert into t1 values (3, null);
+insert into t1 values (4, null);
+
+exec check_index();
+
+insert into t1 values (5, 5);
+
+exec check_index();
+
+##################################
+# SECTOR; UPDATE
+##################################
+
+update t1 set i2=1 where i1=1;
+
+exec check_index();
+
+update t1 set i2=null where i1=5;
+
+exec check_index();
+
+##################################
+# SECTOR; DELETE
+##################################
+
+delete from t1 where i1=1;
+
+exec check_index();
+
+delete from t1 where i1=2;
+
+exec check_index();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

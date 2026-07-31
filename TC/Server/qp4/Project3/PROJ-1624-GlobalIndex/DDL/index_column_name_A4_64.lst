@@ -1,0 +1,164 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; SECURITY COLUMN
+$T0> ##################################
+
+
+$T0> create table t1
+( 
+  i1         varchar(5), 
+  i2         varchar(5),
+  "$GIT_OID" varchar(5),
+  "$GIT_RID" varchar(5)
+)
+partition by range(i1)
+(
+  partition p1 values less than ('b'),
+  partition p2 values less than ('e'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ('a', 'a', 'abc', 'bcd');
+1 row inserted.
+$T0> insert into t1 values ('d', 'b', 'abcd', 'bcde');
+1 row inserted.
+$T0> insert into t1 values ('g', 'c', 'abcde', 'bcdef');
+1 row inserted.
+
+$T0> create index idx1 on t1(i2, "$GIT_OID");
+[ERR-31023 : Duplicate column name : $GIT_OID]
+$T0> create index idx2 on t1("$GIT_RID" desc, i2);
+[ERR-31023 : Duplicate column name : $GIT_RID]
+$T0> create unique index idx3 on t1("$GIT_OID" desc, i2, "$GIT_RID" asc);
+[ERR-31023 : Duplicate column name : $GIT_OID]
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       VARCHAR(5)                  
+I2                                       VARCHAR(5)                  
+$GIT_OID                                 VARCHAR(5)                  
+$GIT_RID                                 VARCHAR(5)                  
+T1 has no index
+T1 has no primary key
+$T0> desc "$GIT_IDX1";
+[ERR-91014 : The table ($GIT_IDX1) does not exist.]
+
+$T0> select * from "$_TEMP";
+[ERR-31031 : Table or view was not found : 
+0001 : select * from "$_TEMP"
+                     ^     ^
+]
+$T0> desc "$GIT_IDX2";
+[ERR-91014 : The table ($GIT_IDX2) does not exist.]
+
+$T0> select * from "$_TEMP";
+[ERR-31031 : Table or view was not found : 
+0001 : select * from "$_TEMP"
+                     ^     ^
+]
+$T0> desc "$GIT_IDX3";
+[ERR-91014 : The table ($GIT_IDX3) does not exist.]
+
+$T0> select * from "$_TEMP";
+[ERR-31031 : Table or view was not found : 
+0001 : select * from "$_TEMP"
+                     ^     ^
+]
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select * from t1;
+T1.I1  T1.I2  T1.$GIT_OID  T1.$GIT_RID  
+---------------------------------------------
+a      a      abc    bcd    
+d      b      abcd   bcde   
+g      c      abcde  bcdef  
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 31, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+index(t1, idx1)*/ * from t1;
+T1.I1  T1.I2  T1.$GIT_OID  T1.$GIT_RID  
+---------------------------------------------
+a      a      abc    bcd    
+d      b      abcd   bcde   
+g      c      abcde  bcdef  
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 31, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+index(t1, idx2)*/ * from t1;
+T1.I1  T1.I2  T1.$GIT_OID  T1.$GIT_RID  
+---------------------------------------------
+a      a      abc    bcd    
+d      b      abcd   bcde   
+g      c      abcde  bcdef  
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 31, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+index(t1, idx3)*/ * from t1;
+T1.I1  T1.I2  T1.$GIT_OID  T1.$GIT_RID  
+---------------------------------------------
+a      a      abc    bcd    
+d      b      abcd   bcde   
+g      c      abcde  bcdef  
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 31, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> SKIP END;
+

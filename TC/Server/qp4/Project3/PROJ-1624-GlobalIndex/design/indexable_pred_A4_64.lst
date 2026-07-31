@@ -1,0 +1,460 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 varchar(10),
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 'abc', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 'abc', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 'abc', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 'bcd', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 'bcd', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 9, 9, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 10, 10, 'def', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 11, 11, 'def', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 12, 12, 'def', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 13, 13, 'def', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 14, 14, 'def', 5 );
+1 row inserted.
+$T0> insert into t1 values ( 15, 15, 'ghi', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 16, 16, 'jkl', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 17, 17, 'jkl', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 18, 18, 'lmn', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 19, 19, 'lmn', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 20, null, 'lmn', 3 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i4 desc);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T1 has no primary key
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 clob, 
+  i3 geometry
+)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 values ( 1, 'a', geometry'polygon((0 0, 1 0, 1 1, 0 1))' );
+1 row inserted.
+$T0> insert into t2 values ( 2, 'b', geometry'polygon((1 1, 2 1, 2 2, 1 2))' );
+1 row inserted.
+$T0> insert into t2 values ( 3, 'c', geometry'polygon((2 2, 3 2, 3 3, 2 3))' );
+1 row inserted.
+$T0> insert into t2 values ( 4, 'd', geometry'polygon((3 3, 4 3, 4 4, 3 4))' );
+1 row inserted.
+$T0> insert into t2 values ( 5, 'e', geometry'polygon((4 4, 5 4, 5 5, 4 5))' );
+1 row inserted.
+$T0> insert into t2 values ( 6, 'f', geometry'polygon((5 5, 6 5, 6 6, 5 6))' );
+1 row inserted.
+$T0> insert into t2 values ( 7, 'g', geometry'polygon((6 6, 7 6, 7 7, 6 7))' );
+1 row inserted.
+$T0> insert into t2 values ( 8, 'h', geometry'polygon((7 7, 8 7, 8 8, 7 8))' );
+1 row inserted.
+$T0> insert into t2 values ( 9, 'i', geometry'polygon((8 8, 9 8, 9 9, 8 9))' );
+1 row inserted.
+$T0> insert into t2 values ( 10, 'j', geometry'polygon((9 9, 10 9, 10 10, 9 10))' );
+1 row inserted.
+
+$T0> create index t2_idx3 on t1(i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T2_IDX3                                  BTREE                  I3 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; INDEXABLE PREDICATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 is null;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+20                      lmn         3           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 IS NULL
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 < 5;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 4, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 < 5
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 >= 15;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 5, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 >= 15
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 in (1,3,5);
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+3           3           abc         3           
+5           5           bcd         2           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 3, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    OR
+     I2 = 1
+     I2 = 3
+     I2 = 5
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 between 11 and 13;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 3, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 BETWEEN 11 AND 13
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i2 in (select level from dual connect by level <= 5);
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+5           5           bcd         2           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+  [ SUBQUERY FILTER ]
+  EXISTS (SELECT '0' FROM DUAL WHERE T1.I2 = LEVEL CONNECT BY LEVEL <= 5)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 3, COST: BLOCKED )
+   FILTER
+    [ FILTER ]
+    T1.I2 = LEVEL
+    CONNECT BY ( ACCESS: 94, COST: BLOCKED )
+     [ LEVEL FILTER ]
+     LEVEL <= 5
+     SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 94, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; INDEXABLE PREDICATE
+$T0> ##################################
+
+$T0> select * from t1 where i3 = 'abc';
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 3, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 'abc'
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i3 = 'abc' and i4 = 2;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+2           2           abc         2           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 1, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 'abc'
+   OR
+    I4 = 2
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i3 like 'a%';
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 3, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 LIKE 'a%'
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i3 like 'b%d';
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+7           7           bcd         4           
+6           6           bcd         3           
+5           5           bcd         2           
+9           9           bcd         2           
+4           4           bcd         1           
+8           8           bcd         1           
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 6, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 LIKE 'b%d'
+  [ FILTER ]
+  I3 LIKE 'b%d'
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where i3 >= 'def' and i4 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+10          10          def         1           
+15          15          ghi         1           
+16          16          jkl         1           
+18          18          lmn         1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 4, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 >= 'def'
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 1
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 where (i3, i4) in ( select 'abc', 1 from dual 
+                                     union all
+                                     select 'def', 1 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+10          10          def         1           
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 2, COST: BLOCKED )
+  [ IN-SUBQUERY VARIABLE KEY ]
+  OR
+   AND
+    I3 = (SELECT 'abc', 1 FROM DUAL UNION ALL SELECT 'def', 1 FROM DUAL)
+    I4 = 
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 12, COST: BLOCKED )
+   DISTINCT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, BUCKET_COUNT: 1024, ACCESS: 4, COST: BLOCKED )
+    VIEW ( ACCESS: 2, COST: BLOCKED )
+     PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 12, COST: BLOCKED )
+      VIEW ( ACCESS: 2, COST: BLOCKED )
+       BAG-UNION
+        PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 8, COST: BLOCKED )
+         SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+        PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 8, COST: BLOCKED )
+         SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; INDEXABLE PREDICATE
+$T0> ##################################
+
+$T0> select i1,astext(i3,64) from t2 where within( i3, geometry'polygon((3 3, 5 3, 5 5, 3 5))' );
+I1          ASTEXT(I3,64)                                                     
+---------------------------------------------------------------------------------
+4           POLYGON((3 3, 4 3, 4 4, 3 4, 3 3))                                
+5           POLYGON((4 4, 5 4, 5 5, 4 5, 4 4))                                
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 70, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 2/2, FULL SCAN, ACCESS: 2, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   ST_WITHIN(I3, GEOMETRY'polygon((3 3, 5 3, 5 5, 3 5))')
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   ST_WITHIN(I3, GEOMETRY'polygon((3 3, 5 3, 5 5, 3 5))')
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

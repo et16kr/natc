@@ -1,0 +1,82 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--##################################
+--+SECTOR 1; DROP USER
+--##################################
+--+SKIP BEGIN; 
+$P0> DROP TABLE JYLEE.PDT;
+$P0> DROP USER MKKIM CASCADE;
+$P0> DROP USER JYLEE CASCADE;
+--+SKIP END; 
+
+$P0> CREATE USER MKKIM IDENTIFIED BY MKKIMPWD DEFAULT TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> GRANT ALL PRIVILEGES TO MKKIM;
+Grant success.
+$P0> CREATE USER JYLEE IDENTIFIED BY JYLEEPWD DEFAULT TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> GRANT ALL PRIVILEGES TO JYLEE;
+Grant success.
+
+$P0> CONNECT JYLEE/JYLEEPWD;
+Connect success.
+$P0> CREATE TABLE PDT
+     (
+         F1 INTEGER,
+         F2 INTEGER
+     )
+     PARTITION BY RANGE( F1 )
+     (
+         PARTITION P1 VALUES LESS THAN( 10 ),
+         PARTITION P2 VALUES LESS THAN( 20 ),
+         PARTITION P3 VALUES LESS THAN( 30 ),
+         PARTITION P4 VALUES DEFAULT
+     );
+Create success.
+
+$P0> CONNECT MKKIM/MKKIMPWD;
+Connect success.
+
+$P0> CREATE INDEX IDX_PDT1 ON JYLEE.PDT( F1 );
+Create success.
+$P0> CREATE INDEX IDX_PDT2 ON JYLEE.PDT( F2 );
+Create success.
+$P0> CREATE INDEX IDX_PDT3 ON JYLEE.PDT( F1, F2 );
+Create success.
+
+$P0> INSERT INTO JYLEE.PDT VALUES( 1, 1 );
+1 row inserted.
+
+$P0> CONNECT SYS/MANAGER;
+Connect success.
+
+-- should be success
+$P0> DROP USER MKKIM CASCADE;
+Drop success.
+
+-- should be success
+$P0> SELECT COUNT(*) FROM JYLEE.PDT;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+
+$P0> CONNECT SYS/MANAGER;
+Connect success.
+-- should be success
+$P0> DROP USER JYLEE CASCADE;
+Drop success.
+-- should be fail
+$P0> SELECT COUNT(*) FROM JYLEE.PDT;
+[ERR-31010 : User not found]
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE JYLEE.PDT;
+$P0> DROP USER MKKIM CASCADE;
+$P0> DROP USER JYLEE CASCADE;
+--+SKIP END; 
+

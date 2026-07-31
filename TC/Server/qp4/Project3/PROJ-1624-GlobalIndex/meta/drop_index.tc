@@ -1,0 +1,185 @@
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+INCLUDE select_meta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop user user1 cascade;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t1;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+create user user1 identified by user1;
+
+grant all privileges to user1;
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+connect user1/user1;
+
+create table t2
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+connect sys/manager;
+
+##################################
+# SECTOR; BACKUP META
+##################################
+
+CALL CREATE_BACKUP_META();
+
+##################################
+# SECTOR; CREATE INDEX
+##################################
+
+connect sys/manager;
+
+create index idx1 on t1(i1);
+create index idx2 on t1(i1, i2);
+create index idx3 on t1(i1, i2, i3);
+
+create index idx4 on t1(i2);
+create index idx5 on t1(i2, i3);
+
+connect user1/user1;
+
+create index idx6 on sys.t1(i3);
+create index idx7 on sys.t1(i3, i1);
+create index idx8 on sys.t1(i3, i2, i1);
+
+create index idx1 on t2(i1);
+create index idx2 on t2(i1, i2);
+create index idx3 on t2(i1, i2, i3);
+
+create index idx4 on t2(i2);
+create index idx5 on t2(i2, i3);
+
+connect sys/manager;
+
+desc t1;
+CALL DESC_INDEX( "IDX1" );
+CALL DESC_INDEX( "IDX2" );
+CALL DESC_INDEX( "IDX3" );
+CALL DESC_INDEX( "IDX4" );
+CALL DESC_INDEX( "IDX5" );
+CALL DESC_INDEX( "IDX6" );
+CALL DESC_INDEX( "IDX7" );
+CALL DESC_INDEX( "IDX8" );
+
+connect user1/user1;
+
+desc t2;
+CALL DESC_INDEX( "IDX1" );
+CALL DESC_INDEX( "IDX2" );
+CALL DESC_INDEX( "IDX3" );
+CALL DESC_INDEX( "IDX4" );
+CALL DESC_INDEX( "IDX5" );
+
+connect sys/manager;
+
+##################################
+# SECTOR; DROP INDEX
+##################################
+
+CALL SELECT_META();
+
+drop index idx1;
+drop index idx2;
+drop index idx3;
+drop index idx4;
+drop index idx5;
+
+CALL SELECT_META();
+
+drop index idx6;
+drop index idx7;
+
+CALL SELECT_META();
+
+connect user1/user1;
+
+drop index idx8;
+
+CALL SELECT_META();
+
+drop index idx1;
+drop index idx2;
+drop index idx3;
+drop index idx4;
+drop index idx5;
+
+CALL SELECT_META();
+
+##################################
+# SECTOR; COMPARE META
+##################################
+
+connect sys/manager;
+
+CALL COMPARE_META();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

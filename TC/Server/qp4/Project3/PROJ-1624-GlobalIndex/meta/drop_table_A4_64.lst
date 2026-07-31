@@ -1,0 +1,463 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+Create success.
+$T0> create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; BACKUP META
+$T0> ##################################
+
+
+
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  constraint t1_pk primary key (i3) using index tablespace data1,
+  constraint t1_uk unique (i4)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index idx1 on t1(i2);
+Create success.
+$T0> create index idx2 on t1(i2 desc, i3 desc) tablespace data2;
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I3 ASC
+T1_UK                                    BTREE    UNIQUE        I4 ASC
+IDX1                                     BTREE                  I2 ASC
+IDX2                                     BTREE                  I2 DESC,
+                                                                I3 DESC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I3
+$T0> desc "$GIT_T1_PK";
+[ TABLESPACE : DATA1 ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I3                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_PK                               BTREE    UNIQUE        I3 ASC
+$GIR_T1_PK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_PK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_T1_UK";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I4                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIK_T1_UK                               BTREE    UNIQUE        I4 ASC
+$GIR_T1_UK                               BTREE    UNIQUE        $GIT_RID ASC
+"$GIT_T1_UK" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I4   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_IDX1";
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_IDX1                                BTREE    UNIQUE        $GIT_RID ASC
+$GIK_IDX1                                BTREE                  I2 ASC
+"$GIT_IDX1" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+----------------------------------------------------------
+No rows selected.
+$T0> desc "$GIT_IDX2";
+[ TABLESPACE : DATA2 ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I2                                       INTEGER                     
+I3                                       INTEGER                     NOT NULL
+$GIT_OID                                 BIGINT                      
+$GIT_RID                                 BIGINT                      
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+$GIR_IDX2                                BTREE    UNIQUE        $GIT_RID ASC
+$GIK_IDX2                                BTREE                  I2 DESC,
+                                                                I3 DESC
+"$GIT_IDX2" has no primary key
+
+$T0> select * from "$_TEMP";
+$_TEMP.I2   $_TEMP.I3   $_TEMP.$GIT_OID      $_TEMP.$GIT_RID      
+-----------------------------------------------------------------------
+No rows selected.
+
+$T0> select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name like '$%' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  HIDDEN  TBS_NAME                                  
+------------------------------------------------------------------
+SYS                                                                                                                               
+$GIT_T1_PK                                                                                                                        
+G  Y  DATA1                                     
+SYS                                                                                                                               
+$GIT_T1_UK                                                                                                                        
+G  Y  SYS_TBS_DISK_DATA                         
+SYS                                                                                                                               
+$GIT_IDX1                                                                                                                         
+G  Y  SYS_TBS_DISK_DATA                         
+SYS                                                                                                                               
+$GIT_IDX2                                                                                                                         
+G  Y  DATA2                                     
+4 rows selected.
+
+$T0> select t.table_name, c.column_order, c.column_name, d.type_name, c.is_nullable
+from system_.sys_tables_ t, system_.sys_columns_ c, v$datatype d
+where t.table_name like '$%' and t.table_id = c.table_id and c.data_type = d.data_type
+order by t.table_id, c.column_order;
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+COLUMN_ORDER 
+---------------
+COLUMN_NAME                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+TYPE_NAME                                 IS_NULLABLE  
+----------------------------------------------------------
+$GIT_T1_PK                                                                                                                        
+0           
+I3                                                                                                                                
+INTEGER                                   T  
+$GIT_T1_PK                                                                                                                        
+1           
+$GIT_OID                                                                                                                          
+BIGINT                                    T  
+$GIT_T1_PK                                                                                                                        
+2           
+$GIT_RID                                                                                                                          
+BIGINT                                    T  
+$GIT_T1_UK                                                                                                                        
+0           
+I4                                                                                                                                
+INTEGER                                   T  
+$GIT_T1_UK                                                                                                                        
+1           
+$GIT_OID                                                                                                                          
+BIGINT                                    T  
+$GIT_T1_UK                                                                                                                        
+2           
+$GIT_RID                                                                                                                          
+BIGINT                                    T  
+$GIT_IDX1                                                                                                                         
+0           
+I2                                                                                                                                
+INTEGER                                   T  
+$GIT_IDX1                                                                                                                         
+1           
+$GIT_OID                                                                                                                          
+BIGINT                                    T  
+$GIT_IDX1                                                                                                                         
+2           
+$GIT_RID                                                                                                                          
+BIGINT                                    T  
+$GIT_IDX2                                                                                                                         
+0           
+I2                                                                                                                                
+INTEGER                                   T  
+$GIT_IDX2                                                                                                                         
+1           
+I3                                                                                                                                
+INTEGER                                   F  
+$GIT_IDX2                                                                                                                         
+2           
+$GIT_OID                                                                                                                          
+BIGINT                                    T  
+$GIT_IDX2                                                                                                                         
+3           
+$GIT_RID                                                                                                                          
+BIGINT                                    T  
+13 rows selected.
+
+$T0> select u.user_name, i.index_name, i.index_type, i.is_unique, b.name tbs_name, i.is_partitioned
+from system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b
+where i.index_name like '$%' and i.user_id = u.user_id and i.tbs_id = b.id
+order by i.index_id;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TYPE  IS_UNIQUE  TBS_NAME                                  IS_PARTITIONED  
+--------------------------------------------------------------------------------------
+SYS                                                                                                                               
+$GIK_T1_PK                                                                                                                        
+1           T  DATA1                                     F  
+SYS                                                                                                                               
+$GIR_T1_PK                                                                                                                        
+1           T  DATA1                                     F  
+SYS                                                                                                                               
+$GIK_T1_UK                                                                                                                        
+1           T  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIR_T1_UK                                                                                                                        
+1           T  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIK_IDX1                                                                                                                         
+1           F  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIR_IDX1                                                                                                                         
+1           T  SYS_TBS_DISK_DATA                         F  
+SYS                                                                                                                               
+$GIK_IDX2                                                                                                                         
+1           F  DATA2                                     F  
+SYS                                                                                                                               
+$GIR_IDX2                                                                                                                         
+1           T  DATA2                                     F  
+8 rows selected.
+
+$T0> select i.index_name, j.index_col_order, c.column_name, j.sort_order
+from system_.sys_indices_ i, system_.sys_index_columns_ j, system_.sys_columns_ c
+where i.index_name like '$%' and i.index_id = j.index_id and j.column_id = c.column_id
+order by i.index_id, j.index_col_order;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_COL_ORDER 
+------------------
+COLUMN_NAME                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+SORT_ORDER  
+--------------
+$GIK_T1_PK                                                                                                                        
+0           
+I3                                                                                                                                
+A  
+$GIR_T1_PK                                                                                                                        
+0           
+$GIT_RID                                                                                                                          
+A  
+$GIK_T1_UK                                                                                                                        
+0           
+I4                                                                                                                                
+A  
+$GIR_T1_UK                                                                                                                        
+0           
+$GIT_RID                                                                                                                          
+A  
+$GIK_IDX1                                                                                                                         
+0           
+I2                                                                                                                                
+A  
+$GIR_IDX1                                                                                                                         
+0           
+$GIT_RID                                                                                                                          
+A  
+$GIK_IDX2                                                                                                                         
+0           
+I2                                                                                                                                
+D  
+$GIK_IDX2                                                                                                                         
+1           
+I3                                                                                                                                
+D  
+$GIR_IDX2                                                                                                                         
+0           
+$GIT_RID                                                                                                                          
+A  
+9 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; DROP TABLE
+$T0> ##################################
+
+$T0> drop table t1;
+Drop success.
+
+$T0> ##################################
+$T0> # SECTOR; COMPARE META
+$T0> ##################################
+
+$T0> select table_name from (
+    select * from system_.sys_tables_ minus select * from sys_tables_backup
+)
+order by table_name;
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select table_name from (
+    select * from sys_tables_backup minus select * from system_.sys_tables_
+)
+order by table_name;
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select column_name from (
+    select * from system_.sys_columns_ minus select * from sys_columns_backup
+)
+order by column_name;
+COLUMN_NAME                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select column_name from (
+    select * from sys_columns_backup minus select * from system_.sys_columns_
+)
+order by column_name;
+COLUMN_NAME                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select index_name from (
+    select * from system_.sys_indices_ minus select * from sys_indices_backup
+)
+order by index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select index_name from (
+    select * from sys_indices_backup minus select * from system_.sys_indices_
+)
+order by index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select c.column_name index_column_name from (
+    select * from system_.sys_index_columns_ minus select * from sys_index_columns_backup
+) v1, system_.sys_columns_ c
+where v1.column_id = c.column_id
+order by c.column_id;
+INDEX_COLUMN_NAME                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select c.column_name index_column_name from (
+    select * from sys_index_columns_backup minus select * from system_.sys_index_columns_
+) v1, system_.sys_columns_ c
+where v1.column_id = c.column_id
+order by c.column_id;
+INDEX_COLUMN_NAME                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select constraint_name from (
+    select * from system_.sys_constraints_ minus select * from sys_constraints_backup
+)
+order by constraint_name;
+CONSTRAINT_NAME                                                                                                                   
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select constraint_name from (
+    select * from sys_constraints_backup minus select * from system_.sys_constraints_
+)
+order by constraint_name;
+CONSTRAINT_NAME                                                                                                                   
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select c.column_name constraint_column_name from (
+    select * from system_.sys_constraint_columns_ minus select * from sys_constraint_columns_backup
+) v1, system_.sys_columns_ c
+where v1.column_id = c.column_id
+order by c.column_id;
+CONSTRAINT_COLUMN_NAME                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select c.column_name constraint_column_name from (
+    select * from sys_constraint_columns_backup minus select * from system_.sys_constraint_columns_
+) v1, system_.sys_columns_ c
+where v1.column_id = c.column_id
+order by c.column_id;
+CONSTRAINT_COLUMN_NAME                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop tablespace data1 including contents and datafiles;
+$T0> drop tablespace data2 including contents and datafiles;
+$T0> SKIP END;
+

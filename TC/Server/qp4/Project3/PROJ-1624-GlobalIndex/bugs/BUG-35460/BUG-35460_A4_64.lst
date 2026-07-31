@@ -1,0 +1,123 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # BUG-35460
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; RANGE PARTITION
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> desc "$GIT_T1_PK";
+[ERR-91014 : The table ($GIT_T1_PK) does not exist.]
+$T0> desc "$GIT_T1_UK";
+[ERR-91014 : The table ($GIT_T1_UK) does not exist.]
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+No rows selected.
+
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> select count(*) from t1;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+
+$T0> select count(*) from "$GIT_T1_PK";
+[ERR-31031 : Table or view was not found : 
+0001 : select COUNT(*) from "$GIT_T1_PK"
+                            ^         ^
+]
+
+$T0> select count(*) from "$GIT_T1_UK";
+[ERR-31031 : Table or view was not found : 
+0001 : select COUNT(*) from "$GIT_T1_UK"
+                            ^         ^
+]
+
+$T0> select table_name from system_.sys_tables_ where table_type = 'T' and user_id = user_id() order by table_id;
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+T1                                                                                                                                
+1 row selected.
+
+$T0> select table_name from system_.sys_tables_ where table_type = 'G' and user_id = user_id() order by table_id;
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> SKIP END;
+

@@ -14,6 +14,10 @@ NODISPLAY ON;
 CALL stdServerKill();
 CALL stdClean();
 CALL stdServerStart();
+EXEC P1 "is -f ${ALTIBASE_HOME}/packages/dbms_metadata.sql";
+P_WAIT P1;
+EXEC P1 "is -f ${ALTIBASE_HOME}/packages/dbms_metadata.plb";
+P_WAIT P1;
 NODISPLAY OFF;
 
 }

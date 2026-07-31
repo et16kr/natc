@@ -1,0 +1,483 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 varchar(10),
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 'abc', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 'abc', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 'abc', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 'bcd', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 'bcd', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 9, 9, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 10, 10, 'def', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 11, 11, 'def', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 12, 12, 'def', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 13, 13, 'def', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 14, 14, 'def', 5 );
+1 row inserted.
+$T0> insert into t1 values ( 15, 15, 'ghi', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 16, 16, 'jkl', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 17, 17, 'jkl', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 18, 18, 'lmn', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 19, 19, 'lmn', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 20, null, 'lmn', 3 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i4 desc);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; ORDER BY
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 order by i2;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+5           5           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+8           8           bcd         1           
+9           9           bcd         2           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+20                      lmn         3           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 20, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i2 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+20                      lmn         3           
+19          19          lmn         2           
+18          18          lmn         1           
+17          17          jkl         2           
+16          16          jkl         1           
+15          15          ghi         1           
+14          14          def         5           
+13          13          def         4           
+12          12          def         3           
+11          11          def         2           
+10          10          def         1           
+9           9           bcd         2           
+8           8           bcd         1           
+7           7           bcd         4           
+6           6           bcd         3           
+5           5           bcd         2           
+4           4           bcd         1           
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX2, ACCESS: 20, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1 order by i3;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+7           7           bcd         4           
+6           6           bcd         3           
+5           5           bcd         2           
+9           9           bcd         2           
+4           4           bcd         1           
+8           8           bcd         1           
+14          14          def         5           
+13          13          def         4           
+12          12          def         3           
+11          11          def         2           
+10          10          def         1           
+15          15          ghi         1           
+17          17          jkl         2           
+16          16          jkl         1           
+20                      lmn         3           
+19          19          lmn         2           
+18          18          lmn         1           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 20, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i3 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+18          18          lmn         1           
+19          19          lmn         2           
+20                      lmn         3           
+16          16          jkl         1           
+17          17          jkl         2           
+15          15          ghi         1           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+8           8           bcd         1           
+4           4           bcd         1           
+9           9           bcd         2           
+5           5           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 20, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1 order by i3, i4;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+8           8           bcd         1           
+4           4           bcd         1           
+5           5           bcd         2           
+9           9           bcd         2           
+6           6           bcd         3           
+7           7           bcd         4           
+10          10          def         1           
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+14          14          def         5           
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+20                      lmn         3           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 20, DISK_PAGE_COUNT: BLOCKED, ACCESS: 20, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t1 order by i3, i4 desc;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+7           7           bcd         4           
+6           6           bcd         3           
+5           5           bcd         2           
+9           9           bcd         2           
+4           4           bcd         1           
+8           8           bcd         1           
+14          14          def         5           
+13          13          def         4           
+12          12          def         3           
+11          11          def         2           
+10          10          def         1           
+15          15          ghi         1           
+17          17          jkl         2           
+16          16          jkl         1           
+20                      lmn         3           
+19          19          lmn         2           
+18          18          lmn         1           
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.T1_IDX3, ACCESS: 20, COST: BLOCKED )
+  SCAN ( PARTITION: PD, RID SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, RID SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; DISTINCT
+$T0> ##################################
+
+$T0> select distinct i2 from t1;
+I2          
+--------------
+1           
+2           
+3           
+4           
+5           
+6           
+7           
+8           
+9           
+10          
+11          
+12          
+13          
+14          
+15          
+16          
+17          
+18          
+19          
+            
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+ DISTINCT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 20, DISK_PAGE_COUNT: BLOCKED, ACCESS: 20, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select distinct i3 from t1;
+I3          
+--------------
+abc         
+bcd         
+def         
+ghi         
+jkl         
+lmn         
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 12, COST: BLOCKED )
+ DISTINCT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 6, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select distinct i3, i4 from t1;
+I3          I4          
+---------------------------
+abc         1           
+abc         2           
+abc         3           
+bcd         1           
+bcd         2           
+bcd         3           
+bcd         4           
+def         1           
+def         2           
+def         3           
+def         4           
+def         5           
+ghi         1           
+jkl         1           
+jkl         2           
+lmn         1           
+lmn         2           
+lmn         3           
+18 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 16, COST: BLOCKED )
+ DISTINCT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 18, DISK_PAGE_COUNT: BLOCKED, ACCESS: 18, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; GROUP BY
+$T0> ##################################
+
+$T0> select i2, count(i1) from t1 group by i2;
+I2          COUNT(I1)            
+------------------------------------
+1           1                    
+2           1                    
+3           1                    
+4           1                    
+5           1                    
+6           1                    
+7           1                    
+8           1                    
+9           1                    
+10          1                    
+11          1                    
+12          1                    
+13          1                    
+14          1                    
+15          1                    
+16          1                    
+17          1                    
+18          1                    
+19          1                    
+            1                    
+20 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 16, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 20, DISK_PAGE_COUNT: BLOCKED, ACCESS: 20, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select i3, count(i1) from t1 group by i3;
+I3          COUNT(I1)            
+------------------------------------
+abc         3                    
+bcd         6                    
+def         5                    
+ghi         1                    
+jkl         2                    
+lmn         3                    
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 24, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 6, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select i3, i4, count(i1) from t1 group by i3, i4;
+I3          I4          COUNT(I1)            
+-------------------------------------------------
+abc         1           1                    
+abc         2           1                    
+abc         3           1                    
+bcd         1           2                    
+bcd         2           2                    
+bcd         3           1                    
+bcd         4           1                    
+def         1           1                    
+def         2           1                    
+def         3           1                    
+def         4           1                    
+def         5           1                    
+ghi         1           1                    
+jkl         1           1                    
+jkl         2           1                    
+lmn         1           1                    
+lmn         2           1                    
+lmn         3           1                    
+18 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 24, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 18, DISK_PAGE_COUNT: BLOCKED, ACCESS: 18, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
