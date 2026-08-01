@@ -1,0 +1,74 @@
+###########################################################################
+# TestCase Description = Compare Disk native range/order/pruning scan results.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_QRY_RANGE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_QRY_RANGE
+    (
+        P INTEGER,
+        K INTEGER,
+        V VARCHAR(16)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE INDEX NGD_QRY_RANGE_I ON NGD_QRY_RANGE(K);
+
+    INSERT INTO NGD_QRY_RANGE VALUES (1, 30, 'P1-C');
+    INSERT INTO NGD_QRY_RANGE VALUES (5, 10, 'P1-A');
+    INSERT INTO NGD_QRY_RANGE VALUES (11, 40, 'P2-D');
+    INSERT INTO NGD_QRY_RANGE VALUES (15, 20, 'P2-B');
+    INSERT INTO NGD_QRY_RANGE VALUES (21, 60, 'PD-F');
+    INSERT INTO NGD_QRY_RANGE VALUES (25, 50, 'PD-E');
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+
+    SELECT /*+ INDEX(NGD_QRY_RANGE, NGD_QRY_RANGE_I) */ P, K, V
+      FROM NGD_QRY_RANGE
+     WHERE K BETWEEN 20 AND 50
+     ORDER BY K;
+
+    SELECT /*+ FULL SCAN(NGD_QRY_RANGE) */ P, K, V
+      FROM NGD_QRY_RANGE
+     WHERE K BETWEEN 20 AND 50
+     ORDER BY K;
+
+    SELECT /*+ INDEX(NGD_QRY_RANGE, NGD_QRY_RANGE_I) */ P, K, V
+      FROM NGD_QRY_RANGE PARTITION(P2)
+     WHERE K >= 20
+     ORDER BY K DESC;
+
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_QRY_RANGE;
+    SKIP END;
+}
+

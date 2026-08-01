@@ -1,0 +1,76 @@
+###########################################################################
+# TestCase Description = Compare Memory native variable range scan results.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_RANGE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_QRY_RANGE
+    (
+        P INTEGER,
+        K VARCHAR(64),
+        V INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_QRY_RANGE_I
+        ON NGM_QRY_RANGE(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+
+    INSERT INTO NGM_QRY_RANGE VALUES (1, 'K-030', 30);
+    INSERT INTO NGM_QRY_RANGE VALUES (5, 'K-010', 10);
+    INSERT INTO NGM_QRY_RANGE VALUES (11, 'K-040', 40);
+    INSERT INTO NGM_QRY_RANGE VALUES (15, 'K-020', 20);
+    INSERT INTO NGM_QRY_RANGE VALUES (21, 'K-060', 60);
+    INSERT INTO NGM_QRY_RANGE VALUES (25, 'K-050', 50);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+
+    SELECT /*+ INDEX(NGM_QRY_RANGE, NGM_QRY_RANGE_I) */ P, K, V
+      FROM NGM_QRY_RANGE
+     WHERE K BETWEEN 'K-020' AND 'K-050'
+     ORDER BY K;
+
+    SELECT /*+ FULL SCAN(NGM_QRY_RANGE) */ P, K, V
+      FROM NGM_QRY_RANGE
+     WHERE K BETWEEN 'K-020' AND 'K-050'
+     ORDER BY K;
+
+    SELECT /*+ INDEX(NGM_QRY_RANGE, NGM_QRY_RANGE_I) */ P, K, V
+      FROM NGM_QRY_RANGE PARTITION(P2)
+     WHERE K >= 'K-020'
+     ORDER BY K DESC;
+
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_RANGE;
+    SKIP END;
+}
+

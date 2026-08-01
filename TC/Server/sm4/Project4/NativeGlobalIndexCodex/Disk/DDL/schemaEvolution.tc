@@ -1,0 +1,67 @@
+###########################################################################
+# TestCase Description = Preserve a Disk index across column schema changes.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_SCHEMA;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DDL_SCHEMA
+    (
+        P INTEGER,
+        K INTEGER,
+        V INTEGER,
+        SPARE INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE INDEX NGD_DDL_SCHEMA_I ON NGD_DDL_SCHEMA(K, V DESC);
+
+    INSERT INTO NGD_DDL_SCHEMA VALUES (1, 101, 1, 1001);
+    INSERT INTO NGD_DDL_SCHEMA VALUES (11, 111, 2, 1011);
+    INSERT INTO NGD_DDL_SCHEMA VALUES (21, 121, 3, 1021);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER TABLE NGD_DDL_SCHEMA ADD COLUMN (NOTE VARCHAR(16));
+    UPDATE NGD_DDL_SCHEMA SET NOTE = 'ADDED';
+
+    ALTER TABLE NGD_DDL_SCHEMA RENAME COLUMN K TO K_NEW;
+    ALTER TABLE NGD_DDL_SCHEMA DROP COLUMN (SPARE);
+
+    SELECT /*+ INDEX(NGD_DDL_SCHEMA, NGD_DDL_SCHEMA_I) */
+           P, K_NEW, V, NOTE
+      FROM NGD_DDL_SCHEMA
+     WHERE K_NEW BETWEEN 100 AND 120
+     ORDER BY K_NEW, V DESC;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_DDL_SCHEMA_I';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_SCHEMA;
+    SKIP END;
+}

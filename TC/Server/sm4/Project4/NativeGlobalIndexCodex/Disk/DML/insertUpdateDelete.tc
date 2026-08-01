@@ -1,0 +1,65 @@
+###########################################################################
+# TestCase Description = Maintain a Disk native index across basic DML.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_BASIC;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DML_BASIC
+    (
+        P INTEGER,
+        K INTEGER,
+        V INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE INDEX NGD_DML_BASIC_I ON NGD_DML_BASIC(K);
+
+##################################
+SECTOR; TEST
+##################################
+    INSERT INTO NGD_DML_BASIC VALUES (1, 101, 1);
+    INSERT INTO NGD_DML_BASIC VALUES (11, 111, 1);
+    INSERT INTO NGD_DML_BASIC VALUES (21, 121, 1);
+
+    SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+
+    UPDATE NGD_DML_BASIC SET V = V + 10 WHERE K = 111;
+    SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+
+    UPDATE NGD_DML_BASIC SET K = K + 1000 WHERE P >= 20;
+    SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+
+    DELETE FROM NGD_DML_BASIC WHERE K = 101;
+    SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+
+    SELECT /*+ INDEX(NGD_DML_BASIC, NGD_DML_BASIC_I) */
+           COUNT(*), MIN(K), MAX(K)
+      FROM NGD_DML_BASIC;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_BASIC;
+    SKIP END;
+}
+

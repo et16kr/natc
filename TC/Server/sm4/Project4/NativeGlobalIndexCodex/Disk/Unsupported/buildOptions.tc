@@ -1,0 +1,66 @@
+###########################################################################
+# TestCase Description = Reject unsupported Disk native index build options.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_BUILD;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_NEG_BUILD (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_NEG_BUILD VALUES (1, 101);
+    INSERT INTO NGD_NEG_BUILD VALUES (11, 111);
+    INSERT INTO NGD_NEG_BUILD VALUES (21, 121);
+
+##################################
+SECTOR; TEST
+##################################
+    CREATE INDEX NGD_NEG_BUILD_NOLOG
+        ON NGD_NEG_BUILD(K)
+        NOLOGGING;
+
+    CREATE INDEX NGD_NEG_BUILD_PAR
+        ON NGD_NEG_BUILD(K)
+        PARALLEL 2;
+
+    CREATE INDEX NGD_NEG_BUILD_OK
+        ON NGD_NEG_BUILD(K);
+
+    ALTER INDEX NGD_NEG_BUILD_OK DISABLE;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_BUILD_%'
+     ORDER BY INDEX_NAME;
+
+    SELECT /*+ INDEX(NGD_NEG_BUILD, NGD_NEG_BUILD_OK) */ P, K
+      FROM NGD_NEG_BUILD
+     ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_BUILD;
+    SKIP END;
+}
+

@@ -1,0 +1,58 @@
+###########################################################################
+# TestCase Description = Verify native Disk implementation catalog identity.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_CAT_TYPE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_CAT_TYPE
+    (
+        P INTEGER,
+        K INTEGER,
+        V VARCHAR(32)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE INDEX NGD_CAT_TYPE_I
+        ON NGD_CAT_TYPE(K)
+        TABLESPACE SYS_TBS_DISK_DATA;
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT I.INDEX_NAME,
+           I.INDEX_IMPL_TYPE,
+           I.INDEX_TABLE_ID,
+           I.IS_PARTITIONED
+      FROM SYSTEM_.SYS_TABLES_ T,
+           SYSTEM_.SYS_INDICES_ I
+     WHERE T.TABLE_NAME = 'NGD_CAT_TYPE'
+       AND T.USER_ID = USER_ID()
+       AND I.TABLE_ID = T.TABLE_ID
+     ORDER BY I.INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_CAT_TYPE;
+    SKIP END;
+}

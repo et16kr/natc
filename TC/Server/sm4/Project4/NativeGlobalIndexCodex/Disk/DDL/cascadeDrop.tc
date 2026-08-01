@@ -1,0 +1,72 @@
+###########################################################################
+# TestCase Description = Drop a Disk parent with multiple native indexes.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_CASCADE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DDL_CASCADE
+    (
+        P INTEGER,
+        ID INTEGER NOT NULL,
+        K1 INTEGER,
+        K2 INTEGER
+    )
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    ALTER TABLE NGD_DDL_CASCADE
+        ADD CONSTRAINT NGD_DDL_CASCADE_PK PRIMARY KEY(ID);
+
+    CREATE INDEX NGD_DDL_CASCADE_I1 ON NGD_DDL_CASCADE(K1);
+    CREATE INDEX NGD_DDL_CASCADE_I2 ON NGD_DDL_CASCADE(K2);
+
+    INSERT INTO NGD_DDL_CASCADE VALUES (1, 1, 10, 100);
+    INSERT INTO NGD_DDL_CASCADE VALUES (2, 2, 20, 200);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT COUNT(*) AS INDEX_COUNT_BEFORE_DROP
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGD_DDL_CASCADE_PK',
+            'NGD_DDL_CASCADE_I1',
+            'NGD_DDL_CASCADE_I2');
+
+    DROP TABLE NGD_DDL_CASCADE;
+
+    SELECT COUNT(*) AS INDEX_COUNT_AFTER_DROP
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGD_DDL_CASCADE_PK',
+            'NGD_DDL_CASCADE_I1',
+            'NGD_DDL_CASCADE_I2');
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_CASCADE;
+    SKIP END;
+}
+

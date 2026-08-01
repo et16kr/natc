@@ -1,0 +1,68 @@
+###########################################################################
+# TestCase Description = Rebuild and drop a Memory native global index.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DDL_REBUILD;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_DDL_REBUILD (P INTEGER, K VARCHAR(64), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    INSERT INTO NGM_DDL_REBUILD VALUES (1, 'K-101', 1);
+    INSERT INTO NGM_DDL_REBUILD VALUES (11, 'K-111', 2);
+    INSERT INTO NGM_DDL_REBUILD VALUES (21, 'K-121', 3);
+
+    CREATE INDEX NGM_DDL_REBUILD_I
+        ON NGM_DDL_REBUILD(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER INDEX NGM_DDL_REBUILD_I REBUILD;
+
+    SELECT /*+ INDEX(NGM_DDL_REBUILD, NGM_DDL_REBUILD_I) */
+           P, K, V
+      FROM NGM_DDL_REBUILD
+     ORDER BY K;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_DDL_REBUILD_I';
+
+    DROP INDEX NGM_DDL_REBUILD_I;
+
+    SELECT COUNT(*) AS INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_DDL_REBUILD_I';
+
+    SELECT P, K, V FROM NGM_DDL_REBUILD ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DDL_REBUILD;
+    SKIP END;
+}
+

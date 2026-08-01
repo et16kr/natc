@@ -1,0 +1,86 @@
+###########################################################################
+# TestCase Description = Mutate Memory hash/list participants and index keys.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DML_KIND_H;
+    DROP TABLE NGM_DML_KIND_L;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_DML_KIND_H (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE TABLE NGM_DML_KIND_L (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY LIST(P)
+    (
+        PARTITION P1 VALUES (1, 2),
+        PARTITION P2 VALUES (3, 4),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_DML_KIND_H_I ON NGM_DML_KIND_H(K);
+    CREATE INDEX NGM_DML_KIND_L_I ON NGM_DML_KIND_L(K);
+
+    INSERT INTO NGM_DML_KIND_H VALUES (1, 'H-101', 1);
+    INSERT INTO NGM_DML_KIND_H VALUES (2, 'H-102', 2);
+    INSERT INTO NGM_DML_KIND_H VALUES (3, 'H-103', 3);
+    INSERT INTO NGM_DML_KIND_H VALUES (4, 'H-104', 4);
+    INSERT INTO NGM_DML_KIND_L VALUES (1, 'L-201', 1);
+    INSERT INTO NGM_DML_KIND_L VALUES (2, 'L-202', 2);
+    INSERT INTO NGM_DML_KIND_L VALUES (3, 'L-203', 3);
+    INSERT INTO NGM_DML_KIND_L VALUES (9, 'L-209', 9);
+
+##################################
+SECTOR; TEST
+##################################
+    UPDATE NGM_DML_KIND_H
+       SET P = P + 10, K = K || '-M'
+     WHERE K = 'H-101';
+
+    UPDATE NGM_DML_KIND_L
+       SET P = 3, K = K || '-M'
+     WHERE K = 'L-201';
+
+    UPDATE NGM_DML_KIND_H SET V = V + 100 WHERE K = 'H-103';
+    UPDATE NGM_DML_KIND_L SET V = V + 100 WHERE K = 'L-209';
+
+    DELETE FROM NGM_DML_KIND_H WHERE K = 'H-102';
+    DELETE FROM NGM_DML_KIND_L WHERE K = 'L-202';
+
+    SELECT /*+ INDEX(NGM_DML_KIND_H, NGM_DML_KIND_H_I) */ P, K, V
+      FROM NGM_DML_KIND_H
+     ORDER BY K, P;
+
+    SELECT /*+ INDEX(NGM_DML_KIND_L, NGM_DML_KIND_L_I) */ P, K, V
+      FROM NGM_DML_KIND_L
+     ORDER BY K, P;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DML_KIND_H;
+    DROP TABLE NGM_DML_KIND_L;
+    SKIP END;
+}
+

@@ -1,0 +1,57 @@
+###########################################################################
+# TestCase Description = Reject Disk partition topology and reset DDL.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_PART;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_NEG_PART (P INTEGER, K INTEGER)
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE INDEX NGD_NEG_PART_I ON NGD_NEG_PART(K);
+
+    INSERT INTO NGD_NEG_PART VALUES (1, 101);
+    INSERT INTO NGD_NEG_PART VALUES (2, 102);
+    INSERT INTO NGD_NEG_PART VALUES (3, 103);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER TABLE NGD_NEG_PART ADD PARTITION P4;
+    ALTER TABLE NGD_NEG_PART COALESCE PARTITION;
+    ALTER TABLE NGD_NEG_PART TRUNCATE PARTITION P1;
+    ALTER TABLE NGD_NEG_PART DROP PARTITION P1;
+
+    SELECT P, K FROM NGD_NEG_PART ORDER BY K;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_NEG_PART_I';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_PART;
+    SKIP END;
+}
+

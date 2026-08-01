@@ -1,0 +1,74 @@
+###########################################################################
+# TestCase Description = Verify Disk local and native global index coexistence.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_QRY_BOTH;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_QRY_BOTH
+    (
+        P INTEGER,
+        GKEY INTEGER,
+        LKEY INTEGER,
+        V VARCHAR(16)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE INDEX NGD_QRY_GLOBAL_I ON NGD_QRY_BOTH(GKEY);
+    CREATE INDEX NGD_QRY_LOCAL_I ON NGD_QRY_BOTH(LKEY) LOCAL;
+
+    INSERT INTO NGD_QRY_BOTH VALUES (1, 100, 1, 'A');
+    INSERT INTO NGD_QRY_BOTH VALUES (11, 200, 2, 'B');
+    INSERT INTO NGD_QRY_BOTH VALUES (21, 300, 3, 'C');
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_QRY_GLOBAL_I', 'NGD_QRY_LOCAL_I')
+     ORDER BY INDEX_NAME;
+
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+
+    SELECT /*+ INDEX(NGD_QRY_BOTH, NGD_QRY_GLOBAL_I) */ P, GKEY, LKEY, V
+      FROM NGD_QRY_BOTH
+     WHERE GKEY = 200
+     ORDER BY P;
+
+    SELECT /*+ INDEX(NGD_QRY_BOTH, NGD_QRY_LOCAL_I) */ P, GKEY, LKEY, V
+      FROM NGD_QRY_BOTH
+     WHERE LKEY = 2
+     ORDER BY P;
+
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_QRY_BOTH;
+    SKIP END;
+}
+

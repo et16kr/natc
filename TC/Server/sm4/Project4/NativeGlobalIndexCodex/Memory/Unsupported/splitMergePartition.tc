@@ -1,0 +1,87 @@
+###########################################################################
+# TestCase Description = Reject Memory SPLIT/MERGE before topology mutation.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_NEG_SPLIT;
+    DROP TABLE NGM_NEG_MERGE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_NEG_SPLIT (P INTEGER, K VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P11 VALUES LESS THAN (10),
+        PARTITION P12 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE TABLE NGM_NEG_MERGE (P INTEGER, K VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P11 VALUES LESS THAN (10),
+        PARTITION P12 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_NEG_SPLIT_I ON NGM_NEG_SPLIT(K);
+    CREATE INDEX NGM_NEG_MERGE_I ON NGM_NEG_MERGE(K);
+
+    INSERT INTO NGM_NEG_SPLIT VALUES (1, 'K-101');
+    INSERT INTO NGM_NEG_SPLIT VALUES (11, 'K-111');
+    INSERT INTO NGM_NEG_SPLIT VALUES (21, 'K-121');
+    INSERT INTO NGM_NEG_MERGE VALUES (1, 'K-201');
+    INSERT INTO NGM_NEG_MERGE VALUES (11, 'K-211');
+    INSERT INTO NGM_NEG_MERGE VALUES (21, 'K-221');
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER TABLE NGM_NEG_SPLIT
+        SPLIT PARTITION P11 AT (5) INTO
+        (
+            PARTITION P111,
+            PARTITION P112
+        );
+
+    ALTER TABLE NGM_NEG_MERGE
+        MERGE PARTITIONS P11, P12 INTO PARTITION P1;
+
+    SELECT T.TABLE_NAME, P.PARTITION_NAME
+      FROM SYSTEM_.SYS_TABLES_ T,
+           SYSTEM_.SYS_TABLE_PARTITIONS_ P
+     WHERE T.USER_ID = USER_ID()
+       AND T.TABLE_NAME IN ('NGM_NEG_SPLIT', 'NGM_NEG_MERGE')
+       AND P.TABLE_ID = T.TABLE_ID
+     ORDER BY T.TABLE_NAME, P.PARTITION_ORDER;
+
+    SELECT P, K FROM NGM_NEG_SPLIT ORDER BY K;
+    SELECT P, K FROM NGM_NEG_MERGE ORDER BY K;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_NEG_SPLIT_I', 'NGM_NEG_MERGE_I')
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_NEG_SPLIT;
+    DROP TABLE NGM_NEG_MERGE;
+    SKIP END;
+}
+

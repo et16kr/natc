@@ -1,0 +1,105 @@
+###########################################################################
+# TestCase Description = Exercise Memory predicates, binds, and ordering.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_PRED;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    VAR V_LOW INTEGER;
+    VAR V_HIGH INTEGER;
+    EXEC :V_LOW := 3;
+    EXEC :V_HIGH := 7;
+
+    CREATE TABLE NGM_QRY_PRED
+    (
+        P INTEGER,
+        K INTEGER,
+        S VARCHAR(16),
+        C INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_QRY_PRED_K ON NGM_QRY_PRED(K);
+    CREATE INDEX NGM_QRY_PRED_SC ON NGM_QRY_PRED(S, C DESC);
+
+    INSERT INTO NGM_QRY_PRED VALUES (1, 1, 'AA', 1);
+    INSERT INTO NGM_QRY_PRED VALUES (2, 2, 'AB', 2);
+    INSERT INTO NGM_QRY_PRED VALUES (11, 3, 'AB', 1);
+    INSERT INTO NGM_QRY_PRED VALUES (12, 4, 'AC', 4);
+    INSERT INTO NGM_QRY_PRED VALUES (21, 5, 'BA', 5);
+    INSERT INTO NGM_QRY_PRED VALUES (22, 6, 'BB', 6);
+    INSERT INTO NGM_QRY_PRED VALUES (23, 7, 'AB', 3);
+    INSERT INTO NGM_QRY_PRED VALUES (24, NULL, NULL, NULL);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+
+    SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_K) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE K IS NULL
+     ORDER BY P;
+
+    SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_K) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE K BETWEEN :V_LOW AND :V_HIGH
+     ORDER BY K, P;
+
+    SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_K) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE K IN (1, 4, 7)
+     ORDER BY K, P;
+
+    SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_SC) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE S LIKE 'A%'
+     ORDER BY S, C DESC, P;
+
+    SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_SC) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE (S, C) IN
+           (SELECT 'AB', 1 FROM DUAL
+            UNION ALL
+            SELECT 'AB', 3 FROM DUAL)
+     ORDER BY S, C, P;
+
+    SELECT DISTINCT S, C
+      FROM NGM_QRY_PRED
+     ORDER BY S, C;
+
+    SELECT S, COUNT(*) AS ROW_COUNT
+      FROM NGM_QRY_PRED
+     GROUP BY S
+     ORDER BY S;
+
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_PRED;
+    SKIP END;
+}
+

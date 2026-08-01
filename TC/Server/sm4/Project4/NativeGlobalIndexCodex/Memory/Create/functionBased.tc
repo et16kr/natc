@@ -1,0 +1,67 @@
+###########################################################################
+# TestCase Description = Create and maintain a Memory function-based index.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_CRT_FUNC;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_CRT_FUNC
+    (
+        P INTEGER,
+        K INTEGER,
+        V INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_CRT_FUNC_I ON NGM_CRT_FUNC(K + V);
+
+    INSERT INTO NGM_CRT_FUNC VALUES (1, 10, 1);
+    INSERT INTO NGM_CRT_FUNC VALUES (11, 20, 2);
+    INSERT INTO NGM_CRT_FUNC VALUES (21, 30, 3);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT /*+ INDEX(NGM_CRT_FUNC, NGM_CRT_FUNC_I) */ P, K, V, K + V
+      FROM NGM_CRT_FUNC
+     WHERE K + V BETWEEN 10 AND 30
+     ORDER BY K + V, P;
+
+    UPDATE NGM_CRT_FUNC SET V = V + 10 WHERE P = 11;
+
+    SELECT /*+ INDEX(NGM_CRT_FUNC, NGM_CRT_FUNC_I) */ P, K, V, K + V
+      FROM NGM_CRT_FUNC
+     WHERE K + V >= 20
+     ORDER BY K + V, P;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_CRT_FUNC_I';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_CRT_FUNC;
+    SKIP END;
+}
+

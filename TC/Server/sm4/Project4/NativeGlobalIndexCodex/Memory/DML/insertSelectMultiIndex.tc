@@ -1,0 +1,77 @@
+###########################################################################
+# TestCase Description = Maintain multiple Memory indexes in INSERT SELECT.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DML_SEL_DST;
+    DROP TABLE NGM_DML_SEL_SRC;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_DML_SEL_SRC (P INTEGER, K VARCHAR(24), V VARCHAR(24))
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE TABLE NGM_DML_SEL_DST (P INTEGER, K VARCHAR(24), V VARCHAR(24))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_DML_SEL_DST_K ON NGM_DML_SEL_DST(K);
+    CREATE INDEX NGM_DML_SEL_DST_V ON NGM_DML_SEL_DST(V DESC, K);
+    CREATE INDEX NGM_DML_SEL_DST_L ON NGM_DML_SEL_DST(P) LOCAL;
+
+    INSERT INTO NGM_DML_SEL_SRC VALUES (1, 'K-101', 'SRC-A');
+    INSERT INTO NGM_DML_SEL_SRC VALUES (11, 'K-111', 'SRC-B');
+    INSERT INTO NGM_DML_SEL_SRC VALUES (21, 'K-121', 'SRC-C');
+
+##################################
+SECTOR; TEST
+##################################
+    INSERT INTO NGM_DML_SEL_DST
+        SELECT P, K, V FROM NGM_DML_SEL_SRC;
+
+    INSERT INTO NGM_DML_SEL_DST
+        SELECT P + 30, K || '-COPY', V || '-COPY'
+          FROM NGM_DML_SEL_SRC
+         WHERE P < 10;
+
+    UPDATE NGM_DML_SEL_DST SET V = 'DST-B' WHERE K = 'K-111';
+    DELETE FROM NGM_DML_SEL_DST WHERE K = 'K-121';
+
+    SELECT /*+ INDEX(NGM_DML_SEL_DST, NGM_DML_SEL_DST_K) */ P, K, V
+      FROM NGM_DML_SEL_DST
+     ORDER BY K, P;
+
+    SELECT /*+ INDEX(NGM_DML_SEL_DST, NGM_DML_SEL_DST_V) */ P, K, V
+      FROM NGM_DML_SEL_DST
+     ORDER BY V DESC, K, P;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_DML_SEL_DST_%'
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DML_SEL_DST;
+    DROP TABLE NGM_DML_SEL_SRC;
+    SKIP END;
+}
+

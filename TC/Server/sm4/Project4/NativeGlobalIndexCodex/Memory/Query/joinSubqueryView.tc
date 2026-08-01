@@ -1,0 +1,95 @@
+###########################################################################
+# TestCase Description = Query Memory indexes through joins, subqueries, views.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP VIEW NGM_QRY_JOIN_V;
+    DROP TABLE NGM_QRY_JOIN_A;
+    DROP TABLE NGM_QRY_JOIN_B;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_QRY_JOIN_A (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE TABLE NGM_QRY_JOIN_B (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE INDEX NGM_QRY_JOIN_A_I ON NGM_QRY_JOIN_A(K);
+    CREATE INDEX NGM_QRY_JOIN_B_I ON NGM_QRY_JOIN_B(K);
+
+    INSERT INTO NGM_QRY_JOIN_A VALUES (1, 'K-A', 10);
+    INSERT INTO NGM_QRY_JOIN_A VALUES (11, 'K-B', 20);
+    INSERT INTO NGM_QRY_JOIN_A VALUES (21, 'K-C', 30);
+    INSERT INTO NGM_QRY_JOIN_A VALUES (22, 'K-D', 40);
+    INSERT INTO NGM_QRY_JOIN_B VALUES (2, 'K-A', 100);
+    INSERT INTO NGM_QRY_JOIN_B VALUES (12, 'K-C', 300);
+    INSERT INTO NGM_QRY_JOIN_B VALUES (23, 'K-X', 900);
+
+    CREATE VIEW NGM_QRY_JOIN_V AS
+        SELECT P, K, V FROM NGM_QRY_JOIN_A WHERE V >= 20;
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT A.P, A.K, A.V, B.P, B.V
+      FROM NGM_QRY_JOIN_A A,
+           NGM_QRY_JOIN_B B
+     WHERE A.K = B.K
+     ORDER BY A.K, A.P, B.P;
+
+    SELECT A.P, A.K, A.V, B.P, B.V
+      FROM NGM_QRY_JOIN_A A LEFT OUTER JOIN NGM_QRY_JOIN_B B
+        ON A.K = B.K
+     ORDER BY A.P, B.P;
+
+    SELECT P, K, V
+      FROM NGM_QRY_JOIN_A
+     WHERE K IN (SELECT K FROM NGM_QRY_JOIN_B WHERE V < 500)
+     ORDER BY K, P;
+
+    SELECT A.P, A.K, A.V
+      FROM NGM_QRY_JOIN_A A
+     WHERE EXISTS
+           (SELECT 1 FROM NGM_QRY_JOIN_B B
+             WHERE B.K = A.K AND B.V > A.V)
+     ORDER BY A.K, A.P;
+
+    SELECT V.P, V.K, V.V, B.V
+      FROM NGM_QRY_JOIN_V V,
+           NGM_QRY_JOIN_B B
+     WHERE V.K = B.K
+     ORDER BY V.K, V.P;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP VIEW NGM_QRY_JOIN_V;
+    DROP TABLE NGM_QRY_JOIN_A;
+    DROP TABLE NGM_QRY_JOIN_B;
+    SKIP END;
+}
+

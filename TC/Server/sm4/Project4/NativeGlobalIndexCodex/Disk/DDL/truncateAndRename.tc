@@ -1,0 +1,72 @@
+###########################################################################
+# TestCase Description = Rename and reuse a Disk index after table truncate.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_TRUNC;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DDL_TRUNC (P INTEGER, K INTEGER, V VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE UNIQUE INDEX NGD_DDL_TRUNC_OLD ON NGD_DDL_TRUNC(K);
+    CREATE INDEX NGD_DDL_TRUNC_LOCAL ON NGD_DDL_TRUNC(P) LOCAL;
+
+    INSERT INTO NGD_DDL_TRUNC VALUES (1, 101, 'BEFORE-A');
+    INSERT INTO NGD_DDL_TRUNC VALUES (11, 111, 'BEFORE-B');
+    INSERT INTO NGD_DDL_TRUNC VALUES (21, 121, 'BEFORE-C');
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER INDEX NGD_DDL_TRUNC_OLD RENAME TO NGD_DDL_TRUNC_NEW;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_TRUNC_%'
+     ORDER BY INDEX_NAME;
+
+    TRUNCATE TABLE NGD_DDL_TRUNC;
+
+    SELECT COUNT(*) AS ROW_COUNT_AFTER_TRUNCATE FROM NGD_DDL_TRUNC;
+
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_TRUNC_%'
+     ORDER BY INDEX_NAME;
+
+    INSERT INTO NGD_DDL_TRUNC VALUES (2, 101, 'AFTER-A');
+    INSERT INTO NGD_DDL_TRUNC VALUES (12, 111, 'AFTER-B');
+    INSERT INTO NGD_DDL_TRUNC VALUES (22, 121, 'AFTER-C');
+
+    SELECT /*+ INDEX(NGD_DDL_TRUNC, NGD_DDL_TRUNC_NEW) */ P, K, V
+      FROM NGD_DDL_TRUNC
+     ORDER BY K, P;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_TRUNC;
+    SKIP END;
+}
+

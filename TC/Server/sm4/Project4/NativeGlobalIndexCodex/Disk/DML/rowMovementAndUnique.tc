@@ -1,0 +1,63 @@
+###########################################################################
+# TestCase Description = Verify Disk row movement and global uniqueness.
+# Project ID           = NativeGlobalIndexCodex
+# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_MOVE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DML_MOVE
+    (
+        P INTEGER,
+        UKEY INTEGER,
+        V VARCHAR(16)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE UNIQUE INDEX NGD_DML_MOVE_U ON NGD_DML_MOVE(UKEY);
+
+    INSERT INTO NGD_DML_MOVE VALUES (1, 100, 'MOVE');
+    INSERT INTO NGD_DML_MOVE VALUES (11, 200, 'STAY');
+
+##################################
+SECTOR; TEST
+##################################
+    UPDATE NGD_DML_MOVE SET P = 21 WHERE UKEY = 100;
+
+    SELECT P, UKEY, V
+      FROM NGD_DML_MOVE
+     ORDER BY UKEY;
+
+    INSERT INTO NGD_DML_MOVE VALUES (5, 100, 'DUPLICATE');
+
+    SELECT /*+ INDEX(NGD_DML_MOVE, NGD_DML_MOVE_U) */
+           P, UKEY, V
+      FROM NGD_DML_MOVE
+     ORDER BY UKEY;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_MOVE;
+    SKIP END;
+}
+
