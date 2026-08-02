@@ -1,0 +1,72 @@
+###########################################################################
+# TestCase Description = Roll back Memory changes across partitions and indexes.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-TRX-003
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGM_TRX_ALL;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_TRX_ALL (P INTEGER, K1 VARCHAR(32), K2 INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE UNIQUE INDEX NGM_TRX_ALL_U ON NGM_TRX_ALL(K1)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_TRX_ALL_I ON NGM_TRX_ALL(K2 DESC)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_TRX_ALL VALUES (1, 'K-101', 301, 1);
+    INSERT INTO NGM_TRX_ALL VALUES (11, 'K-111', 311, 2);
+    INSERT INTO NGM_TRX_ALL VALUES (21, 'K-121', 321, 3);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT P, K1, K2, V FROM NGM_TRX_ALL ORDER BY K1;
+    AUTOCOMMIT OFF;
+    INSERT INTO NGM_TRX_ALL VALUES (5, 'K-105', 305, 4);
+    INSERT INTO NGM_TRX_ALL VALUES (15, 'K-115', 315, 5);
+    INSERT INTO NGM_TRX_ALL VALUES (25, 'K-125', 325, 6);
+    UPDATE NGM_TRX_ALL SET P = 22, K1 = 'K-201', K2 = 401
+     WHERE K1 = 'K-101';
+    DELETE FROM NGM_TRX_ALL WHERE K1 = 'K-111';
+    SELECT P, K1, K2, V FROM NGM_TRX_ALL ORDER BY K1;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+
+    SELECT /*+ INDEX(NGM_TRX_ALL, NGM_TRX_ALL_U) */ P, K1, K2, V
+      FROM NGM_TRX_ALL ORDER BY K1;
+    SELECT /*+ FULL SCAN(NGM_TRX_ALL) */ P, K1, K2, V
+      FROM NGM_TRX_ALL ORDER BY K1;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_TRX_ALL_I', 'NGM_TRX_ALL_U')
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP TABLE NGM_TRX_ALL;
+    SKIP END;
+}

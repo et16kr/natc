@@ -1,0 +1,63 @@
+###########################################################################
+# TestCase Description = Abort duplicate Disk unique builds without publication.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-CRT-006
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_CRT_DUP;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_CRT_DUP (P INTEGER, K INTEGER NOT NULL, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    INSERT INTO NGD_CRT_DUP VALUES (1, 100, 1);
+    INSERT INTO NGD_CRT_DUP VALUES (11, 100, 2);
+    INSERT INTO NGD_CRT_DUP VALUES (21, 200, 3);
+
+##################################
+SECTOR; TEST
+##################################
+    CREATE UNIQUE INDEX NGD_CRT_DUP_U ON NGD_CRT_DUP(K);
+    ALTER TABLE NGD_CRT_DUP
+        ADD CONSTRAINT NGD_CRT_DUP_UK UNIQUE(K);
+    ALTER TABLE NGD_CRT_DUP
+        ADD CONSTRAINT NGD_CRT_DUP_PK PRIMARY KEY(K);
+
+    SELECT COUNT(*) AS PARTIAL_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_CRT_DUP_U', 'NGD_CRT_DUP_UK', 'NGD_CRT_DUP_PK');
+    SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_CRT_DUP_%';
+    SELECT P, K, V FROM NGD_CRT_DUP ORDER BY P, V;
+
+    DELETE FROM NGD_CRT_DUP WHERE P = 11;
+    CREATE UNIQUE INDEX NGD_CRT_DUP_U ON NGD_CRT_DUP(K);
+    INSERT INTO NGD_CRT_DUP VALUES (11, 300, 4);
+    SELECT /*+ INDEX(NGD_CRT_DUP, NGD_CRT_DUP_U) */ P, K, V
+      FROM NGD_CRT_DUP ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_CRT_DUP;
+    SKIP END;
+}

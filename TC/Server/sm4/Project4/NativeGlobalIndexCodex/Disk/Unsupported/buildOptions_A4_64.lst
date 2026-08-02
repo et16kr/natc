@@ -1,0 +1,97 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject unsupported Disk native index build options.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_BUILD;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_NEG_BUILD (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGD_NEG_BUILD VALUES (1, 101);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_BUILD VALUES (11, 111);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_BUILD VALUES (21, 121);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> CREATE INDEX NGD_NEG_BUILD_NOLOG
+        ON NGD_NEG_BUILD(K)
+        NOLOGGING;
+[ERR-314AB : The specified option is not supported for a native disk global index.]
+
+$T0> CREATE INDEX NGD_NEG_BUILD_PAR
+        ON NGD_NEG_BUILD(K)
+        PARALLEL 2;
+[ERR-314AB : The specified option is not supported for a native disk global index.]
+
+$T0> CREATE INDEX NGD_NEG_BUILD_OK
+        ON NGD_NEG_BUILD(K);
+Create success.
+
+$T0> ALTER INDEX NGD_NEG_BUILD_OK DISABLE;
+[ERR-31001 : SQL syntax error 
+
+line 1: missing or invalid syntax
+ALTER INDEX NGD_NEG_BUILD_OK DISABLE
+                             ^     ^
+
+]
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_BUILD_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_NEG_BUILD_OK                                                                                                                  
+3           0           
+1 row selected.
+
+$T0> SELECT /*+ INDEX(NGD_NEG_BUILD, NGD_NEG_BUILD_OK) */ P, K
+      FROM NGD_NEG_BUILD
+     ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+21          121         
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_BUILD;
+$T0> SKIP END;
+

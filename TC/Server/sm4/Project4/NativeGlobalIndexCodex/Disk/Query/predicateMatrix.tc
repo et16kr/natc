@@ -1,7 +1,7 @@
 ###########################################################################
 # TestCase Description = Exercise Disk index predicates, binds, and ordering.
 # Project ID           = NativeGlobalIndexCodex
-# Prototype Status     = SourceOnly; tagged oracle pending server gate.
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
 ###########################################################################
 INCLUDE stdFunc.i;
 
@@ -60,7 +60,9 @@ SECTOR; TEST
      WHERE K IS NULL
      ORDER BY P;
 
-    SELECT /*+ INDEX(NGD_QRY_PRED, NGD_QRY_PRED_K) */ P, K, S, C
+    -- Host-variable execution follows
+    -- docs/manuals/altibase/trunk/eng/iSQL User's Manual.md.
+    PREPARE SELECT /*+ INDEX(NGD_QRY_PRED, NGD_QRY_PRED_K) */ P, K, S, C
       FROM NGD_QRY_PRED
      WHERE K BETWEEN :V_LOW AND :V_HIGH
      ORDER BY K, P;
@@ -102,4 +104,3 @@ SECTOR; FINALIZATION
     DROP TABLE NGD_QRY_PRED;
     SKIP END;
 }
-

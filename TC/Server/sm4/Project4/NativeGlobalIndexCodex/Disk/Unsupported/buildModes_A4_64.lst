@@ -1,0 +1,138 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject unsupported Disk native index build modes.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-NEG-006
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_MODE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_NEG_MODE (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_NEG_MODE_OK ON NGD_NEG_MODE(K);
+Create success.
+$T0> INSERT INTO NGD_NEG_MODE VALUES (1, 101, 201);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_MODE VALUES (11, 111, 211);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_MODE_%';
+BEFORE_INDEX_COUNT   
+-----------------------
+1                    
+1 row selected.
+
+$T0> CREATE INDEX NGD_NEG_MODE_TRY ON NGD_NEG_MODE(V) NOLOGGING FORCE;
+[ERR-314AB : The specified option is not supported for a native disk global index.]
+$T0> CREATE INDEX NGD_NEG_MODE_TRY ON NGD_NEG_MODE(V) NOLOGGING NOFORCE;
+[ERR-314AB : The specified option is not supported for a native disk global index.]
+$T0> CREATE INDEX NGD_NEG_MODE_TRY ON NGD_NEG_MODE(V) PARALLEL 2;
+[ERR-314AB : The specified option is not supported for a native disk global index.]
+
+$T0> SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_MODE_%';
+AFTER_REJECT_INDEX_COUNT 
+---------------------------
+1                    
+1 row selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_NEG_MODE_OK';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_NEG_MODE_OK                                                                                                                   
+3           0           
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_FALLBACK_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_NEG_MODE_%';
+HIDDEN_FALLBACK_COUNT 
+------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_FALLBACK_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGD_NEG_MODE_%'
+            OR INDEX_NAME LIKE '$GIR_NGD_NEG_MODE_%');
+HIDDEN_FALLBACK_INDEX_COUNT 
+------------------------------
+0                    
+1 row selected.
+$T0> SELECT /*+ INDEX(NGD_NEG_MODE, NGD_NEG_MODE_OK) */ P, K, V
+      FROM NGD_NEG_MODE ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         201         
+11          111         211         
+2 rows selected.
+$T0> DELETE FROM NGD_NEG_MODE WHERE P = 1;
+1 row deleted.
+$T0> INSERT INTO NGD_NEG_MODE VALUES (21, 121, 221);
+1 row inserted.
+$T0> SELECT /*+ INDEX(NGD_NEG_MODE, NGD_NEG_MODE_OK) */ P, K, V
+      FROM NGD_NEG_MODE ORDER BY K;
+P           K           V           
+----------------------------------------
+11          111         211         
+21          121         221         
+2 rows selected.
+
+$T0> CREATE INDEX NGD_NEG_MODE_TRY ON NGD_NEG_MODE(V);
+Create success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_MODE_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_NEG_MODE_OK                                                                                                                   
+3           0           
+NGD_NEG_MODE_TRY                                                                                                                  
+3           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_MODE;
+$T0> SKIP END;
+

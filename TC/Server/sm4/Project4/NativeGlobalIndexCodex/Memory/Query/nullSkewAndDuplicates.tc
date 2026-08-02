@@ -1,0 +1,54 @@
+###########################################################################
+# TestCase Description = Search Memory NULL, skew, and duplicate native keys.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-QRY-009
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_QRY_SKEW;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_QRY_SKEW (P INTEGER, K VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_QRY_SKEW_I ON NGM_QRY_SKEW(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_QRY_SKEW VALUES (1, NULL, 1);
+    INSERT INTO NGM_QRY_SKEW VALUES (2, NULL, 2);
+    INSERT INTO NGM_QRY_SKEW VALUES (3, 'HOT', 3);
+    INSERT INTO NGM_QRY_SKEW VALUES (11, 'HOT', 4);
+    INSERT INTO NGM_QRY_SKEW VALUES (12, 'HOT', 5);
+    INSERT INTO NGM_QRY_SKEW VALUES (21, 'COLD', 6);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT /*+ INDEX(NGM_QRY_SKEW, NGM_QRY_SKEW_I) */ P, K, V
+      FROM NGM_QRY_SKEW WHERE K = 'HOT' ORDER BY P, V;
+    SELECT /*+ FULL SCAN(NGM_QRY_SKEW) */ P, K, V
+      FROM NGM_QRY_SKEW WHERE K = 'HOT' ORDER BY P, V;
+    SELECT P, K, V FROM NGM_QRY_SKEW WHERE K IS NULL ORDER BY P, V;
+    SELECT K, COUNT(*) FROM NGM_QRY_SKEW
+     GROUP BY K ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_QRY_SKEW;
+    SKIP END;
+}

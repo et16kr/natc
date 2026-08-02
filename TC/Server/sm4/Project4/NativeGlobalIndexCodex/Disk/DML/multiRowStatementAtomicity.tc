@@ -1,0 +1,58 @@
+###########################################################################
+# TestCase Description = Keep Disk multi-row DML atomic on a unique error.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DML-006
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_ATOMIC_SRC;
+    DROP TABLE NGD_DML_ATOMIC;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DML_ATOMIC (P INTEGER, UKEY INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE TABLE NGD_DML_ATOMIC_SRC (P INTEGER, UKEY INTEGER, V INTEGER)
+        TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE UNIQUE INDEX NGD_DML_ATOMIC_U ON NGD_DML_ATOMIC(UKEY);
+    INSERT INTO NGD_DML_ATOMIC VALUES (1, 100, 1);
+    INSERT INTO NGD_DML_ATOMIC VALUES (11, 200, 2);
+    INSERT INTO NGD_DML_ATOMIC_SRC VALUES (5, 300, 3);
+    INSERT INTO NGD_DML_ATOMIC_SRC VALUES (15, 100, 4);
+    INSERT INTO NGD_DML_ATOMIC_SRC VALUES (25, 400, 5);
+
+##################################
+SECTOR; TEST
+##################################
+    INSERT INTO NGD_DML_ATOMIC
+        SELECT P, UKEY, V FROM NGD_DML_ATOMIC_SRC;
+    SELECT P, UKEY, V FROM NGD_DML_ATOMIC ORDER BY UKEY;
+
+    UPDATE NGD_DML_ATOMIC SET UKEY = 500 WHERE UKEY IN (100, 200);
+    SELECT /*+ INDEX(NGD_DML_ATOMIC, NGD_DML_ATOMIC_U) */ P, UKEY, V
+      FROM NGD_DML_ATOMIC ORDER BY UKEY;
+    SELECT /*+ FULL SCAN(NGD_DML_ATOMIC) */ P, UKEY, V
+      FROM NGD_DML_ATOMIC ORDER BY UKEY;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_ATOMIC_SRC;
+    DROP TABLE NGD_DML_ATOMIC;
+    SKIP END;
+}

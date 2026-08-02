@@ -1,0 +1,54 @@
+###########################################################################
+# TestCase Description = Reuse a deleted Memory global unique key.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DML-010
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DML_REUSE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_DML_REUSE (P INTEGER, UKEY VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE UNIQUE INDEX NGM_DML_REUSE_U ON NGM_DML_REUSE(UKEY)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_DML_REUSE VALUES (1, 'K-100', 1);
+    INSERT INTO NGM_DML_REUSE VALUES (11, 'K-200', 2);
+
+##################################
+SECTOR; TEST
+##################################
+    DELETE FROM NGM_DML_REUSE WHERE UKEY = 'K-100';
+    SELECT P, UKEY, V FROM NGM_DML_REUSE ORDER BY UKEY;
+    INSERT INTO NGM_DML_REUSE VALUES (21, 'K-100', 3);
+    SELECT /*+ INDEX(NGM_DML_REUSE, NGM_DML_REUSE_U) */ P, UKEY, V
+      FROM NGM_DML_REUSE ORDER BY UKEY;
+    DELETE FROM NGM_DML_REUSE WHERE UKEY = 'K-100';
+    INSERT INTO NGM_DML_REUSE VALUES (5, 'K-100', 4);
+    SELECT /*+ FULL SCAN(NGM_DML_REUSE) */ P, UKEY, V
+      FROM NGM_DML_REUSE ORDER BY UKEY;
+    INSERT INTO NGM_DML_REUSE VALUES (15, 'K-100', 5);
+    SELECT UKEY, COUNT(*) FROM NGM_DML_REUSE GROUP BY UKEY ORDER BY UKEY;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DML_REUSE;
+    SKIP END;
+}

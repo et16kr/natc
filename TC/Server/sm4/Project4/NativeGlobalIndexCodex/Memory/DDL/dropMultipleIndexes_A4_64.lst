@@ -1,0 +1,94 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Drop several Memory native indexes and cascade the table.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DDL-009
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_DROP_MANY;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DDL_DROP_MANY
+    (P INTEGER, K1 VARCHAR(16), K2 VARCHAR(16), K3 VARCHAR(16))
+    PARTITION BY HASH(P)
+    (PARTITION P1, PARTITION P2, PARTITION P3)
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DDL_DROP_I1 ON NGM_DDL_DROP_MANY(K1) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DDL_DROP_I2 ON NGM_DDL_DROP_MANY(K2) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DDL_DROP_I3 ON NGM_DDL_DROP_MANY(K3) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_DDL_DROP_MANY VALUES (1, 'A-101', 'B-201', 'C-301');
+1 row inserted.
+$T0> INSERT INTO NGM_DDL_DROP_MANY VALUES (2, 'A-102', 'B-202', 'C-302');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> DROP INDEX NGM_DDL_DROP_I1;
+Drop success.
+$T0> DROP INDEX NGM_DDL_DROP_I2;
+Drop success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_DDL_DROP_I%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_DDL_DROP_I3                                                                                                                   
+2           0           
+1 row selected.
+$T0> SELECT /*+ INDEX(NGM_DDL_DROP_MANY, NGM_DDL_DROP_I3) */ P, K1, K2, K3
+      FROM NGM_DDL_DROP_MANY ORDER BY K3;
+P           K1                K2                K3                
+-----------------------------------------------------------------------
+2           A-102             B-202             C-302             
+1           A-101             B-201             C-301             
+2 rows selected.
+$T0> DROP TABLE NGM_DDL_DROP_MANY;
+Drop success.
+$T0> SELECT COUNT(*) AS REMAINING_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_DDL_DROP_I%';
+REMAINING_INDEX_COUNT 
+------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGM_DDL_DROP_I%';
+HIDDEN_TABLE_COUNT   
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_DROP_MANY;
+$T0> SKIP END;
+

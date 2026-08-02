@@ -1,0 +1,93 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve a Memory index across column changes.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_SCHEMA;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DDL_SCHEMA
+    (
+        P INTEGER,
+        K VARCHAR(16),
+        V INTEGER,
+        SPARE INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_DDL_SCHEMA_I ON NGM_DDL_SCHEMA(K, V DESC);
+Create success.
+
+$T0> INSERT INTO NGM_DDL_SCHEMA VALUES (1, 'K-101', 1, 1001);
+1 row inserted.
+$T0> INSERT INTO NGM_DDL_SCHEMA VALUES (11, 'K-111', 2, 1011);
+1 row inserted.
+$T0> INSERT INTO NGM_DDL_SCHEMA VALUES (21, 'K-121', 3, 1021);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER TABLE NGM_DDL_SCHEMA ADD COLUMN (NOTE VARCHAR(16));
+Alter success.
+$T0> UPDATE NGM_DDL_SCHEMA SET NOTE = 'ADDED';
+3 rows updated.
+
+$T0> ALTER TABLE NGM_DDL_SCHEMA RENAME COLUMN K TO K_NEW;
+Alter success.
+$T0> ALTER TABLE NGM_DDL_SCHEMA DROP COLUMN (SPARE);
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_DDL_SCHEMA_I ).]
+
+$T0> SELECT /*+ INDEX(NGM_DDL_SCHEMA, NGM_DDL_SCHEMA_I) */
+           P, K_NEW, V, NOTE
+      FROM NGM_DDL_SCHEMA
+     WHERE K_NEW BETWEEN 'K-100' AND 'K-120'
+     ORDER BY K_NEW, V DESC;
+P           K_NEW             V           NOTE              
+-----------------------------------------------------------------
+1           K-101             1           ADDED             
+11          K-111             2           ADDED             
+2 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_DDL_SCHEMA_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_DDL_SCHEMA_I                                                                                                                  
+2           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_SCHEMA;
+$T0> SKIP END;
+

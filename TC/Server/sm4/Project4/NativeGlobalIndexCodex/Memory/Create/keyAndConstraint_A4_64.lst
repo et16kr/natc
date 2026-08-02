@@ -1,0 +1,115 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Create Memory native indexes for variable keys.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_KEY;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_KEY
+    (
+        P INTEGER,
+        ID INTEGER NOT NULL,
+        UKEY VARCHAR(64),
+        CKEY CHAR(8),
+        VKEY VARCHAR(128)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> ALTER TABLE NGM_CRT_KEY
+        ADD CONSTRAINT NGM_CRT_KEY_PK PRIMARY KEY(ID);
+Alter success.
+
+$T0> ALTER TABLE NGM_CRT_KEY
+        ADD CONSTRAINT NGM_CRT_KEY_UK UNIQUE(UKEY);
+Alter success.
+
+$T0> CREATE INDEX NGM_CRT_KEY_I
+        ON NGM_CRT_KEY(CKEY ASC, VKEY DESC)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_CRT_KEY
+        VALUES (1, 1, 'U-ALPHA', 'A', 'ALPHA-ALPHA-ALPHA');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_KEY
+        VALUES (11, 2, 'U-BETA', 'B', 'BETA-BETA-BETA');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_KEY
+        VALUES (21, 3, NULL, 'C', NULL);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT P, ID, UKEY, CKEY, VKEY
+      FROM NGM_CRT_KEY
+     ORDER BY CKEY, VKEY DESC, ID;
+P           ID          
+---------------------------
+UKEY                                                              CKEY      
+-------------------------------------------------------------------------------
+VKEY                                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------
+1           1           
+U-ALPHA                                                           A         
+ALPHA-ALPHA-ALPHA                                                                                                                 
+11          2           
+U-BETA                                                            B         
+BETA-BETA-BETA                                                                                                                    
+21          3           
+                                                                  C         
+                                                                                                                                  
+3 rows selected.
+
+$T0> SELECT INDEX_NAME,
+           INDEX_IMPL_TYPE,
+           INDEX_TABLE_ID,
+           IS_UNIQUE
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGM_CRT_KEY_PK', 'NGM_CRT_KEY_UK', 'NGM_CRT_KEY_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID IS_UNIQUE  
+----------------------------------------------
+NGM_CRT_KEY_I                                                                                                                     
+2           0           F  
+NGM_CRT_KEY_PK                                                                                                                    
+2           0           T  
+NGM_CRT_KEY_UK                                                                                                                    
+2           0           T  
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_KEY;
+$T0> SKIP END;
+

@@ -1,0 +1,79 @@
+###########################################################################
+# TestCase Description = Reject unsupported index types for a Disk native global index.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-NEG-004
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_TYPE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_NEG_TYPE (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_NEG_TYPE_OK ON NGD_NEG_TYPE(K) INDEXTYPE IS BTREE;
+    INSERT INTO NGD_NEG_TYPE VALUES (1, 101, 201);
+    INSERT INTO NGD_NEG_TYPE VALUES (11, 111, 211);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_TYPE_%';
+
+    CREATE INDEX NGD_NEG_TYPE_TRY ON NGD_NEG_TYPE(V) INDEXTYPE IS RTREE;
+    CREATE INDEX NGD_NEG_TYPE_TRY ON NGD_NEG_TYPE(V) INDEXTYPE IS TDRTREE;
+
+    SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_TYPE_%';
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_NEG_TYPE_OK';
+    SELECT COUNT(*) AS HIDDEN_FALLBACK_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_NEG_TYPE_%';
+    SELECT COUNT(*) AS HIDDEN_FALLBACK_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGD_NEG_TYPE_%'
+            OR INDEX_NAME LIKE '$GIR_NGD_NEG_TYPE_%');
+    SELECT /*+ INDEX(NGD_NEG_TYPE, NGD_NEG_TYPE_OK) */ P, K, V
+      FROM NGD_NEG_TYPE ORDER BY K;
+    INSERT INTO NGD_NEG_TYPE VALUES (21, 121, 221);
+    SELECT /*+ INDEX(NGD_NEG_TYPE, NGD_NEG_TYPE_OK) */ P, K, V
+      FROM NGD_NEG_TYPE ORDER BY K;
+
+    CREATE INDEX NGD_NEG_TYPE_TRY ON NGD_NEG_TYPE(V);
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_TYPE_%'
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_TYPE;
+    SKIP END;
+}

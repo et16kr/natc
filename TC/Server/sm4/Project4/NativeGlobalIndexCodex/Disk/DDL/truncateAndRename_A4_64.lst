@@ -1,0 +1,115 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Rename and reuse a Disk index after table truncate.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_TRUNC;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DDL_TRUNC (P INTEGER, K INTEGER, V VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE UNIQUE INDEX NGD_DDL_TRUNC_OLD ON NGD_DDL_TRUNC(K);
+Create success.
+$T0> CREATE INDEX NGD_DDL_TRUNC_LOCAL ON NGD_DDL_TRUNC(P) LOCAL;
+Create success.
+
+$T0> INSERT INTO NGD_DDL_TRUNC VALUES (1, 101, 'BEFORE-A');
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC VALUES (11, 111, 'BEFORE-B');
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC VALUES (21, 121, 'BEFORE-C');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER INDEX NGD_DDL_TRUNC_OLD RENAME TO NGD_DDL_TRUNC_NEW;
+Alter success.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_TRUNC_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID IS_PARTITIONED  
+---------------------------------------------------
+NGD_DDL_TRUNC_LOCAL                                                                                                               
+0           0           T  
+NGD_DDL_TRUNC_NEW                                                                                                                 
+3           0           F  
+2 rows selected.
+
+$T0> TRUNCATE TABLE NGD_DDL_TRUNC;
+Truncate success.
+
+$T0> SELECT COUNT(*) AS ROW_COUNT_AFTER_TRUNCATE FROM NGD_DDL_TRUNC;
+ROW_COUNT_AFTER_TRUNCATE 
+---------------------------
+0                    
+1 row selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_TRUNC_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID IS_PARTITIONED  
+---------------------------------------------------
+NGD_DDL_TRUNC_LOCAL                                                                                                               
+0           0           T  
+NGD_DDL_TRUNC_NEW                                                                                                                 
+3           0           F  
+2 rows selected.
+
+$T0> INSERT INTO NGD_DDL_TRUNC VALUES (2, 101, 'AFTER-A');
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC VALUES (12, 111, 'AFTER-B');
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC VALUES (22, 121, 'AFTER-C');
+1 row inserted.
+
+$T0> SELECT /*+ INDEX(NGD_DDL_TRUNC, NGD_DDL_TRUNC_NEW) */ P, K, V
+      FROM NGD_DDL_TRUNC
+     ORDER BY K, P;
+P           K           V                 
+----------------------------------------------
+2           101         AFTER-A           
+12          111         AFTER-B           
+22          121         AFTER-C           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_TRUNC;
+$T0> SKIP END;
+

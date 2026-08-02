@@ -1,0 +1,88 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Repeatedly move one Disk row across partitions.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DML-007
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DML_REPEAT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DML_REPEAT (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) ENABLE ROW MOVEMENT TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE UNIQUE INDEX NGD_DML_REPEAT_U ON NGD_DML_REPEAT(K);
+Create success.
+$T0> INSERT INTO NGD_DML_REPEAT VALUES (1, 100, 1);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> UPDATE NGD_DML_REPEAT SET P = 11, V = 2 WHERE K = 100;
+1 row updated.
+$T0> SELECT P, K, V FROM NGD_DML_REPEAT ORDER BY K;
+P           K           V           
+----------------------------------------
+11          100         2           
+1 row selected.
+$T0> UPDATE NGD_DML_REPEAT SET P = 21, V = 3 WHERE K = 100;
+1 row updated.
+$T0> SELECT P, K, V FROM NGD_DML_REPEAT ORDER BY K;
+P           K           V           
+----------------------------------------
+21          100         3           
+1 row selected.
+$T0> UPDATE NGD_DML_REPEAT SET P = 5, V = 4 WHERE K = 100;
+1 row updated.
+$T0> SELECT P, K, V FROM NGD_DML_REPEAT ORDER BY K;
+P           K           V           
+----------------------------------------
+5           100         4           
+1 row selected.
+
+$T0> SELECT /*+ INDEX(NGD_DML_REPEAT, NGD_DML_REPEAT_U) */ P, K, V
+      FROM NGD_DML_REPEAT WHERE K = 100 ORDER BY P;
+P           K           V           
+----------------------------------------
+5           100         4           
+1 row selected.
+$T0> SELECT /*+ FULL SCAN(NGD_DML_REPEAT) */ P, K, V
+      FROM NGD_DML_REPEAT WHERE K = 100 ORDER BY P;
+P           K           V           
+----------------------------------------
+5           100         4           
+1 row selected.
+$T0> SELECT K, COUNT(*) FROM NGD_DML_REPEAT GROUP BY K ORDER BY K;
+K           COUNT                
+------------------------------------
+100         1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DML_REPEAT;
+$T0> SKIP END;
+

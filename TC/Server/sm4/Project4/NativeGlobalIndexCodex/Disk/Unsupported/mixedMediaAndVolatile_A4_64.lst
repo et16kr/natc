@@ -1,0 +1,173 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject mixed-media and volatile Disk global indexes.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-NEG-008
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_VOL;
+$T0> DROP TABLE NGD_NEG_MIX;
+$T0> DROP TABLE NGD_NEG_MEDIA;
+$T0> DROP TABLESPACE NGD_NEG_VOL_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_NEG_MEDIA (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_NEG_MEDIA_OK ON NGD_NEG_MEDIA(K);
+Create success.
+$T0> INSERT INTO NGD_NEG_MEDIA VALUES (1, 101, 201);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_MEDIA VALUES (11, 111, 211);
+1 row inserted.
+
+$T0> CREATE TABLE NGD_NEG_MIX (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10) TABLESPACE SYS_TBS_DISK_DATA,
+        PARTITION P2 VALUES LESS THAN (20) TABLESPACE SYS_TBS_MEM_DATA,
+        PARTITION PD VALUES DEFAULT TABLESPACE SYS_TBS_DISK_DATA
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> INSERT INTO NGD_NEG_MIX VALUES (1, 301);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_MIX VALUES (11, 311);
+1 row inserted.
+
+$T0> CREATE VOLATILE DATA TABLESPACE NGD_NEG_VOL_TS SIZE 32M AUTOEXTEND ON;
+Create success.
+$T0> CREATE TABLE NGD_NEG_VOL (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE NGD_NEG_VOL_TS;
+Create success.
+$T0> INSERT INTO NGD_NEG_VOL VALUES (1, 401);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_NEG_MEDIA_OK', 'NGD_NEG_MIX_I', 'NGD_NEG_VOL_I');
+BEFORE_INDEX_COUNT   
+-----------------------
+1                    
+1 row selected.
+
+$T0> CREATE INDEX NGD_NEG_MIX_I ON NGD_NEG_MIX(K);
+[ERR-3143A : It is unsupported for the hybrid partitioned tables.]
+$T0> CREATE INDEX NGD_NEG_VOL_I ON NGD_NEG_VOL(K);
+[ERR-3143A : It is unsupported for the hybrid partitioned tables.]
+
+$T0> SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_NEG_MEDIA_OK', 'NGD_NEG_MIX_I', 'NGD_NEG_VOL_I');
+AFTER_REJECT_INDEX_COUNT 
+---------------------------
+1                    
+1 row selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_NEG_MEDIA_OK';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_NEG_MEDIA_OK                                                                                                                  
+3           0           
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_FALLBACK_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND (TABLE_NAME LIKE '$GIT_NGD_NEG_MIX_%'
+            OR TABLE_NAME LIKE '$GIT_NGD_NEG_VOL_%');
+HIDDEN_FALLBACK_COUNT 
+------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_FALLBACK_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGD_NEG_MIX_%'
+            OR INDEX_NAME LIKE '$GIR_NGD_NEG_MIX_%'
+            OR INDEX_NAME LIKE '$GIK_NGD_NEG_VOL_%'
+            OR INDEX_NAME LIKE '$GIR_NGD_NEG_VOL_%');
+HIDDEN_FALLBACK_INDEX_COUNT 
+------------------------------
+0                    
+1 row selected.
+$T0> SELECT /*+ INDEX(NGD_NEG_MEDIA, NGD_NEG_MEDIA_OK) */ P, K, V
+      FROM NGD_NEG_MEDIA ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         201         
+11          111         211         
+2 rows selected.
+$T0> INSERT INTO NGD_NEG_MEDIA VALUES (21, 121, 221);
+1 row inserted.
+$T0> SELECT /*+ INDEX(NGD_NEG_MEDIA, NGD_NEG_MEDIA_OK) */ P, K, V
+      FROM NGD_NEG_MEDIA ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         201         
+11          111         211         
+21          121         221         
+3 rows selected.
+
+$T0> CREATE INDEX NGD_NEG_MIX_I ON NGD_NEG_MEDIA(V);
+Create success.
+$T0> CREATE INDEX NGD_NEG_VOL_I ON NGD_NEG_MEDIA(P);
+Create success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_NEG_MEDIA_OK', 'NGD_NEG_MIX_I', 'NGD_NEG_VOL_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_NEG_MEDIA_OK                                                                                                                  
+3           0           
+NGD_NEG_MIX_I                                                                                                                     
+3           0           
+NGD_NEG_VOL_I                                                                                                                     
+3           0           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_VOL;
+$T0> DROP TABLE NGD_NEG_MIX;
+$T0> DROP TABLE NGD_NEG_MEDIA;
+$T0> DROP TABLESPACE NGD_NEG_VOL_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

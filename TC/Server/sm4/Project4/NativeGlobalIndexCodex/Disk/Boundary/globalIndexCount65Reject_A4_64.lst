@@ -1,0 +1,264 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject the 65th Disk native global index atomically.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-BND-003
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_BND_65;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_BND_65
+    (
+        P INTEGER,
+        V INTEGER,
+        K1 INTEGER, K2 INTEGER, K3 INTEGER, K4 INTEGER,
+        K5 INTEGER, K6 INTEGER, K7 INTEGER, K8 INTEGER,
+        K9 INTEGER, K10 INTEGER, K11 INTEGER, K12 INTEGER,
+        K13 INTEGER, K14 INTEGER, K15 INTEGER, K16 INTEGER,
+        K17 INTEGER, K18 INTEGER, K19 INTEGER, K20 INTEGER,
+        K21 INTEGER, K22 INTEGER, K23 INTEGER, K24 INTEGER,
+        K25 INTEGER, K26 INTEGER, K27 INTEGER, K28 INTEGER,
+        K29 INTEGER, K30 INTEGER, K31 INTEGER, K32 INTEGER,
+        K33 INTEGER, K34 INTEGER, K35 INTEGER, K36 INTEGER,
+        K37 INTEGER, K38 INTEGER, K39 INTEGER, K40 INTEGER,
+        K41 INTEGER, K42 INTEGER, K43 INTEGER, K44 INTEGER,
+        K45 INTEGER, K46 INTEGER, K47 INTEGER, K48 INTEGER,
+        K49 INTEGER, K50 INTEGER, K51 INTEGER, K52 INTEGER,
+        K53 INTEGER, K54 INTEGER, K55 INTEGER, K56 INTEGER,
+        K57 INTEGER, K58 INTEGER, K59 INTEGER, K60 INTEGER,
+        K61 INTEGER, K62 INTEGER, K63 INTEGER, K64 INTEGER,
+        K65 INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I1 ON NGD_BND_65(K1);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I2 ON NGD_BND_65(K2);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I3 ON NGD_BND_65(K3);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I4 ON NGD_BND_65(K4);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I5 ON NGD_BND_65(K5);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I6 ON NGD_BND_65(K6);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I7 ON NGD_BND_65(K7);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I8 ON NGD_BND_65(K8);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I9 ON NGD_BND_65(K9);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I10 ON NGD_BND_65(K10);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I11 ON NGD_BND_65(K11);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I12 ON NGD_BND_65(K12);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I13 ON NGD_BND_65(K13);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I14 ON NGD_BND_65(K14);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I15 ON NGD_BND_65(K15);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I16 ON NGD_BND_65(K16);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I17 ON NGD_BND_65(K17);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I18 ON NGD_BND_65(K18);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I19 ON NGD_BND_65(K19);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I20 ON NGD_BND_65(K20);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I21 ON NGD_BND_65(K21);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I22 ON NGD_BND_65(K22);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I23 ON NGD_BND_65(K23);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I24 ON NGD_BND_65(K24);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I25 ON NGD_BND_65(K25);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I26 ON NGD_BND_65(K26);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I27 ON NGD_BND_65(K27);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I28 ON NGD_BND_65(K28);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I29 ON NGD_BND_65(K29);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I30 ON NGD_BND_65(K30);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I31 ON NGD_BND_65(K31);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I32 ON NGD_BND_65(K32);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I33 ON NGD_BND_65(K33);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I34 ON NGD_BND_65(K34);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I35 ON NGD_BND_65(K35);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I36 ON NGD_BND_65(K36);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I37 ON NGD_BND_65(K37);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I38 ON NGD_BND_65(K38);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I39 ON NGD_BND_65(K39);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I40 ON NGD_BND_65(K40);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I41 ON NGD_BND_65(K41);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I42 ON NGD_BND_65(K42);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I43 ON NGD_BND_65(K43);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I44 ON NGD_BND_65(K44);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I45 ON NGD_BND_65(K45);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I46 ON NGD_BND_65(K46);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I47 ON NGD_BND_65(K47);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I48 ON NGD_BND_65(K48);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I49 ON NGD_BND_65(K49);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I50 ON NGD_BND_65(K50);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I51 ON NGD_BND_65(K51);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I52 ON NGD_BND_65(K52);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I53 ON NGD_BND_65(K53);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I54 ON NGD_BND_65(K54);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I55 ON NGD_BND_65(K55);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I56 ON NGD_BND_65(K56);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I57 ON NGD_BND_65(K57);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I58 ON NGD_BND_65(K58);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I59 ON NGD_BND_65(K59);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I60 ON NGD_BND_65(K60);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I61 ON NGD_BND_65(K61);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I62 ON NGD_BND_65(K62);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I63 ON NGD_BND_65(K63);
+Create success.
+$T0> CREATE INDEX NGD_BND_65_I64 ON NGD_BND_65(K64);
+Create success.
+$T0> INSERT INTO NGD_BND_65(P, V, K32, K65) VALUES (1, 1, 100, 165);
+1 row inserted.
+$T0> INSERT INTO NGD_BND_65(P, V, K32, K65) VALUES (11, 2, 200, 265);
+1 row inserted.
+$T0> INSERT INTO NGD_BND_65(P, V, K32, K65) VALUES (21, 3, 300, 365);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME LIKE 'NGD_BND_65_I%';
+BEFORE_INDEX_COUNT   
+-----------------------
+64                   
+1 row selected.
+$T0> CREATE INDEX NGD_BND_65_I65 ON NGD_BND_65(K65);
+[ERR-11065 : The number of indices in the table exceeds the limit(64).]
+$T0> SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME LIKE 'NGD_BND_65_I%';
+AFTER_REJECT_INDEX_COUNT 
+---------------------------
+64                   
+1 row selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_BND_65_I32';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_BND_65_I32                                                                                                                    
+3           0           
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID() AND TABLE_NAME LIKE '$GIT_NGD_BND_65_I%';
+HIDDEN_TABLE_COUNT   
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGD_BND_65_I%'
+            OR INDEX_NAME LIKE '$GIR_NGD_BND_65_I%');
+HIDDEN_INDEX_COUNT   
+-----------------------
+0                    
+1 row selected.
+$T0> UPDATE NGD_BND_65 SET V = V + 10 WHERE K32 = 200;
+1 row updated.
+$T0> SELECT /*+ INDEX(NGD_BND_65, NGD_BND_65_I32) */ P, K32, V
+      FROM NGD_BND_65 ORDER BY K32;
+P           K32         V           
+----------------------------------------
+1           100         1           
+11          200         12          
+21          300         3           
+3 rows selected.
+
+$T0> DROP INDEX NGD_BND_65_I64;
+Drop success.
+$T0> CREATE INDEX NGD_BND_65_I65 ON NGD_BND_65(K65);
+Create success.
+$T0> SELECT COUNT(*) AS REUSED_NAME_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME LIKE 'NGD_BND_65_I%';
+REUSED_NAME_INDEX_COUNT 
+--------------------------
+64                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_BND_65;
+$T0> SKIP END;
+

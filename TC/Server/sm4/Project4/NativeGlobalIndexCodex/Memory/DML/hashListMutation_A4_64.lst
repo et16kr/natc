@@ -1,0 +1,120 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Mutate Memory hash/list participants and index keys.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DML_KIND_H;
+$T0> DROP TABLE NGM_DML_KIND_L;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DML_KIND_H (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_DML_KIND_L (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY LIST(P)
+    (
+        PARTITION P1 VALUES (1, 2),
+        PARTITION P2 VALUES (3, 4),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_DML_KIND_H_I ON NGM_DML_KIND_H(K);
+Create success.
+$T0> CREATE INDEX NGM_DML_KIND_L_I ON NGM_DML_KIND_L(K);
+Create success.
+
+$T0> INSERT INTO NGM_DML_KIND_H VALUES (1, 'H-101', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_H VALUES (2, 'H-102', 2);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_H VALUES (3, 'H-103', 3);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_H VALUES (4, 'H-104', 4);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_L VALUES (1, 'L-201', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_L VALUES (2, 'L-202', 2);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_L VALUES (3, 'L-203', 3);
+1 row inserted.
+$T0> INSERT INTO NGM_DML_KIND_L VALUES (9, 'L-209', 9);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> UPDATE NGM_DML_KIND_H
+       SET P = P + 10, K = K || '-M'
+     WHERE K = 'H-101';
+1 row updated.
+
+$T0> UPDATE NGM_DML_KIND_L
+       SET P = 3, K = K || '-M'
+     WHERE K = 'L-201';
+1 row updated.
+
+$T0> UPDATE NGM_DML_KIND_H SET V = V + 100 WHERE K = 'H-103';
+1 row updated.
+$T0> UPDATE NGM_DML_KIND_L SET V = V + 100 WHERE K = 'L-209';
+1 row updated.
+
+$T0> DELETE FROM NGM_DML_KIND_H WHERE K = 'H-102';
+1 row deleted.
+$T0> DELETE FROM NGM_DML_KIND_L WHERE K = 'L-202';
+1 row deleted.
+
+$T0> SELECT /*+ INDEX(NGM_DML_KIND_H, NGM_DML_KIND_H_I) */ P, K, V
+      FROM NGM_DML_KIND_H
+     ORDER BY K, P;
+P           K                 V           
+----------------------------------------------
+11          H-101-M           1           
+3           H-103             103         
+4           H-104             4           
+3 rows selected.
+
+$T0> SELECT /*+ INDEX(NGM_DML_KIND_L, NGM_DML_KIND_L_I) */ P, K, V
+      FROM NGM_DML_KIND_L
+     ORDER BY K, P;
+P           K                 V           
+----------------------------------------------
+3           L-201-M           1           
+3           L-203             3           
+9           L-209             109         
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DML_KIND_H;
+$T0> DROP TABLE NGM_DML_KIND_L;
+$T0> SKIP END;
+

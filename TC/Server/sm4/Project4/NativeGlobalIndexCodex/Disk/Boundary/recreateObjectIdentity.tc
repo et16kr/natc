@@ -1,0 +1,57 @@
+###########################################################################
+# TestCase Description = Recreate a Disk native index without stale identity.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-BND-006
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_BND_RECREATE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_BND_RECREATE (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    INSERT INTO NGD_BND_RECREATE VALUES (1, 101, 1);
+    INSERT INTO NGD_BND_RECREATE VALUES (11, 111, 2);
+    INSERT INTO NGD_BND_RECREATE VALUES (21, 121, 3);
+
+##################################
+SECTOR; TEST
+##################################
+    LOOP 5
+    {
+        CREATE INDEX NGD_BND_RECREATE_I ON NGD_BND_RECREATE(K);
+        UPDATE NGD_BND_RECREATE SET K = K + 1, V = V + 1 WHERE P = 11;
+        SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+          FROM SYSTEM_.SYS_INDICES_
+         WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_BND_RECREATE_I';
+        DROP INDEX NGD_BND_RECREATE_I;
+        SELECT COUNT(*) AS DROPPED_INDEX_COUNT
+          FROM SYSTEM_.SYS_INDICES_
+         WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_BND_RECREATE_I';
+    }
+    CREATE INDEX NGD_BND_RECREATE_I ON NGD_BND_RECREATE(K);
+    SELECT /*+ INDEX(NGD_BND_RECREATE, NGD_BND_RECREATE_I) */ P, K, V
+      FROM NGD_BND_RECREATE ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_BND_RECREATE;
+    SKIP END;
+}

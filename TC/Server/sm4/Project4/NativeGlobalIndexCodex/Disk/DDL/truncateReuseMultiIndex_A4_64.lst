@@ -1,0 +1,102 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reuse several Disk native indexes after TRUNCATE.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DDL-010
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_TRUNC_M;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DDL_TRUNC_M (P INTEGER, K1 INTEGER, K2 INTEGER, K3 INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE UNIQUE INDEX NGD_DDL_TRUNC_U ON NGD_DDL_TRUNC_M(K1);
+Create success.
+$T0> CREATE INDEX NGD_DDL_TRUNC_I2 ON NGD_DDL_TRUNC_M(K2);
+Create success.
+$T0> CREATE INDEX NGD_DDL_TRUNC_I3 ON NGD_DDL_TRUNC_M(K3 DESC);
+Create success.
+$T0> INSERT INTO NGD_DDL_TRUNC_M VALUES (1, 101, 201, 301);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC_M VALUES (11, 111, 211, 311);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC_M VALUES (21, 121, 221, 321);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> TRUNCATE TABLE NGD_DDL_TRUNC_M;
+Truncate success.
+$T0> SELECT COUNT(*) FROM NGD_DDL_TRUNC_M;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_TRUNC_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_DDL_TRUNC_I2                                                                                                                  
+3           0           
+NGD_DDL_TRUNC_I3                                                                                                                  
+3           0           
+NGD_DDL_TRUNC_U                                                                                                                   
+3           0           
+3 rows selected.
+$T0> INSERT INTO NGD_DDL_TRUNC_M VALUES (5, 105, 205, 305);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC_M VALUES (15, 115, 215, 315);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_TRUNC_M VALUES (25, 125, 225, 325);
+1 row inserted.
+$T0> SELECT /*+ INDEX(NGD_DDL_TRUNC_M, NGD_DDL_TRUNC_U) */ P, K1, K2, K3
+      FROM NGD_DDL_TRUNC_M ORDER BY K1;
+P           K1          K2          K3          
+-----------------------------------------------------
+5           105         205         305         
+15          115         215         315         
+25          125         225         325         
+3 rows selected.
+$T0> SELECT /*+ INDEX(NGD_DDL_TRUNC_M, NGD_DDL_TRUNC_I3) */ P, K1, K2, K3
+      FROM NGD_DDL_TRUNC_M ORDER BY K3 DESC;
+P           K1          K2          K3          
+-----------------------------------------------------
+25          125         225         325         
+15          115         215         315         
+5           105         205         305         
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_TRUNC_M;
+$T0> SKIP END;
+

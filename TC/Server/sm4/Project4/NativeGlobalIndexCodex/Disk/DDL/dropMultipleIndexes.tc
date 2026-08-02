@@ -1,0 +1,60 @@
+###########################################################################
+# TestCase Description = Drop several Disk native indexes and cascade the table.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DDL-009
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_DROP_MANY;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DDL_DROP_MANY
+    (P INTEGER, K1 INTEGER, K2 INTEGER, K3 INTEGER)
+    PARTITION BY HASH(P)
+    (PARTITION P1, PARTITION P2, PARTITION P3)
+    TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_DDL_DROP_I1 ON NGD_DDL_DROP_MANY(K1);
+    CREATE INDEX NGD_DDL_DROP_I2 ON NGD_DDL_DROP_MANY(K2);
+    CREATE INDEX NGD_DDL_DROP_I3 ON NGD_DDL_DROP_MANY(K3);
+    INSERT INTO NGD_DDL_DROP_MANY VALUES (1, 101, 201, 301);
+    INSERT INTO NGD_DDL_DROP_MANY VALUES (2, 102, 202, 302);
+
+##################################
+SECTOR; TEST
+##################################
+    DROP INDEX NGD_DDL_DROP_I1;
+    DROP INDEX NGD_DDL_DROP_I2;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_DROP_I%'
+     ORDER BY INDEX_NAME;
+    SELECT /*+ INDEX(NGD_DDL_DROP_MANY, NGD_DDL_DROP_I3) */ P, K1, K2, K3
+      FROM NGD_DDL_DROP_MANY ORDER BY K3;
+    DROP TABLE NGD_DDL_DROP_MANY;
+    SELECT COUNT(*) AS REMAINING_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_DROP_I%';
+    SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_DDL_DROP_I%';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_DROP_MANY;
+    SKIP END;
+}

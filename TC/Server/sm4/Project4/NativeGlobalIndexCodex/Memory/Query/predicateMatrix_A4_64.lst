@@ -1,0 +1,245 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Exercise Memory predicates, binds, and ordering.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGM_QRY_PRED;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> VAR V_LOW INTEGER;
+$T0> VAR V_HIGH INTEGER;
+$T0> EXEC :V_LOW := 3;
+Execute success.
+$T0> EXEC :V_HIGH := 7;
+Execute success.
+
+$T0> CREATE TABLE NGM_QRY_PRED
+    (
+        P INTEGER,
+        K INTEGER,
+        S VARCHAR(16),
+        C INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_QRY_PRED_K ON NGM_QRY_PRED(K);
+Create success.
+$T0> CREATE INDEX NGM_QRY_PRED_SC ON NGM_QRY_PRED(S, C DESC);
+Create success.
+
+$T0> INSERT INTO NGM_QRY_PRED VALUES (1, 1, 'AA', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (2, 2, 'AB', 2);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (11, 3, 'AB', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (12, 4, 'AC', 4);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (21, 5, 'BA', 5);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (22, 6, 'BB', 6);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (23, 7, 'AB', 3);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_PRED VALUES (24, NULL, NULL, NULL);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+
+$T0> SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_K) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE K IS NULL
+     ORDER BY P;
+P           K           S                 C           
+-----------------------------------------------------------
+24                                                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_K, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> PREPARE SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_K) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE K BETWEEN :V_LOW AND :V_HIGH
+     ORDER BY K, P;
+P           K           S                 C           
+-----------------------------------------------------------
+11          3           AB                1           
+12          4           AC                4           
+21          5           BA                5           
+22          6           BB                6           
+23          7           AB                3           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, ACCESS: 5, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_K, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_K) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE K IN (1, 4, 7)
+     ORDER BY K, P;
+P           K           S                 C           
+-----------------------------------------------------------
+1           1           AA                1           
+12          4           AC                4           
+23          7           AB                3           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, ACCESS: 3, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_K, ACCESS: 3, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_SC) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE S LIKE 'A%'
+     ORDER BY S, C DESC, P;
+P           K           S                 C           
+-----------------------------------------------------------
+1           1           AA                1           
+23          7           AB                3           
+2           2           AB                2           
+11          3           AB                1           
+12          4           AC                4           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, ACCESS: 5, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_SC, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> SELECT /*+ INDEX(NGM_QRY_PRED, NGM_QRY_PRED_SC) */ P, K, S, C
+      FROM NGM_QRY_PRED
+     WHERE (S, C) IN
+           (SELECT 'AB', 1 FROM DUAL
+            UNION ALL
+            SELECT 'AB', 3 FROM DUAL)
+     ORDER BY S, C, P;
+P           K           S                 C           
+-----------------------------------------------------------
+11          3           AB                1           
+23          7           AB                3           
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, ACCESS: 2, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_SC, ACCESS: 2, COST: BLOCKED )
+   ::SUB-QUERY BEGIN
+   PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 8, COST: BLOCKED )
+    DISTINCT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, BUCKET_COUNT: 1024, ACCESS: 4, COST: BLOCKED )
+     VIEW ( ACCESS: 2, COST: BLOCKED )
+      PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 8, COST: BLOCKED )
+       VIEW ( ACCESS: 2, COST: BLOCKED )
+        BAG-UNION
+         PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 6, COST: BLOCKED )
+          SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+         PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 6, COST: BLOCKED )
+          SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   ::SUB-QUERY END
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> SELECT DISTINCT S, C
+      FROM NGM_QRY_PRED
+     ORDER BY S, C;
+S                 C           
+---------------------------------
+AA                1           
+AB                1           
+AB                2           
+AB                3           
+AC                4           
+BA                5           
+BB                6           
+                              
+8 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 24, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, ACCESS: 8, COST: BLOCKED )
+  GROUPING
+   PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_SC, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+    SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> SELECT S, COUNT(*) AS ROW_COUNT
+      FROM NGM_QRY_PRED
+     GROUP BY S
+     ORDER BY S;
+S                 ROW_COUNT            
+------------------------------------------
+AA                1                    
+AB                3                    
+AC                1                    
+BA                1                    
+BB                1                    
+                  1                    
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 32, COST: BLOCKED )
+ AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 6, COST: BLOCKED )
+  GROUPING
+   PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_PRED, PARTITION: 3/3, INDEX: SYS.NGM_QRY_PRED_SC, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+    SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGM_QRY_PRED;
+$T0> SKIP END;
+

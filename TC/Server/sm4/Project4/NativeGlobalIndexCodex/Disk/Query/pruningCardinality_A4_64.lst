@@ -1,0 +1,130 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Cover Disk pruning of zero, one, many, and all partitions.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-QRY-006
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_QRY_PRUNE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_QRY_PRUNE (P INTEGER, K INTEGER, V VARCHAR(8))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION P3 VALUES LESS THAN (30),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_QRY_PRUNE_I ON NGD_QRY_PRUNE(K);
+Create success.
+$T0> INSERT INTO NGD_QRY_PRUNE VALUES (1, 101, 'P1');
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_PRUNE VALUES (11, 111, 'P2');
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_PRUNE VALUES (21, 121, 'P3');
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_PRUNE VALUES (31, 131, 'PD');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT 'ZERO' AS SCOPE, COUNT(*) FROM NGD_QRY_PRUNE
+     WHERE P < 0 AND K >= 100;
+SCOPE  COUNT                
+-------------------------------
+ZERO  0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 16, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_PRUNE, PARTITION: 1/4, INDEX: SYS.NGD_QRY_PRUNE_I, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT 'ONE' AS SCOPE, COUNT(*) FROM NGD_QRY_PRUNE
+     WHERE P >= 10 AND P < 20 AND K >= 100;
+SCOPE  COUNT                
+-------------------------------
+ONE  1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 16, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_PRUNE, PARTITION: 1/4, INDEX: SYS.NGD_QRY_PRUNE_I, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT 'MANY' AS SCOPE, COUNT(*) FROM NGD_QRY_PRUNE
+     WHERE P < 30 AND K >= 100;
+SCOPE  COUNT                
+-------------------------------
+MANY  3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 16, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_PRUNE, PARTITION: 3/4, INDEX: SYS.NGD_QRY_PRUNE_I, ACCESS: 3, COST: BLOCKED )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT 'ALL' AS SCOPE, COUNT(*) FROM NGD_QRY_PRUNE
+     WHERE K >= 100;
+SCOPE  COUNT                
+-------------------------------
+ALL  4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 16, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_PRUNE, PARTITION: 4/4, INDEX: SYS.NGD_QRY_PRUNE_I, ACCESS: 4, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT /*+ INDEX(NGD_QRY_PRUNE, NGD_QRY_PRUNE_I) */ P, K, V
+      FROM NGD_QRY_PRUNE WHERE P < 30 AND K >= 100 ORDER BY K;
+P           K           V         
+--------------------------------------
+1           101         P1        
+11          111         P2        
+21          121         P3        
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 18, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_PRUNE, PARTITION: 3/4, INDEX: SYS.NGD_QRY_PRUNE_I, ACCESS: 3, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_QRY_PRUNE;
+$T0> SKIP END;
+

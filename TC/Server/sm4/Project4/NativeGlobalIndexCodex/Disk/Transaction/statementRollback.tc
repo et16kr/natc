@@ -1,0 +1,65 @@
+###########################################################################
+# TestCase Description = Preserve Disk native entries after a failed statement.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-TRX-001
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_TRX_STMT;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_TRX_STMT (P INTEGER, UKEY INTEGER, V VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE UNIQUE INDEX NGD_TRX_STMT_U ON NGD_TRX_STMT(UKEY);
+    INSERT INTO NGD_TRX_STMT VALUES (1, 101, 'BASE-1');
+    INSERT INTO NGD_TRX_STMT VALUES (11, 111, 'BASE-2');
+    INSERT INTO NGD_TRX_STMT VALUES (21, 121, 'BASE-3');
+
+##################################
+SECTOR; TEST
+##################################
+    AUTOCOMMIT OFF;
+    INSERT INTO NGD_TRX_STMT VALUES (5, 105, 'PENDING');
+    INSERT INTO NGD_TRX_STMT VALUES (15, 111, 'DUPLICATE');
+
+    SELECT /*+ INDEX(NGD_TRX_STMT, NGD_TRX_STMT_U) */ P, UKEY, V
+      FROM NGD_TRX_STMT
+     ORDER BY UKEY;
+    SELECT /*+ FULL SCAN(NGD_TRX_STMT) */ P, UKEY, V
+      FROM NGD_TRX_STMT
+     ORDER BY UKEY;
+
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    SELECT P, UKEY, V FROM NGD_TRX_STMT ORDER BY UKEY;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_TRX_STMT_U';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_TRX_STMT;
+    SKIP END;
+}

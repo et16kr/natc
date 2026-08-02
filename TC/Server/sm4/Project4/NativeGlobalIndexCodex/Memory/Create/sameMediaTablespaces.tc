@@ -1,0 +1,60 @@
+###########################################################################
+# TestCase Description = Build a Memory native index across same-media tablespaces.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-CRT-009
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_CRT_TBS;
+    DROP TABLESPACE NGM_CRT_TS2 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE NGM_CRT_TS1 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE MEMORY TABLESPACE NGM_CRT_TS1 SIZE 16M AUTOEXTEND OFF
+        CHECKPOINT PATH 'dbs';
+    CREATE MEMORY TABLESPACE NGM_CRT_TS2 SIZE 16M AUTOEXTEND OFF
+        CHECKPOINT PATH 'dbs';
+    CREATE TABLE NGM_CRT_TBS (P INTEGER, K VARCHAR(32), V VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10) TABLESPACE NGM_CRT_TS1,
+        PARTITION P2 VALUES LESS THAN (20) TABLESPACE NGM_CRT_TS2,
+        PARTITION PD VALUES DEFAULT TABLESPACE NGM_CRT_TS1
+    ) TABLESPACE NGM_CRT_TS1;
+    CREATE INDEX NGM_CRT_TBS_I ON NGM_CRT_TBS(K)
+        TABLESPACE NGM_CRT_TS2;
+    INSERT INTO NGM_CRT_TBS VALUES (1, 'K-101', 'P1');
+    INSERT INTO NGM_CRT_TBS VALUES (11, 'K-111', 'P2');
+    INSERT INTO NGM_CRT_TBS VALUES (21, 'K-121', 'PD');
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT /*+ INDEX(NGM_CRT_TBS, NGM_CRT_TBS_I) */ P, K, V
+      FROM NGM_CRT_TBS ORDER BY K;
+    SELECT I.INDEX_NAME, I.INDEX_IMPL_TYPE, I.INDEX_TABLE_ID,
+           B.NAME AS INDEX_TBS_NAME
+      FROM SYSTEM_.SYS_INDICES_ I, V$TABLESPACES B
+     WHERE I.USER_ID = USER_ID()
+       AND I.INDEX_NAME = 'NGM_CRT_TBS_I'
+       AND I.TBS_ID = B.ID;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_CRT_TBS;
+    DROP TABLESPACE NGM_CRT_TS2 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE NGM_CRT_TS1 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

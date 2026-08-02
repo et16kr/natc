@@ -1,0 +1,137 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Query Disk indexes through joins, subqueries, views.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP VIEW NGD_QRY_JOIN_V;
+$T0> DROP TABLE NGD_QRY_JOIN_A;
+$T0> DROP TABLE NGD_QRY_JOIN_B;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_QRY_JOIN_A (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE TABLE NGD_QRY_JOIN_B (P INTEGER, K VARCHAR(16), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE INDEX NGD_QRY_JOIN_A_I ON NGD_QRY_JOIN_A(K);
+Create success.
+$T0> CREATE INDEX NGD_QRY_JOIN_B_I ON NGD_QRY_JOIN_B(K);
+Create success.
+
+$T0> INSERT INTO NGD_QRY_JOIN_A VALUES (1, 'K-A', 10);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_JOIN_A VALUES (11, 'K-B', 20);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_JOIN_A VALUES (21, 'K-C', 30);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_JOIN_A VALUES (22, 'K-D', 40);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_JOIN_B VALUES (2, 'K-A', 100);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_JOIN_B VALUES (12, 'K-C', 300);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_JOIN_B VALUES (23, 'K-X', 900);
+1 row inserted.
+
+$T0> CREATE VIEW NGD_QRY_JOIN_V AS
+        SELECT P, K, V FROM NGD_QRY_JOIN_A WHERE V >= 20;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT A.P, A.K, A.V, B.P, B.V
+      FROM NGD_QRY_JOIN_A A,
+           NGD_QRY_JOIN_B B
+     WHERE A.K = B.K
+     ORDER BY A.K, A.P, B.P;
+P           K                 V           P           V           
+------------------------------------------------------------------------
+1           K-A               10          2           100         
+21          K-C               30          12          300         
+2 rows selected.
+
+$T0> SELECT A.P, A.K, A.V, B.P, B.V
+      FROM NGD_QRY_JOIN_A A LEFT OUTER JOIN NGD_QRY_JOIN_B B
+        ON A.K = B.K
+     ORDER BY A.P, B.P;
+P           K                 V           P           V           
+------------------------------------------------------------------------
+1           K-A               10          2           100         
+11          K-B               20                                  
+21          K-C               30          12          300         
+22          K-D               40                                  
+4 rows selected.
+
+$T0> SELECT P, K, V
+      FROM NGD_QRY_JOIN_A
+     WHERE K IN (SELECT K FROM NGD_QRY_JOIN_B WHERE V < 500)
+     ORDER BY K, P;
+P           K                 V           
+----------------------------------------------
+1           K-A               10          
+21          K-C               30          
+2 rows selected.
+
+$T0> SELECT A.P, A.K, A.V
+      FROM NGD_QRY_JOIN_A A
+     WHERE EXISTS
+           (SELECT 1 FROM NGD_QRY_JOIN_B B
+             WHERE B.K = A.K AND B.V > A.V)
+     ORDER BY A.K, A.P;
+P           K                 V           
+----------------------------------------------
+1           K-A               10          
+21          K-C               30          
+2 rows selected.
+
+$T0> SELECT V.P, V.K, V.V, B.V
+      FROM NGD_QRY_JOIN_V V,
+           NGD_QRY_JOIN_B B
+     WHERE V.K = B.K
+     ORDER BY V.K, V.P;
+P           K                 V           V           
+-----------------------------------------------------------
+21          K-C               30          300         
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP VIEW NGD_QRY_JOIN_V;
+$T0> DROP TABLE NGD_QRY_JOIN_A;
+$T0> DROP TABLE NGD_QRY_JOIN_B;
+$T0> SKIP END;
+

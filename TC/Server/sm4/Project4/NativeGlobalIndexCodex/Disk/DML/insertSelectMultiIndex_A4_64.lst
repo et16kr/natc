@@ -1,0 +1,116 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Maintain multiple Disk indexes during INSERT SELECT.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DML_SEL_DST;
+$T0> DROP TABLE NGD_DML_SEL_SRC;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DML_SEL_SRC (P INTEGER, K INTEGER, V VARCHAR(24))
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE TABLE NGD_DML_SEL_DST (P INTEGER, K INTEGER, V VARCHAR(24))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE INDEX NGD_DML_SEL_DST_K ON NGD_DML_SEL_DST(K);
+Create success.
+$T0> CREATE INDEX NGD_DML_SEL_DST_V ON NGD_DML_SEL_DST(V DESC, K);
+Create success.
+$T0> CREATE INDEX NGD_DML_SEL_DST_L ON NGD_DML_SEL_DST(P) LOCAL;
+Create success.
+
+$T0> INSERT INTO NGD_DML_SEL_SRC VALUES (1, 101, 'SRC-A');
+1 row inserted.
+$T0> INSERT INTO NGD_DML_SEL_SRC VALUES (11, 111, 'SRC-B');
+1 row inserted.
+$T0> INSERT INTO NGD_DML_SEL_SRC VALUES (21, 121, 'SRC-C');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> INSERT INTO NGD_DML_SEL_DST
+        SELECT P, K, V FROM NGD_DML_SEL_SRC;
+3 rows inserted.
+
+$T0> INSERT INTO NGD_DML_SEL_DST
+        SELECT P + 30, K + 300, V || '-COPY'
+          FROM NGD_DML_SEL_SRC
+         WHERE P < 10;
+1 row inserted.
+
+$T0> UPDATE NGD_DML_SEL_DST SET V = 'DST-B' WHERE K = 111;
+1 row updated.
+$T0> DELETE FROM NGD_DML_SEL_DST WHERE K = 121;
+1 row deleted.
+
+$T0> SELECT /*+ INDEX(NGD_DML_SEL_DST, NGD_DML_SEL_DST_K) */ P, K, V
+      FROM NGD_DML_SEL_DST
+     ORDER BY K, P;
+P           K           V                         
+------------------------------------------------------
+1           101         SRC-A                     
+11          111         DST-B                     
+31          401         SRC-A-COPY                
+3 rows selected.
+
+$T0> SELECT /*+ INDEX(NGD_DML_SEL_DST, NGD_DML_SEL_DST_V) */ P, K, V
+      FROM NGD_DML_SEL_DST
+     ORDER BY V DESC, K, P;
+P           K           V                         
+------------------------------------------------------
+31          401         SRC-A-COPY                
+1           101         SRC-A                     
+11          111         DST-B                     
+3 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DML_SEL_DST_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE IS_PARTITIONED  
+-----------------------------------
+NGD_DML_SEL_DST_K                                                                                                                 
+3           F  
+NGD_DML_SEL_DST_L                                                                                                                 
+0           T  
+NGD_DML_SEL_DST_V                                                                                                                 
+3           F  
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DML_SEL_DST;
+$T0> DROP TABLE NGD_DML_SEL_SRC;
+$T0> SKIP END;
+

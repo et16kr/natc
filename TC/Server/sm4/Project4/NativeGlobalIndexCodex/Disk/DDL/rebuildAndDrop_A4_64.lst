@@ -1,0 +1,100 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Rebuild and drop a Disk native global index.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_REBUILD;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DDL_REBUILD (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGD_DDL_REBUILD VALUES (1, 101, 1);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_REBUILD VALUES (11, 111, 2);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_REBUILD VALUES (21, 121, 3);
+1 row inserted.
+
+$T0> CREATE INDEX NGD_DDL_REBUILD_I ON NGD_DDL_REBUILD(K);
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER INDEX NGD_DDL_REBUILD_I REBUILD;
+Alter success.
+
+$T0> SELECT /*+ INDEX(NGD_DDL_REBUILD, NGD_DDL_REBUILD_I) */
+           P, K, V
+      FROM NGD_DDL_REBUILD
+     ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         1           
+11          111         2           
+21          121         3           
+3 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_DDL_REBUILD_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_DDL_REBUILD_I                                                                                                                 
+3           0           
+1 row selected.
+
+$T0> DROP INDEX NGD_DDL_REBUILD_I;
+Drop success.
+
+$T0> SELECT COUNT(*) AS INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_DDL_REBUILD_I';
+INDEX_COUNT          
+-----------------------
+0                    
+1 row selected.
+
+$T0> SELECT P, K, V FROM NGD_DDL_REBUILD ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         1           
+11          111         2           
+21          121         3           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_REBUILD;
+$T0> SKIP END;
+

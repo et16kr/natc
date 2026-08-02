@@ -1,0 +1,124 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Verify Memory local and native index coexistence.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGM_QRY_BOTH;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_QRY_BOTH
+    (
+        P INTEGER,
+        GKEY INTEGER,
+        LKEY INTEGER,
+        V VARCHAR(16)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_QRY_GLOBAL_I
+        ON NGM_QRY_BOTH(GKEY)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_QRY_LOCAL_I
+        ON NGM_QRY_BOTH(LKEY)
+        LOCAL;
+Create success.
+
+$T0> INSERT INTO NGM_QRY_BOTH VALUES (1, 100, 1, 'A');
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_BOTH VALUES (11, 200, 2, 'B');
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_BOTH VALUES (21, 300, 3, 'C');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, IS_PARTITIONED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_QRY_GLOBAL_I', 'NGM_QRY_LOCAL_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE IS_PARTITIONED  
+-----------------------------------
+NGM_QRY_GLOBAL_I                                                                                                                  
+2           F  
+NGM_QRY_LOCAL_I                                                                                                                   
+0           T  
+2 rows selected.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+
+$T0> SELECT /*+ INDEX(NGM_QRY_BOTH, NGM_QRY_GLOBAL_I) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_BOTH
+     WHERE GKEY = 200
+     ORDER BY P;
+P           GKEY        LKEY        V                 
+-----------------------------------------------------------
+11          200         2           B                 
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 30, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_BOTH, PARTITION: 3/3, INDEX: SYS.NGM_QRY_GLOBAL_I, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> SELECT /*+ INDEX(NGM_QRY_BOTH, NGM_QRY_LOCAL_I) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_BOTH
+     WHERE LKEY = 2
+     ORDER BY P;
+P           GKEY        LKEY        V                 
+-----------------------------------------------------------
+11          200         2           B                 
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 30, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGM_QRY_BOTH, PARTITION: 3/3, INDEX: SYS.NGM_QRY_LOCAL_I, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: PD, INDEX: SYS.NGM_QRY_LOCAL_I, RANGE SCAN, ACCESS: 0, COST: BLOCKED )
+   SCAN ( PARTITION: P2, INDEX: SYS.NGM_QRY_LOCAL_I, RANGE SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: P1, INDEX: SYS.NGM_QRY_LOCAL_I, RANGE SCAN, ACCESS: 0, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGM_QRY_BOTH;
+$T0> SKIP END;
+

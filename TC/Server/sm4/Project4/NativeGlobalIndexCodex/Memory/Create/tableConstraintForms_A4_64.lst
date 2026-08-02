@@ -1,0 +1,162 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Build Memory native PK and UK from table definitions.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-CRT-004
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_T_OUT_UK;
+$T0> DROP TABLE NGM_CRT_T_OUT_PK;
+$T0> DROP TABLE NGM_CRT_T_IN_UK;
+$T0> DROP TABLE NGM_CRT_T_IN_PK;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_T_IN_PK
+    (
+        P INTEGER,
+        ID VARCHAR(32) CONSTRAINT NGM_CRT_IN_PK PRIMARY KEY,
+        V VARCHAR(16)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_CRT_T_IN_UK
+    (
+        P INTEGER,
+        UKEY VARCHAR(32) CONSTRAINT NGM_CRT_IN_UK UNIQUE,
+        V VARCHAR(16)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_CRT_T_OUT_PK
+    (
+        P INTEGER,
+        K1 VARCHAR(32),
+        K2 INTEGER,
+        V VARCHAR(16),
+        CONSTRAINT NGM_CRT_OUT_PK PRIMARY KEY(K1, K2)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_CRT_T_OUT_UK
+    (
+        P INTEGER,
+        K VARCHAR(32),
+        V VARCHAR(16),
+        CONSTRAINT NGM_CRT_OUT_UK UNIQUE(V)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_CRT_T_IN_PK VALUES (1, 'ID-101', 'A');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_IN_PK VALUES (11, 'ID-111', 'B');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_IN_UK VALUES (1, 'UK-201', 'A');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_IN_UK VALUES (11, 'UK-211', 'B');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_OUT_PK VALUES (1, 'K-101', 1, 'X');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_OUT_PK VALUES (21, 'K-121', 1, 'Y');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_OUT_UK VALUES (1, 'K-101', 'X');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_T_OUT_UK VALUES (21, 'K-121', 'Y');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT P, ID, V FROM NGM_CRT_T_IN_PK ORDER BY ID;
+P           ID                                V                 
+--------------------------------------------------------------------
+1           ID-101                            A                 
+11          ID-111                            B                 
+2 rows selected.
+$T0> SELECT P, UKEY, V FROM NGM_CRT_T_IN_UK ORDER BY UKEY;
+P           UKEY                              V                 
+--------------------------------------------------------------------
+1           UK-201                            A                 
+11          UK-211                            B                 
+2 rows selected.
+$T0> SELECT P, K1, K2, V FROM NGM_CRT_T_OUT_PK ORDER BY K1, K2;
+P           K1                                K2          V                 
+---------------------------------------------------------------------------------
+1           K-101                             1           X                 
+21          K-121                             1           Y                 
+2 rows selected.
+$T0> SELECT P, K, V FROM NGM_CRT_T_OUT_UK ORDER BY V;
+P           K                                 V                 
+--------------------------------------------------------------------
+1           K-101                             X                 
+21          K-121                             Y                 
+2 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID, IS_UNIQUE
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGM_CRT_IN_PK', 'NGM_CRT_IN_UK',
+            'NGM_CRT_OUT_PK', 'NGM_CRT_OUT_UK')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID IS_UNIQUE  
+----------------------------------------------
+NGM_CRT_IN_PK                                                                                                                     
+2           0           T  
+NGM_CRT_IN_UK                                                                                                                     
+2           0           T  
+NGM_CRT_OUT_PK                                                                                                                    
+2           0           T  
+NGM_CRT_OUT_UK                                                                                                                    
+2           0           T  
+4 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_T_OUT_UK;
+$T0> DROP TABLE NGM_CRT_T_OUT_PK;
+$T0> DROP TABLE NGM_CRT_T_IN_UK;
+$T0> DROP TABLE NGM_CRT_T_IN_PK;
+$T0> SKIP END;
+

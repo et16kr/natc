@@ -1,0 +1,90 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Scan Disk mixed ASC and DESC composite keys.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-QRY-010
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_QRY_DESC;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_QRY_DESC (P INTEGER, K1 INTEGER, K2 INTEGER, K3 INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_QRY_DESC_I ON NGD_QRY_DESC(K1 ASC, K2 DESC, K3 ASC);
+Create success.
+$T0> INSERT INTO NGD_QRY_DESC VALUES (1, 1, 30, 1);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_DESC VALUES (11, 1, 20, 2);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_DESC VALUES (21, 1, 10, 3);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_DESC VALUES (5, 2, 30, 4);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_DESC VALUES (15, 2, 20, 5);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGD_QRY_DESC, NGD_QRY_DESC_I) */ P, K1, K2, K3
+      FROM NGD_QRY_DESC
+     WHERE K1 BETWEEN 1 AND 2
+     ORDER BY K1 ASC, K2 DESC, K3 ASC;
+P           K1          K2          K3          
+-----------------------------------------------------
+1           1           30          1           
+11          1           20          2           
+21          1           10          3           
+5           2           30          4           
+15          2           20          5           
+5 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGD_QRY_DESC) */ P, K1, K2, K3
+      FROM NGD_QRY_DESC
+     WHERE K1 BETWEEN 1 AND 2
+     ORDER BY K1 ASC, K2 DESC, K3 ASC;
+P           K1          K2          K3          
+-----------------------------------------------------
+1           1           30          1           
+11          1           20          2           
+21          1           10          3           
+5           2           30          4           
+15          2           20          5           
+5 rows selected.
+$T0> SELECT P, K1, K2, K3 FROM NGD_QRY_DESC
+     WHERE K1 = 1 AND K2 BETWEEN 10 AND 30
+     ORDER BY K2 DESC, K3;
+P           K1          K2          K3          
+-----------------------------------------------------
+1           1           30          1           
+11          1           20          2           
+21          1           10          3           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_QRY_DESC;
+$T0> SKIP END;
+

@@ -1,0 +1,138 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject unsupported Memory native index build modes.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-NEG-006
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_MODE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_NEG_MODE (P INTEGER, K VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_NEG_MODE_OK ON NGM_NEG_MODE(K);
+Create success.
+$T0> INSERT INTO NGM_NEG_MODE VALUES (1, 'K-101', 201);
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_MODE VALUES (11, 'K-111', 211);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_MODE_%';
+BEFORE_INDEX_COUNT   
+-----------------------
+1                    
+1 row selected.
+
+$T0> CREATE INDEX NGM_NEG_MODE_TRY ON NGM_NEG_MODE(V) NOLOGGING FORCE;
+[ERR-3129A : LOGGING and NOLOGGING options are only allowed for a disk B-Tree index.]
+$T0> CREATE INDEX NGM_NEG_MODE_TRY ON NGM_NEG_MODE(V) NOLOGGING NOFORCE;
+[ERR-3129A : LOGGING and NOLOGGING options are only allowed for a disk B-Tree index.]
+$T0> CREATE INDEX NGM_NEG_MODE_TRY ON NGM_NEG_MODE(V) PARALLEL 2;
+[ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+
+$T0> SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_MODE_%';
+AFTER_REJECT_INDEX_COUNT 
+---------------------------
+1                    
+1 row selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_NEG_MODE_OK';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_NEG_MODE_OK                                                                                                                   
+2           0           
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_FALLBACK_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGM_NEG_MODE_%';
+HIDDEN_FALLBACK_COUNT 
+------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_FALLBACK_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGM_NEG_MODE_%'
+            OR INDEX_NAME LIKE '$GIR_NGM_NEG_MODE_%');
+HIDDEN_FALLBACK_INDEX_COUNT 
+------------------------------
+0                    
+1 row selected.
+$T0> SELECT /*+ INDEX(NGM_NEG_MODE, NGM_NEG_MODE_OK) */ P, K, V
+      FROM NGM_NEG_MODE ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             201         
+11          K-111                             211         
+2 rows selected.
+$T0> DELETE FROM NGM_NEG_MODE WHERE P = 1;
+1 row deleted.
+$T0> INSERT INTO NGM_NEG_MODE VALUES (21, 'K-121', 221);
+1 row inserted.
+$T0> SELECT /*+ INDEX(NGM_NEG_MODE, NGM_NEG_MODE_OK) */ P, K, V
+      FROM NGM_NEG_MODE ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+11          K-111                             211         
+21          K-121                             221         
+2 rows selected.
+
+$T0> CREATE INDEX NGM_NEG_MODE_TRY ON NGM_NEG_MODE(V);
+Create success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_MODE_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_NEG_MODE_OK                                                                                                                   
+2           0           
+NGM_NEG_MODE_TRY                                                                                                                  
+2           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_MODE;
+$T0> SKIP END;
+

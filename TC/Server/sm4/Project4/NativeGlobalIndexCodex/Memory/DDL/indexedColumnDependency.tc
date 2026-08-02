@@ -1,0 +1,59 @@
+###########################################################################
+# TestCase Description = Reject Memory indexed-column drop without mutation.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DDL-006
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DDL_COLDEP;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_DDL_COLDEP
+    (P INTEGER, K VARCHAR(32), V INTEGER, SPARE INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_DDL_COLDEP_I ON NGM_DDL_COLDEP(K, V DESC)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_DDL_COLDEP VALUES (1, 'K-101', 1, 1001);
+    INSERT INTO NGM_DDL_COLDEP VALUES (11, 'K-111', 2, 1011);
+    INSERT INTO NGM_DDL_COLDEP VALUES (21, 'K-121', 3, 1021);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGM_DDL_COLDEP_I';
+    ALTER TABLE NGM_DDL_COLDEP DROP COLUMN K;
+    SELECT P, K, V, SPARE FROM NGM_DDL_COLDEP ORDER BY K;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGM_DDL_COLDEP_I';
+    UPDATE NGM_DDL_COLDEP SET K = 'K-211', V = V + 10 WHERE P = 11;
+    INSERT INTO NGM_DDL_COLDEP VALUES (25, 'K-225', 4, 1025);
+    SELECT /*+ INDEX(NGM_DDL_COLDEP, NGM_DDL_COLDEP_I) */ P, K, V, SPARE
+      FROM NGM_DDL_COLDEP ORDER BY K, V DESC;
+    ALTER TABLE NGM_DDL_COLDEP DROP COLUMN SPARE;
+    SELECT P, K, V FROM NGM_DDL_COLDEP ORDER BY K, V DESC;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_DDL_COLDEP;
+    SKIP END;
+}

@@ -1,0 +1,140 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Create Memory global indexes on range/list/hash tables.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_RANGE;
+$T0> DROP TABLE NGM_CRT_LIST;
+$T0> DROP TABLE NGM_CRT_HASH;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_RANGE (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_CRT_LIST (P INTEGER, K INTEGER)
+    PARTITION BY LIST(P)
+    (
+        PARTITION P1 VALUES (1, 4),
+        PARTITION P2 VALUES (2, 5),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_CRT_HASH (P INTEGER, K INTEGER)
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_CRT_RANGE_I
+        ON NGM_CRT_RANGE(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_CRT_LIST_I
+        ON NGM_CRT_LIST(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_CRT_HASH_I
+        ON NGM_CRT_HASH(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_CRT_RANGE VALUES (1, 101);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_RANGE VALUES (11, 111);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_RANGE VALUES (21, 121);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_LIST VALUES (1, 201);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_LIST VALUES (2, 202);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_LIST VALUES (3, 203);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_HASH VALUES (1, 301);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_HASH VALUES (2, 302);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_HASH VALUES (3, 303);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT 'HASH' AS PART_KIND, P, K
+      FROM NGM_CRT_HASH
+    UNION ALL
+    SELECT 'LIST' AS PART_KIND, P, K
+      FROM NGM_CRT_LIST
+    UNION ALL
+    SELECT 'RANGE' AS PART_KIND, P, K
+      FROM NGM_CRT_RANGE
+     ORDER BY PART_KIND, P, K;
+PART_KIND  P           K           
+---------------------------------------
+HASH   1           301         
+HASH   2           302         
+HASH   3           303         
+LIST   1           201         
+LIST   2           202         
+LIST   3           203         
+RANGE  1           101         
+RANGE  11          111         
+RANGE  21          121         
+9 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGM_CRT_RANGE_I', 'NGM_CRT_LIST_I', 'NGM_CRT_HASH_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE 
+------------------
+NGM_CRT_HASH_I                                                                                                                    
+2           
+NGM_CRT_LIST_I                                                                                                                    
+2           
+NGM_CRT_RANGE_I                                                                                                                   
+2           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_RANGE;
+$T0> DROP TABLE NGM_CRT_LIST;
+$T0> DROP TABLE NGM_CRT_HASH;
+$T0> SKIP END;
+

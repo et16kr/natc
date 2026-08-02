@@ -1,0 +1,57 @@
+###########################################################################
+# TestCase Description = Use Disk native predicates with SELECT FOR UPDATE.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-QRY-007
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_QRY_LOCK;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_QRY_LOCK (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_QRY_LOCK_I ON NGD_QRY_LOCK(K);
+    INSERT INTO NGD_QRY_LOCK VALUES (1, 101, 1);
+    INSERT INTO NGD_QRY_LOCK VALUES (11, 111, 2);
+    INSERT INTO NGD_QRY_LOCK VALUES (21, 121, 3);
+
+##################################
+SECTOR; TEST
+##################################
+    AUTOCOMMIT OFF;
+    SELECT /*+ INDEX(NGD_QRY_LOCK, NGD_QRY_LOCK_I) */ P, K, V
+      FROM NGD_QRY_LOCK
+     WHERE K BETWEEN 101 AND 121
+     ORDER BY K
+     FOR UPDATE;
+    UPDATE NGD_QRY_LOCK SET V = V + 10 WHERE K = 111;
+    SELECT P, K, V FROM NGD_QRY_LOCK ORDER BY K;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    SELECT P, K, V FROM NGD_QRY_LOCK ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_QRY_LOCK;
+    SKIP END;
+}

@@ -1,0 +1,60 @@
+###########################################################################
+# TestCase Description = Preserve Disk results and identity across statistics collection.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-QRY-008
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_QRY_STATS;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_QRY_STATS (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_QRY_STATS_I ON NGD_QRY_STATS(K);
+    INSERT INTO NGD_QRY_STATS VALUES (1, 101, 1);
+    INSERT INTO NGD_QRY_STATS VALUES (5, 105, 2);
+    INSERT INTO NGD_QRY_STATS VALUES (11, 111, 3);
+    INSERT INTO NGD_QRY_STATS VALUES (15, 115, 4);
+    INSERT INTO NGD_QRY_STATS VALUES (21, 121, 5);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT /*+ INDEX(NGD_QRY_STATS, NGD_QRY_STATS_I) */ P, K, V
+      FROM NGD_QRY_STATS WHERE K >= 105 ORDER BY K;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_QRY_STATS_I';
+
+    EXEC GATHER_TABLE_STATS('SYS', 'NGD_QRY_STATS');
+
+    SELECT /*+ INDEX(NGD_QRY_STATS, NGD_QRY_STATS_I) */ P, K, V
+      FROM NGD_QRY_STATS WHERE K >= 105 ORDER BY K;
+    SELECT /*+ FULL SCAN(NGD_QRY_STATS) */ P, K, V
+      FROM NGD_QRY_STATS WHERE K >= 105 ORDER BY K;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_QRY_STATS_I';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_QRY_STATS;
+    SKIP END;
+}

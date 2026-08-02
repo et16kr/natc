@@ -1,0 +1,101 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve Memory constraint identity across table rename.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DDL-005
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_REN_NEW;
+$T0> DROP TABLE NGM_DDL_REN_OLD;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DDL_REN_OLD (P INTEGER, UKEY VARCHAR(32), K VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> ALTER TABLE NGM_DDL_REN_OLD
+        ADD CONSTRAINT NGM_DDL_REN_UK UNIQUE(UKEY);
+Alter success.
+$T0> CREATE INDEX NGM_DDL_REN_I_OLD ON NGM_DDL_REN_OLD(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_DDL_REN_OLD VALUES (1, 'UK-101', 'K-201');
+1 row inserted.
+$T0> INSERT INTO NGM_DDL_REN_OLD VALUES (11, 'UK-111', 'K-211');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_DDL_REN_UK', 'NGM_DDL_REN_I_OLD')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_DDL_REN_I_OLD                                                                                                                 
+2           0           
+NGM_DDL_REN_UK                                                                                                                    
+2           0           
+2 rows selected.
+$T0> ALTER TABLE NGM_DDL_REN_OLD RENAME TO NGM_DDL_REN_NEW;
+Alter success.
+$T0> ALTER INDEX NGM_DDL_REN_I_OLD RENAME TO NGM_DDL_REN_I_NEW;
+Alter success.
+$T0> INSERT INTO NGM_DDL_REN_NEW VALUES (21, 'UK-121', 'K-221');
+1 row inserted.
+$T0> UPDATE NGM_DDL_REN_NEW SET K = 'K-311' WHERE UKEY = 'UK-111';
+1 row updated.
+$T0> SELECT /*+ INDEX(NGM_DDL_REN_NEW, NGM_DDL_REN_UK) */ P, UKEY, K
+      FROM NGM_DDL_REN_NEW ORDER BY UKEY;
+P           UKEY                              K                                 
+------------------------------------------------------------------------------------
+1           UK-101                            K-201                             
+11          UK-111                            K-311                             
+21          UK-121                            K-221                             
+3 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_DDL_REN_UK', 'NGM_DDL_REN_I_NEW')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_DDL_REN_I_NEW                                                                                                                 
+2           0           
+NGM_DDL_REN_UK                                                                                                                    
+2           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_REN_NEW;
+$T0> DROP TABLE NGM_DDL_REN_OLD;
+$T0> SKIP END;
+

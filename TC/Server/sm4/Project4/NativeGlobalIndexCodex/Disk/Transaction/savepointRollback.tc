@@ -1,0 +1,64 @@
+###########################################################################
+# TestCase Description = Roll back Disk DML and row movement to a savepoint.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-TRX-002
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_TRX_SAVE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_TRX_SAVE (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_TRX_SAVE_I ON NGD_TRX_SAVE(K);
+    INSERT INTO NGD_TRX_SAVE VALUES (1, 101, 1);
+    INSERT INTO NGD_TRX_SAVE VALUES (11, 111, 2);
+    INSERT INTO NGD_TRX_SAVE VALUES (21, 121, 3);
+
+##################################
+SECTOR; TEST
+##################################
+    AUTOCOMMIT OFF;
+    SAVEPOINT NGD_SP1;
+    INSERT INTO NGD_TRX_SAVE VALUES (5, 105, 4);
+    UPDATE NGD_TRX_SAVE SET P = 25, K = 201 WHERE K = 101;
+    DELETE FROM NGD_TRX_SAVE WHERE K = 111;
+    SELECT P, K, V FROM NGD_TRX_SAVE ORDER BY K;
+
+    ROLLBACK TO SAVEPOINT NGD_SP1;
+    SELECT /*+ INDEX(NGD_TRX_SAVE, NGD_TRX_SAVE_I) */ P, K, V
+      FROM NGD_TRX_SAVE
+     ORDER BY K;
+    SELECT /*+ FULL SCAN(NGD_TRX_SAVE) */ P, K, V
+      FROM NGD_TRX_SAVE
+     ORDER BY K;
+    COMMIT;
+    AUTOCOMMIT ON;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_TRX_SAVE;
+    SKIP END;
+}

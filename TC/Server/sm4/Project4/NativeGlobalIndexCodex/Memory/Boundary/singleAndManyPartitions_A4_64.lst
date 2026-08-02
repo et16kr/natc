@@ -1,0 +1,115 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Compare Memory native indexes on one and eight partitions.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-BND-001
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_BND_MANY;
+$T0> DROP TABLE NGM_BND_ONE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_BND_ONE (P INTEGER, K VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES DEFAULT)
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE TABLE NGM_BND_MANY (P INTEGER, K VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION P3 VALUES LESS THAN (30),
+        PARTITION P4 VALUES LESS THAN (40),
+        PARTITION P5 VALUES LESS THAN (50),
+        PARTITION P6 VALUES LESS THAN (60),
+        PARTITION P7 VALUES LESS THAN (70),
+        PARTITION P8 VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_BND_ONE_I ON NGM_BND_ONE(K) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_BND_MANY_I ON NGM_BND_MANY(K) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_BND_ONE VALUES (1, 'K-101');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_ONE VALUES (81, 'K-181');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (1, 'K-101');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (11, 'K-111');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (21, 'K-121');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (31, 'K-131');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (41, 'K-141');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (51, 'K-151');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (61, 'K-161');
+1 row inserted.
+$T0> INSERT INTO NGM_BND_MANY VALUES (71, 'K-171');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGM_BND_ONE, NGM_BND_ONE_I) */ P, K
+      FROM NGM_BND_ONE ORDER BY K;
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+81          K-181                             
+2 rows selected.
+$T0> SELECT /*+ INDEX(NGM_BND_MANY, NGM_BND_MANY_I) */ P, K
+      FROM NGM_BND_MANY ORDER BY K;
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+11          K-111                             
+21          K-121                             
+31          K-131                             
+41          K-141                             
+51          K-151                             
+61          K-161                             
+71          K-171                             
+8 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_BND_ONE_I', 'NGM_BND_MANY_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_BND_MANY_I                                                                                                                    
+2           0           
+NGM_BND_ONE_I                                                                                                                     
+2           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_BND_MANY;
+$T0> DROP TABLE NGM_BND_ONE;
+$T0> SKIP END;
+

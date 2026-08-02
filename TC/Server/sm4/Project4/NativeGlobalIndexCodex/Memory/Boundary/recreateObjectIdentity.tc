@@ -1,0 +1,59 @@
+###########################################################################
+# TestCase Description = Recreate a Memory native index without stale identity.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-BND-006
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_BND_RECREATE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_BND_RECREATE (P INTEGER, K VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_BND_RECREATE VALUES (1, 'K-101', 1);
+    INSERT INTO NGM_BND_RECREATE VALUES (11, 'K-111', 2);
+    INSERT INTO NGM_BND_RECREATE VALUES (21, 'K-121', 3);
+
+##################################
+SECTOR; TEST
+##################################
+    LOOP 5
+    {
+        CREATE INDEX NGM_BND_RECREATE_I ON NGM_BND_RECREATE(K)
+            TABLESPACE SYS_TBS_MEM_DATA;
+        UPDATE NGM_BND_RECREATE SET K = K || '-R', V = V + 1 WHERE P = 11;
+        SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+          FROM SYSTEM_.SYS_INDICES_
+         WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGM_BND_RECREATE_I';
+        DROP INDEX NGM_BND_RECREATE_I;
+        SELECT COUNT(*) AS DROPPED_INDEX_COUNT
+          FROM SYSTEM_.SYS_INDICES_
+         WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGM_BND_RECREATE_I';
+    }
+    CREATE INDEX NGM_BND_RECREATE_I ON NGM_BND_RECREATE(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    SELECT /*+ INDEX(NGM_BND_RECREATE, NGM_BND_RECREATE_I) */ P, K, V
+      FROM NGM_BND_RECREATE ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_BND_RECREATE;
+    SKIP END;
+}

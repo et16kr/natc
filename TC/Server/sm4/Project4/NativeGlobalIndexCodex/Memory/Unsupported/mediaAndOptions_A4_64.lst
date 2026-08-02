@@ -1,0 +1,98 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject Memory media and unsupported index options.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_OPTION;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_NEG_OPTION (P INTEGER, K VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_NEG_OPTION VALUES (1, 'K-101');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_OPTION VALUES (11, 'K-111');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_OPTION VALUES (21, 'K-121');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> CREATE INDEX NGM_NEG_OPTION_DISK
+        ON NGM_NEG_OPTION(K)
+        TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-311EC : The type (memory/disk/volatile) of tablespace in which to create the index is not the same as the type of the table.]
+
+$T0> CREATE INDEX NGM_NEG_OPTION_PAR
+        ON NGM_NEG_OPTION(K)
+        PARALLEL 2;
+[ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+
+$T0> CREATE INDEX NGM_NEG_OPTION_OK
+        ON NGM_NEG_OPTION(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> ALTER INDEX NGM_NEG_OPTION_OK DISABLE;
+[ERR-31001 : SQL syntax error 
+
+line 1: missing or invalid syntax
+ALTER INDEX NGM_NEG_OPTION_OK DISABLE
+                              ^     ^
+
+]
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_OPTION_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_NEG_OPTION_OK                                                                                                                 
+2           0           
+1 row selected.
+
+$T0> SELECT /*+ INDEX(NGM_NEG_OPTION, NGM_NEG_OPTION_OK) */ P, K
+      FROM NGM_NEG_OPTION
+     ORDER BY K;
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+11          K-111                             
+21          K-121                             
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_OPTION;
+$T0> SKIP END;
+

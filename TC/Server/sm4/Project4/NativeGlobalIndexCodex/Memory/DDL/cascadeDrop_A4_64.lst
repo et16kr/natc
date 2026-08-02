@@ -1,0 +1,96 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Drop a Memory parent with multiple native indexes.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_CASCADE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DDL_CASCADE
+    (
+        P INTEGER,
+        ID INTEGER NOT NULL,
+        K1 VARCHAR(32),
+        K2 INTEGER
+    )
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> ALTER TABLE NGM_DDL_CASCADE
+        ADD CONSTRAINT NGM_DDL_CASCADE_PK PRIMARY KEY(ID);
+Alter success.
+
+$T0> CREATE INDEX NGM_DDL_CASCADE_I1
+        ON NGM_DDL_CASCADE(K1)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_DDL_CASCADE_I2
+        ON NGM_DDL_CASCADE(K2)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_DDL_CASCADE VALUES (1, 1, 'K-10', 100);
+1 row inserted.
+$T0> INSERT INTO NGM_DDL_CASCADE VALUES (2, 2, 'K-20', 200);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS INDEX_COUNT_BEFORE_DROP
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGM_DDL_CASCADE_PK',
+            'NGM_DDL_CASCADE_I1',
+            'NGM_DDL_CASCADE_I2');
+INDEX_COUNT_BEFORE_DROP 
+--------------------------
+3                    
+1 row selected.
+
+$T0> DROP TABLE NGM_DDL_CASCADE;
+Drop success.
+
+$T0> SELECT COUNT(*) AS INDEX_COUNT_AFTER_DROP
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN
+           ('NGM_DDL_CASCADE_PK',
+            'NGM_DDL_CASCADE_I1',
+            'NGM_DDL_CASCADE_I2');
+INDEX_COUNT_AFTER_DROP 
+-------------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_CASCADE;
+$T0> SKIP END;
+

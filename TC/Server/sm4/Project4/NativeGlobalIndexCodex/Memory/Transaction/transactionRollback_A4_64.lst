@@ -1,0 +1,126 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Roll back Memory changes across partitions and indexes.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-TRX-003
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_ALL;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_TRX_ALL (P INTEGER, K1 VARCHAR(32), K2 INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE UNIQUE INDEX NGM_TRX_ALL_U ON NGM_TRX_ALL(K1)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_TRX_ALL_I ON NGM_TRX_ALL(K2 DESC)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_TRX_ALL VALUES (1, 'K-101', 301, 1);
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_ALL VALUES (11, 'K-111', 311, 2);
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_ALL VALUES (21, 'K-121', 321, 3);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT P, K1, K2, V FROM NGM_TRX_ALL ORDER BY K1;
+P           K1                                K2          V           
+---------------------------------------------------------------------------
+1           K-101                             301         1           
+11          K-111                             311         2           
+21          K-121                             321         3           
+3 rows selected.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> INSERT INTO NGM_TRX_ALL VALUES (5, 'K-105', 305, 4);
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_ALL VALUES (15, 'K-115', 315, 5);
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_ALL VALUES (25, 'K-125', 325, 6);
+1 row inserted.
+$T0> UPDATE NGM_TRX_ALL SET P = 22, K1 = 'K-201', K2 = 401
+     WHERE K1 = 'K-101';
+1 row updated.
+$T0> DELETE FROM NGM_TRX_ALL WHERE K1 = 'K-111';
+1 row deleted.
+$T0> SELECT P, K1, K2, V FROM NGM_TRX_ALL ORDER BY K1;
+P           K1                                K2          V           
+---------------------------------------------------------------------------
+5           K-105                             305         4           
+15          K-115                             315         5           
+21          K-121                             321         3           
+25          K-125                             325         6           
+22          K-201                             401         1           
+5 rows selected.
+$T0> ROLLBACK;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> SELECT /*+ INDEX(NGM_TRX_ALL, NGM_TRX_ALL_U) */ P, K1, K2, V
+      FROM NGM_TRX_ALL ORDER BY K1;
+P           K1                                K2          V           
+---------------------------------------------------------------------------
+1           K-101                             301         1           
+11          K-111                             311         2           
+21          K-121                             321         3           
+3 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGM_TRX_ALL) */ P, K1, K2, V
+      FROM NGM_TRX_ALL ORDER BY K1;
+P           K1                                K2          V           
+---------------------------------------------------------------------------
+1           K-101                             301         1           
+11          K-111                             311         2           
+21          K-121                             321         3           
+3 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_TRX_ALL_I', 'NGM_TRX_ALL_U')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_TRX_ALL_I                                                                                                                     
+2           0           
+NGM_TRX_ALL_U                                                                                                                     
+2           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_ALL;
+$T0> SKIP END;
+

@@ -1,0 +1,84 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Verify native Disk index creates no hidden objects.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_CAT_HIDDEN;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_CAT_HIDDEN
+    (
+        P INTEGER,
+        K INTEGER
+    )
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE INDEX NGD_CAT_HIDDEN_I
+        ON NGD_CAT_HIDDEN(K)
+        TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_CAT_HIDDEN_I%';
+HIDDEN_TABLE_COUNT   
+-----------------------
+0                    
+1 row selected.
+
+$T0> SELECT COUNT(*) AS HIDDEN_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGD_CAT_HIDDEN_I%'
+            OR INDEX_NAME LIKE '$GIR_NGD_CAT_HIDDEN_I%');
+HIDDEN_INDEX_COUNT   
+-----------------------
+0                    
+1 row selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_CAT_HIDDEN_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_CAT_HIDDEN_I                                                                                                                  
+3           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_CAT_HIDDEN;
+$T0> SKIP END;
+

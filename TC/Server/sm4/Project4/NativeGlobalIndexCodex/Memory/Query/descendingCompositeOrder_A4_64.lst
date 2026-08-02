@@ -1,0 +1,91 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Scan Memory mixed ASC and DESC composite keys.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-QRY-010
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_QRY_DESC;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_QRY_DESC (P INTEGER, K1 VARCHAR(16), K2 INTEGER, K3 INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_QRY_DESC_I ON NGM_QRY_DESC(K1 ASC, K2 DESC, K3 ASC)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_QRY_DESC VALUES (1, 'A', 30, 1);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_DESC VALUES (11, 'A', 20, 2);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_DESC VALUES (21, 'A', 10, 3);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_DESC VALUES (5, 'B', 30, 4);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_DESC VALUES (15, 'B', 20, 5);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGM_QRY_DESC, NGM_QRY_DESC_I) */ P, K1, K2, K3
+      FROM NGM_QRY_DESC
+     WHERE K1 BETWEEN 'A' AND 'B'
+     ORDER BY K1 ASC, K2 DESC, K3 ASC;
+P           K1                K2          K3          
+-----------------------------------------------------------
+1           A                 30          1           
+11          A                 20          2           
+21          A                 10          3           
+5           B                 30          4           
+15          B                 20          5           
+5 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGM_QRY_DESC) */ P, K1, K2, K3
+      FROM NGM_QRY_DESC
+     WHERE K1 BETWEEN 'A' AND 'B'
+     ORDER BY K1 ASC, K2 DESC, K3 ASC;
+P           K1                K2          K3          
+-----------------------------------------------------------
+1           A                 30          1           
+11          A                 20          2           
+21          A                 10          3           
+5           B                 30          4           
+15          B                 20          5           
+5 rows selected.
+$T0> SELECT P, K1, K2, K3 FROM NGM_QRY_DESC
+     WHERE K1 = 'A' AND K2 BETWEEN 10 AND 30
+     ORDER BY K2 DESC, K3;
+P           K1                K2          K3          
+-----------------------------------------------------------
+1           A                 30          1           
+11          A                 20          2           
+21          A                 10          3           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_QRY_DESC;
+$T0> SKIP END;
+

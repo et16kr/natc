@@ -1,0 +1,94 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Drop several Disk native indexes and cascade the table.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DDL-009
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_DROP_MANY;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DDL_DROP_MANY
+    (P INTEGER, K1 INTEGER, K2 INTEGER, K3 INTEGER)
+    PARTITION BY HASH(P)
+    (PARTITION P1, PARTITION P2, PARTITION P3)
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_DDL_DROP_I1 ON NGD_DDL_DROP_MANY(K1);
+Create success.
+$T0> CREATE INDEX NGD_DDL_DROP_I2 ON NGD_DDL_DROP_MANY(K2);
+Create success.
+$T0> CREATE INDEX NGD_DDL_DROP_I3 ON NGD_DDL_DROP_MANY(K3);
+Create success.
+$T0> INSERT INTO NGD_DDL_DROP_MANY VALUES (1, 101, 201, 301);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_DROP_MANY VALUES (2, 102, 202, 302);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> DROP INDEX NGD_DDL_DROP_I1;
+Drop success.
+$T0> DROP INDEX NGD_DDL_DROP_I2;
+Drop success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_DROP_I%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_DDL_DROP_I3                                                                                                                   
+3           0           
+1 row selected.
+$T0> SELECT /*+ INDEX(NGD_DDL_DROP_MANY, NGD_DDL_DROP_I3) */ P, K1, K2, K3
+      FROM NGD_DDL_DROP_MANY ORDER BY K3;
+P           K1          K2          K3          
+-----------------------------------------------------
+1           101         201         301         
+2           102         202         302         
+2 rows selected.
+$T0> DROP TABLE NGD_DDL_DROP_MANY;
+Drop success.
+$T0> SELECT COUNT(*) AS REMAINING_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_DROP_I%';
+REMAINING_INDEX_COUNT 
+------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_DDL_DROP_I%';
+HIDDEN_TABLE_COUNT   
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_DROP_MANY;
+$T0> SKIP END;
+

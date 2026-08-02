@@ -1,0 +1,67 @@
+###########################################################################
+# TestCase Description = Maintain eight Disk native indexes with one DML row.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DML-008
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_MANY;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DML_MANY
+    (P INTEGER, K1 INTEGER, K2 INTEGER, K3 INTEGER, K4 INTEGER,
+     K5 INTEGER, K6 INTEGER, K7 INTEGER, K8 INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) ENABLE ROW MOVEMENT TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_DML_MANY_I1 ON NGD_DML_MANY(K1);
+    CREATE INDEX NGD_DML_MANY_I2 ON NGD_DML_MANY(K2);
+    CREATE INDEX NGD_DML_MANY_I3 ON NGD_DML_MANY(K3);
+    CREATE INDEX NGD_DML_MANY_I4 ON NGD_DML_MANY(K4);
+    CREATE INDEX NGD_DML_MANY_I5 ON NGD_DML_MANY(K5);
+    CREATE INDEX NGD_DML_MANY_I6 ON NGD_DML_MANY(K6);
+    CREATE INDEX NGD_DML_MANY_I7 ON NGD_DML_MANY(K7);
+    CREATE INDEX NGD_DML_MANY_I8 ON NGD_DML_MANY(K8);
+
+##################################
+SECTOR; TEST
+##################################
+    INSERT INTO NGD_DML_MANY VALUES
+        (1, 101, 102, 103, 104, 105, 106, 107, 108, 1);
+    UPDATE NGD_DML_MANY
+       SET P = 21, K1 = 201, K2 = 202, K3 = 203, K4 = 204,
+           K5 = 205, K6 = 206, K7 = 207, K8 = 208, V = 2
+     WHERE K1 = 101;
+    SELECT /*+ INDEX(NGD_DML_MANY, NGD_DML_MANY_I1) */
+           P, K1, K2, K3, K4, K5, K6, K7, K8, V
+      FROM NGD_DML_MANY ORDER BY K1;
+    SELECT /*+ INDEX(NGD_DML_MANY, NGD_DML_MANY_I8) */
+           P, K1, K2, K3, K4, K5, K6, K7, K8, V
+      FROM NGD_DML_MANY ORDER BY K8;
+    SELECT COUNT(*) AS NATIVE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DML_MANY_I%';
+    DELETE FROM NGD_DML_MANY WHERE K4 = 204;
+    SELECT COUNT(*) FROM NGD_DML_MANY;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DML_MANY;
+    SKIP END;
+}

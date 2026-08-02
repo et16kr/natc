@@ -1,0 +1,104 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Maintain a Disk native index across basic DML.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DML_BASIC;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DML_BASIC
+    (
+        P INTEGER,
+        K INTEGER,
+        V INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE INDEX NGD_DML_BASIC_I ON NGD_DML_BASIC(K);
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> INSERT INTO NGD_DML_BASIC VALUES (1, 101, 1);
+1 row inserted.
+$T0> INSERT INTO NGD_DML_BASIC VALUES (11, 111, 1);
+1 row inserted.
+$T0> INSERT INTO NGD_DML_BASIC VALUES (21, 121, 1);
+1 row inserted.
+
+$T0> SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         1           
+11          111         1           
+21          121         1           
+3 rows selected.
+
+$T0> UPDATE NGD_DML_BASIC SET V = V + 10 WHERE K = 111;
+1 row updated.
+$T0> SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         1           
+11          111         11          
+21          121         1           
+3 rows selected.
+
+$T0> UPDATE NGD_DML_BASIC SET K = K + 1000 WHERE P >= 20;
+1 row updated.
+$T0> SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+P           K           V           
+----------------------------------------
+1           101         1           
+11          111         11          
+21          1121        1           
+3 rows selected.
+
+$T0> DELETE FROM NGD_DML_BASIC WHERE K = 101;
+1 row deleted.
+$T0> SELECT P, K, V FROM NGD_DML_BASIC ORDER BY K;
+P           K           V           
+----------------------------------------
+11          111         11          
+21          1121        1           
+2 rows selected.
+
+$T0> SELECT /*+ INDEX(NGD_DML_BASIC, NGD_DML_BASIC_I) */
+           COUNT(*), MIN(K), MAX(K)
+      FROM NGD_DML_BASIC;
+COUNT                MIN(K)      MAX(K)      
+-------------------------------------------------
+2                    111         1121        
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DML_BASIC;
+$T0> SKIP END;
+

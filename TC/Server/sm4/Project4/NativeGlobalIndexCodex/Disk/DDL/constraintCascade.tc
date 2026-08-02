@@ -1,0 +1,69 @@
+###########################################################################
+# TestCase Description = Protect Disk PK and UK backing indexes from FK drops.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DDL-007
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_FK_CHILD;
+    DROP TABLE NGD_DDL_FK_PARENT;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DDL_FK_PARENT
+    (P INTEGER, ID INTEGER, UKEY INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    ALTER TABLE NGD_DDL_FK_PARENT
+        ADD CONSTRAINT NGD_DDL_FK_PK PRIMARY KEY(ID);
+    ALTER TABLE NGD_DDL_FK_PARENT
+        ADD CONSTRAINT NGD_DDL_FK_UK UNIQUE(UKEY);
+    CREATE TABLE NGD_DDL_FK_CHILD (ID INTEGER, UKEY INTEGER)
+        TABLESPACE SYS_TBS_DISK_DATA;
+    ALTER TABLE NGD_DDL_FK_CHILD
+        ADD CONSTRAINT NGD_DDL_FK_C FOREIGN KEY(UKEY)
+        REFERENCES NGD_DDL_FK_PARENT(UKEY);
+    INSERT INTO NGD_DDL_FK_PARENT VALUES (1, 101, 201);
+    INSERT INTO NGD_DDL_FK_CHILD VALUES (1, 201);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER TABLE NGD_DDL_FK_PARENT DROP CONSTRAINT NGD_DDL_FK_UK;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_DDL_FK_PK', 'NGD_DDL_FK_UK')
+     ORDER BY INDEX_NAME;
+    INSERT INTO NGD_DDL_FK_CHILD VALUES (2, 999);
+    SELECT ID, UKEY FROM NGD_DDL_FK_CHILD ORDER BY ID;
+
+    ALTER TABLE NGD_DDL_FK_CHILD DROP CONSTRAINT NGD_DDL_FK_C;
+    ALTER TABLE NGD_DDL_FK_PARENT DROP CONSTRAINT NGD_DDL_FK_UK;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_FK_%'
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_FK_CHILD;
+    DROP TABLE NGD_DDL_FK_PARENT;
+    SKIP END;
+}

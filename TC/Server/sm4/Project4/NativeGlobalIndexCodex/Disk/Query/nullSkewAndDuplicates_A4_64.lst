@@ -1,0 +1,89 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Search Disk NULL, skew, and duplicate native keys.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-QRY-009
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_QRY_SKEW;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_QRY_SKEW (P INTEGER, K INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_QRY_SKEW_I ON NGD_QRY_SKEW(K);
+Create success.
+$T0> INSERT INTO NGD_QRY_SKEW VALUES (1, NULL, 1);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_SKEW VALUES (2, NULL, 2);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_SKEW VALUES (3, 10, 3);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_SKEW VALUES (11, 10, 4);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_SKEW VALUES (12, 10, 5);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_SKEW VALUES (21, 20, 6);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGD_QRY_SKEW, NGD_QRY_SKEW_I) */ P, K, V
+      FROM NGD_QRY_SKEW WHERE K = 10 ORDER BY P, V;
+P           K           V           
+----------------------------------------
+3           10          3           
+11          10          4           
+12          10          5           
+3 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGD_QRY_SKEW) */ P, K, V
+      FROM NGD_QRY_SKEW WHERE K = 10 ORDER BY P, V;
+P           K           V           
+----------------------------------------
+3           10          3           
+11          10          4           
+12          10          5           
+3 rows selected.
+$T0> SELECT P, K, V FROM NGD_QRY_SKEW WHERE K IS NULL ORDER BY P, V;
+P           K           V           
+----------------------------------------
+1                       1           
+2                       2           
+2 rows selected.
+$T0> SELECT K, COUNT(*) FROM NGD_QRY_SKEW
+     GROUP BY K ORDER BY K;
+K           COUNT                
+------------------------------------
+10          3                    
+20          1                    
+            2                    
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_QRY_SKEW;
+$T0> SKIP END;
+

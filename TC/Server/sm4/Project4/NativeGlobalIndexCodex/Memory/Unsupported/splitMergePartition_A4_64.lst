@@ -1,0 +1,141 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject Memory SPLIT/MERGE before topology mutation.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_SPLIT;
+$T0> DROP TABLE NGM_NEG_MERGE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_NEG_SPLIT (P INTEGER, K VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P11 VALUES LESS THAN (10),
+        PARTITION P12 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_NEG_MERGE (P INTEGER, K VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P11 VALUES LESS THAN (10),
+        PARTITION P12 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_NEG_SPLIT_I ON NGM_NEG_SPLIT(K);
+Create success.
+$T0> CREATE INDEX NGM_NEG_MERGE_I ON NGM_NEG_MERGE(K);
+Create success.
+
+$T0> INSERT INTO NGM_NEG_SPLIT VALUES (1, 'K-101');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_SPLIT VALUES (11, 'K-111');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_SPLIT VALUES (21, 'K-121');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_MERGE VALUES (1, 'K-201');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_MERGE VALUES (11, 'K-211');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_MERGE VALUES (21, 'K-221');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER TABLE NGM_NEG_SPLIT
+        SPLIT PARTITION P11 AT (5) INTO
+        (
+            PARTITION P111,
+            PARTITION P112
+        );
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_NEG_SPLIT_I ).]
+
+$T0> ALTER TABLE NGM_NEG_MERGE
+        MERGE PARTITIONS P11, P12 INTO PARTITION P1;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_NEG_MERGE_I ).]
+
+$T0> SELECT T.TABLE_NAME, P.PARTITION_NAME
+      FROM SYSTEM_.SYS_TABLES_ T,
+           SYSTEM_.SYS_TABLE_PARTITIONS_ P
+     WHERE T.USER_ID = USER_ID()
+       AND T.TABLE_NAME IN ('NGM_NEG_SPLIT', 'NGM_NEG_MERGE')
+       AND P.TABLE_ID = T.TABLE_ID
+     ORDER BY T.TABLE_NAME, P.PARTITION_ORDER;
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_NAME                                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------
+NGM_NEG_MERGE                                                                                                                     
+P11                                                                                                                               
+NGM_NEG_MERGE                                                                                                                     
+P12                                                                                                                               
+NGM_NEG_MERGE                                                                                                                     
+PD                                                                                                                                
+NGM_NEG_SPLIT                                                                                                                     
+P11                                                                                                                               
+NGM_NEG_SPLIT                                                                                                                     
+P12                                                                                                                               
+NGM_NEG_SPLIT                                                                                                                     
+PD                                                                                                                                
+6 rows selected.
+
+$T0> SELECT P, K FROM NGM_NEG_SPLIT ORDER BY K;
+P           K                 
+---------------------------------
+1           K-101             
+11          K-111             
+21          K-121             
+3 rows selected.
+$T0> SELECT P, K FROM NGM_NEG_MERGE ORDER BY K;
+P           K                 
+---------------------------------
+1           K-201             
+11          K-211             
+21          K-221             
+3 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_NEG_SPLIT_I', 'NGM_NEG_MERGE_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_NEG_MERGE_I                                                                                                                   
+2           0           
+NGM_NEG_SPLIT_I                                                                                                                   
+2           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_SPLIT;
+$T0> DROP TABLE NGM_NEG_MERGE;
+$T0> SKIP END;
+

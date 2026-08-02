@@ -1,0 +1,114 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Maintain eight Memory native indexes with one DML row.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DML-008
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DML_MANY;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DML_MANY
+    (P INTEGER, K1 VARCHAR(16), K2 VARCHAR(16), K3 VARCHAR(16), K4 VARCHAR(16),
+     K5 VARCHAR(16), K6 VARCHAR(16), K7 VARCHAR(16), K8 VARCHAR(16), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) ENABLE ROW MOVEMENT TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I1 ON NGM_DML_MANY(K1) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I2 ON NGM_DML_MANY(K2) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I3 ON NGM_DML_MANY(K3) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I4 ON NGM_DML_MANY(K4) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I5 ON NGM_DML_MANY(K5) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I6 ON NGM_DML_MANY(K6) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I7 ON NGM_DML_MANY(K7) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_DML_MANY_I8 ON NGM_DML_MANY(K8) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> INSERT INTO NGM_DML_MANY VALUES
+        (1, 'K1-101', 'K2-102', 'K3-103', 'K4-104',
+         'K5-105', 'K6-106', 'K7-107', 'K8-108', 1);
+1 row inserted.
+$T0> UPDATE NGM_DML_MANY
+       SET P = 21, K1 = 'K1-201', K2 = 'K2-202', K3 = 'K3-203',
+           K4 = 'K4-204', K5 = 'K5-205', K6 = 'K6-206',
+           K7 = 'K7-207', K8 = 'K8-208', V = 2
+     WHERE K1 = 'K1-101';
+1 row updated.
+$T0> SELECT /*+ INDEX(NGM_DML_MANY, NGM_DML_MANY_I1) */
+           P, K1, K2, K3, K4, K5, K6, K7, K8, V
+      FROM NGM_DML_MANY ORDER BY K1;
+P           K1                K2                K3                
+-----------------------------------------------------------------------
+K4                K5                K6                K7                
+-----------------------------------------------------------------------------
+K8                V           
+---------------------------------
+21          K1-201            K2-202            K3-203            
+K4-204            K5-205            K6-206            K7-207            
+K8-208            2           
+1 row selected.
+$T0> SELECT /*+ INDEX(NGM_DML_MANY, NGM_DML_MANY_I8) */
+           P, K1, K2, K3, K4, K5, K6, K7, K8, V
+      FROM NGM_DML_MANY ORDER BY K8;
+P           K1                K2                K3                
+-----------------------------------------------------------------------
+K4                K5                K6                K7                
+-----------------------------------------------------------------------------
+K8                V           
+---------------------------------
+21          K1-201            K2-202            K3-203            
+K4-204            K5-205            K6-206            K7-207            
+K8-208            2           
+1 row selected.
+$T0> SELECT COUNT(*) AS NATIVE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_DML_MANY_I%';
+NATIVE_INDEX_COUNT   
+-----------------------
+8                    
+1 row selected.
+$T0> DELETE FROM NGM_DML_MANY WHERE K4 = 'K4-204';
+1 row deleted.
+$T0> SELECT COUNT(*) FROM NGM_DML_MANY;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DML_MANY;
+$T0> SKIP END;
+

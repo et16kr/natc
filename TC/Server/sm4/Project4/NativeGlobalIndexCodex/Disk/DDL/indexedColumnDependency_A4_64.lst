@@ -1,0 +1,95 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject Disk indexed-column drop without mutation.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DDL-006
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_COLDEP;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_DDL_COLDEP (P INTEGER, K INTEGER, V INTEGER, SPARE INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_DDL_COLDEP_I ON NGD_DDL_COLDEP(K, V DESC);
+Create success.
+$T0> INSERT INTO NGD_DDL_COLDEP VALUES (1, 101, 1, 1001);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_COLDEP VALUES (11, 111, 2, 1011);
+1 row inserted.
+$T0> INSERT INTO NGD_DDL_COLDEP VALUES (21, 121, 3, 1021);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_DDL_COLDEP_I';
+BEFORE_INDEX_COUNT   
+-----------------------
+1                    
+1 row selected.
+$T0> ALTER TABLE NGD_DDL_COLDEP DROP COLUMN K;
+Alter success.
+$T0> SELECT P, K, V, SPARE FROM NGD_DDL_COLDEP ORDER BY K;
+[ERR-31058 : Column not found 
+0001 : SELECT P, K, V, SPARE FROM NGD_DDL_COLDEP ORDER BY K
+                ^^
+]
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGD_DDL_COLDEP_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+No rows selected.
+$T0> UPDATE NGD_DDL_COLDEP SET K = K + 100, V = V + 10 WHERE P = 11;
+[ERR-311F4 : Invalid column name 
+0001 : UPDATE NGD_DDL_COLDEP SET K = K + 100, V = V + 10 WHERE P = 11
+                                ^^
+]
+$T0> INSERT INTO NGD_DDL_COLDEP VALUES (25, 225, 4, 1025);
+[ERR-31054 : Too many insert values]
+$T0> SELECT /*+ INDEX(NGD_DDL_COLDEP, NGD_DDL_COLDEP_I) */ P, K, V, SPARE
+      FROM NGD_DDL_COLDEP ORDER BY K, V DESC;
+[ERR-31058 : Column not found 
+0001 : SELECT /*+ INDEX(NGD_DDL_COLDEP, NGD_DDL_COLDEP_I) */ P, K, V, SPARE
+                                                               ^^
+]
+$T0> ALTER TABLE NGD_DDL_COLDEP DROP COLUMN SPARE;
+Alter success.
+$T0> SELECT P, K, V FROM NGD_DDL_COLDEP ORDER BY K, V DESC;
+[ERR-31058 : Column not found 
+0001 : SELECT P, K, V FROM NGD_DDL_COLDEP ORDER BY K, V DESC
+                ^^
+]
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_DDL_COLDEP;
+$T0> SKIP END;
+

@@ -1,0 +1,59 @@
+###########################################################################
+# TestCase Description = Reuse several Disk native indexes after TRUNCATE.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-DDL-010
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_TRUNC_M;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_DDL_TRUNC_M (P INTEGER, K1 INTEGER, K2 INTEGER, K3 INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE UNIQUE INDEX NGD_DDL_TRUNC_U ON NGD_DDL_TRUNC_M(K1);
+    CREATE INDEX NGD_DDL_TRUNC_I2 ON NGD_DDL_TRUNC_M(K2);
+    CREATE INDEX NGD_DDL_TRUNC_I3 ON NGD_DDL_TRUNC_M(K3 DESC);
+    INSERT INTO NGD_DDL_TRUNC_M VALUES (1, 101, 201, 301);
+    INSERT INTO NGD_DDL_TRUNC_M VALUES (11, 111, 211, 311);
+    INSERT INTO NGD_DDL_TRUNC_M VALUES (21, 121, 221, 321);
+
+##################################
+SECTOR; TEST
+##################################
+    TRUNCATE TABLE NGD_DDL_TRUNC_M;
+    SELECT COUNT(*) FROM NGD_DDL_TRUNC_M;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_DDL_TRUNC_%'
+     ORDER BY INDEX_NAME;
+    INSERT INTO NGD_DDL_TRUNC_M VALUES (5, 105, 205, 305);
+    INSERT INTO NGD_DDL_TRUNC_M VALUES (15, 115, 215, 315);
+    INSERT INTO NGD_DDL_TRUNC_M VALUES (25, 125, 225, 325);
+    SELECT /*+ INDEX(NGD_DDL_TRUNC_M, NGD_DDL_TRUNC_U) */ P, K1, K2, K3
+      FROM NGD_DDL_TRUNC_M ORDER BY K1;
+    SELECT /*+ INDEX(NGD_DDL_TRUNC_M, NGD_DDL_TRUNC_I3) */ P, K1, K2, K3
+      FROM NGD_DDL_TRUNC_M ORDER BY K3 DESC;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_DDL_TRUNC_M;
+    SKIP END;
+}

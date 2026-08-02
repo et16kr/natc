@@ -1,0 +1,94 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Create and maintain a Memory function-based index.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_FUNC;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_FUNC
+    (
+        P INTEGER,
+        K INTEGER,
+        V INTEGER
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_CRT_FUNC_I ON NGM_CRT_FUNC(K + V);
+Create success.
+
+$T0> INSERT INTO NGM_CRT_FUNC VALUES (1, 10, 1);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_FUNC VALUES (11, 20, 2);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_FUNC VALUES (21, 30, 3);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGM_CRT_FUNC, NGM_CRT_FUNC_I) */ P, K, V, K + V
+      FROM NGM_CRT_FUNC
+     WHERE K + V BETWEEN 10 AND 30
+     ORDER BY K + V, P;
+P           K           V           K + V       
+-----------------------------------------------------
+1           10          1           11          
+11          20          2           22          
+2 rows selected.
+
+$T0> UPDATE NGM_CRT_FUNC SET V = V + 10 WHERE P = 11;
+1 row updated.
+
+$T0> SELECT /*+ INDEX(NGM_CRT_FUNC, NGM_CRT_FUNC_I) */ P, K, V, K + V
+      FROM NGM_CRT_FUNC
+     WHERE K + V >= 20
+     ORDER BY K + V, P;
+P           K           V           K + V       
+-----------------------------------------------------
+11          20          12          32          
+21          30          3           33          
+2 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_CRT_FUNC_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_CRT_FUNC_I                                                                                                                    
+2           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_FUNC;
+$T0> SKIP END;
+

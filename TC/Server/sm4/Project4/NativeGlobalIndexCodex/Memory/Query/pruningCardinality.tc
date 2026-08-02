@@ -1,0 +1,60 @@
+###########################################################################
+# TestCase Description = Cover Memory pruning of zero, one, many, and all partitions.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-QRY-006
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_PRUNE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_QRY_PRUNE (P INTEGER, K VARCHAR(32), V VARCHAR(8))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION P3 VALUES LESS THAN (30),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_QRY_PRUNE_I ON NGM_QRY_PRUNE(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_QRY_PRUNE VALUES (1, 'K-101', 'P1');
+    INSERT INTO NGM_QRY_PRUNE VALUES (11, 'K-111', 'P2');
+    INSERT INTO NGM_QRY_PRUNE VALUES (21, 'K-121', 'P3');
+    INSERT INTO NGM_QRY_PRUNE VALUES (31, 'K-131', 'PD');
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+    SELECT 'ZERO' AS SCOPE, COUNT(*) FROM NGM_QRY_PRUNE
+     WHERE P < 0 AND K >= 'K-100';
+    SELECT 'ONE' AS SCOPE, COUNT(*) FROM NGM_QRY_PRUNE
+     WHERE P >= 10 AND P < 20 AND K >= 'K-100';
+    SELECT 'MANY' AS SCOPE, COUNT(*) FROM NGM_QRY_PRUNE
+     WHERE P < 30 AND K >= 'K-100';
+    SELECT 'ALL' AS SCOPE, COUNT(*) FROM NGM_QRY_PRUNE
+     WHERE K >= 'K-100';
+    SELECT /*+ INDEX(NGM_QRY_PRUNE, NGM_QRY_PRUNE_I) */ P, K, V
+      FROM NGM_QRY_PRUNE WHERE P < 30 AND K >= 'K-100' ORDER BY K;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_PRUNE;
+    SKIP END;
+}

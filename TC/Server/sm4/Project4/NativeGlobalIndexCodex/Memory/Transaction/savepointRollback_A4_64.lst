@@ -1,0 +1,101 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Roll back Memory DML and row movement to a savepoint.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-TRX-002
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_SAVE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_TRX_SAVE (P INTEGER, K VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    ENABLE ROW MOVEMENT
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_TRX_SAVE_I ON NGM_TRX_SAVE(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_TRX_SAVE VALUES (1, 'K-101', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_SAVE VALUES (11, 'K-111', 2);
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_SAVE VALUES (21, 'K-121', 3);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> SAVEPOINT NGM_SP1;
+Savepoint success.
+$T0> INSERT INTO NGM_TRX_SAVE VALUES (5, 'K-105', 4);
+1 row inserted.
+$T0> UPDATE NGM_TRX_SAVE SET P = 25, K = 'K-201' WHERE K = 'K-101';
+1 row updated.
+$T0> DELETE FROM NGM_TRX_SAVE WHERE K = 'K-111';
+1 row deleted.
+$T0> SELECT P, K, V FROM NGM_TRX_SAVE ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+5           K-105                             4           
+21          K-121                             3           
+25          K-201                             1           
+3 rows selected.
+
+$T0> ROLLBACK TO SAVEPOINT NGM_SP1;
+Rollback success.
+$T0> SELECT /*+ INDEX(NGM_TRX_SAVE, NGM_TRX_SAVE_I) */ P, K, V
+      FROM NGM_TRX_SAVE
+     ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             1           
+11          K-111                             2           
+21          K-121                             3           
+3 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGM_TRX_SAVE) */ P, K, V
+      FROM NGM_TRX_SAVE
+     ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             1           
+11          K-111                             2           
+21          K-121                             3           
+3 rows selected.
+$T0> COMMIT;
+Commit success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_SAVE;
+$T0> SKIP END;
+

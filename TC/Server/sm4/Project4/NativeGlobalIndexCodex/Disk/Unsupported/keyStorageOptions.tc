@@ -1,0 +1,80 @@
+###########################################################################
+# TestCase Description = Reject unsupported key storage options for a Disk native index.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-NEG-005
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_KEYOPT;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_NEG_KEYOPT (P INTEGER, K VARCHAR(64), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_NEG_KEYOPT_OK ON NGD_NEG_KEYOPT(K);
+    INSERT INTO NGD_NEG_KEYOPT VALUES (1, 'K-101', 201);
+    INSERT INTO NGD_NEG_KEYOPT VALUES (11, 'K-111', 211);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_KEYOPT_%';
+
+    CREATE INDEX NGD_NEG_KEYOPT_DKEY ON NGD_NEG_KEYOPT(V) DIRECTKEY;
+    CREATE INDEX NGD_NEG_KEYOPT_PERS ON NGD_NEG_KEYOPT(V) SET PERSISTENT = ON;
+
+    SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_KEYOPT_%';
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_NEG_KEYOPT_OK';
+    SELECT COUNT(*) AS HIDDEN_FALLBACK_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGD_NEG_KEYOPT_%';
+    SELECT COUNT(*) AS HIDDEN_FALLBACK_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGD_NEG_KEYOPT_%'
+            OR INDEX_NAME LIKE '$GIR_NGD_NEG_KEYOPT_%');
+    SELECT /*+ INDEX(NGD_NEG_KEYOPT, NGD_NEG_KEYOPT_OK) */ P, K, V
+      FROM NGD_NEG_KEYOPT ORDER BY K;
+    UPDATE NGD_NEG_KEYOPT SET K = 'K-121' WHERE P = 11;
+    SELECT /*+ INDEX(NGD_NEG_KEYOPT, NGD_NEG_KEYOPT_OK) */ P, K, V
+      FROM NGD_NEG_KEYOPT ORDER BY K;
+
+    CREATE INDEX NGD_NEG_KEYOPT_DKEY ON NGD_NEG_KEYOPT(V);
+    CREATE INDEX NGD_NEG_KEYOPT_PERS ON NGD_NEG_KEYOPT(P);
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGD_NEG_KEYOPT_%'
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_NEG_KEYOPT;
+    SKIP END;
+}

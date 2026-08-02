@@ -1,0 +1,98 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Build Memory native indexes on empty and populated tables.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-CRT-007
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_POP;
+$T0> DROP TABLE NGM_CRT_EMPTY;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_EMPTY (P INTEGER, K VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN (10), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE TABLE NGM_CRT_POP (P INTEGER, K VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN (10), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_CRT_POP VALUES (1, 'K-101');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_POP VALUES (11, 'K-111');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> CREATE INDEX NGM_CRT_EMPTY_I ON NGM_CRT_EMPTY(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_CRT_EMPTY VALUES (1, 'K-201');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_EMPTY VALUES (11, 'K-211');
+1 row inserted.
+
+$T0> CREATE INDEX NGM_CRT_POP_I ON NGM_CRT_POP(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_CRT_POP VALUES (21, 'K-121');
+1 row inserted.
+$T0> UPDATE NGM_CRT_POP SET K = 'K-301' WHERE P = 1;
+1 row updated.
+
+$T0> SELECT /*+ INDEX(NGM_CRT_EMPTY, NGM_CRT_EMPTY_I) */ P, K
+      FROM NGM_CRT_EMPTY ORDER BY K;
+P           K                                 
+-------------------------------------------------
+1           K-201                             
+11          K-211                             
+2 rows selected.
+$T0> SELECT /*+ INDEX(NGM_CRT_POP, NGM_CRT_POP_I) */ P, K
+      FROM NGM_CRT_POP ORDER BY K;
+P           K                                 
+-------------------------------------------------
+1           K-301                             
+11          K-111                             
+21          K-121                             
+3 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_CRT_EMPTY_I', 'NGM_CRT_POP_I')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_CRT_EMPTY_I                                                                                                                   
+2           0           
+NGM_CRT_POP_I                                                                                                                     
+2           0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_POP;
+$T0> DROP TABLE NGM_CRT_EMPTY;
+$T0> SKIP END;
+

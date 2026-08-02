@@ -1,0 +1,85 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject Memory partition topology and reset DDL.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_PART;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_NEG_PART (P INTEGER, K VARCHAR(32))
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE INDEX NGM_NEG_PART_I
+        ON NGM_NEG_PART(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_NEG_PART VALUES (1, 'K-101');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_PART VALUES (2, 'K-102');
+1 row inserted.
+$T0> INSERT INTO NGM_NEG_PART VALUES (3, 'K-103');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER TABLE NGM_NEG_PART ADD PARTITION P4;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_NEG_PART_I ).]
+$T0> ALTER TABLE NGM_NEG_PART COALESCE PARTITION;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_NEG_PART_I ).]
+$T0> ALTER TABLE NGM_NEG_PART TRUNCATE PARTITION P1;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_NEG_PART_I ).]
+$T0> ALTER TABLE NGM_NEG_PART DROP PARTITION P1;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGM_NEG_PART_I ).]
+
+$T0> SELECT P, K FROM NGM_NEG_PART ORDER BY K;
+P           K                                 
+-------------------------------------------------
+2           K-102                             
+3           K-103                             
+1           K-101                             
+3 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_NEG_PART_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_NEG_PART_I                                                                                                                    
+2           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_NEG_PART;
+$T0> SKIP END;
+

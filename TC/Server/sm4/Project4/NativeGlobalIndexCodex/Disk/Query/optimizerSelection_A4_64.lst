@@ -1,0 +1,130 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Compare unhinted, local, native, and full Disk scans.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-QRY-005
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_QRY_OPT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_QRY_OPT (P INTEGER, GKEY INTEGER, LKEY INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NGD_QRY_OPT_G ON NGD_QRY_OPT(GKEY);
+Create success.
+$T0> CREATE INDEX NGD_QRY_OPT_L ON NGD_QRY_OPT(LKEY) LOCAL;
+Create success.
+$T0> INSERT INTO NGD_QRY_OPT VALUES (1, 101, 1, 10);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_OPT VALUES (5, 105, 5, 20);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_OPT VALUES (11, 111, 1, 30);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_OPT VALUES (15, 115, 5, 40);
+1 row inserted.
+$T0> INSERT INTO NGD_QRY_OPT VALUES (21, 121, 1, 50);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT P, GKEY, LKEY, V FROM NGD_QRY_OPT
+     WHERE GKEY BETWEEN 105 AND 121 ORDER BY GKEY;
+P           GKEY        LKEY        V           
+-----------------------------------------------------
+5           105         5           20          
+11          111         1           30          
+15          115         5           40          
+21          121         1           50          
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_OPT, PARTITION: 3/3, INDEX: SYS.NGD_QRY_OPT_G, ACCESS: 4, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT /*+ INDEX(NGD_QRY_OPT, NGD_QRY_OPT_G) */ P, GKEY, LKEY, V
+      FROM NGD_QRY_OPT WHERE GKEY BETWEEN 105 AND 121 ORDER BY GKEY;
+P           GKEY        LKEY        V           
+-----------------------------------------------------
+5           105         5           20          
+11          111         1           30          
+15          115         5           40          
+21          121         1           50          
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_OPT, PARTITION: 3/3, INDEX: SYS.NGD_QRY_OPT_G, ACCESS: 4, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT /*+ FULL SCAN(NGD_QRY_OPT) */ P, GKEY, LKEY, V
+      FROM NGD_QRY_OPT WHERE GKEY BETWEEN 105 AND 121 ORDER BY GKEY;
+P           GKEY        LKEY        V           
+-----------------------------------------------------
+5           105         5           20          
+11          111         1           30          
+15          115         5           40          
+21          121         1           50          
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_OPT, PARTITION: 3/3, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+   SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT /*+ INDEX(NGD_QRY_OPT, NGD_QRY_OPT_L) */ P, GKEY, LKEY, V
+      FROM NGD_QRY_OPT WHERE LKEY = 1 ORDER BY GKEY;
+P           GKEY        LKEY        V           
+-----------------------------------------------------
+1           101         1           10          
+11          111         1           30          
+21          121         1           50          
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.NGD_QRY_OPT, PARTITION: 3/3, INDEX: SYS.NGD_QRY_OPT_L, ACCESS: 3, COST: BLOCKED )
+   SCAN ( PARTITION: PD, INDEX: SYS.NGD_QRY_OPT_L, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P2, INDEX: SYS.NGD_QRY_OPT_L, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( PARTITION: P1, INDEX: SYS.NGD_QRY_OPT_L, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_QRY_OPT;
+$T0> SKIP END;
+

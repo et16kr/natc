@@ -1,0 +1,100 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Abort duplicate Memory unique builds without publication.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-CRT-006
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_DUP;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_DUP (P INTEGER, K VARCHAR(32) NOT NULL, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_CRT_DUP VALUES (1, 'K-100', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_DUP VALUES (11, 'K-100', 2);
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_DUP VALUES (21, 'K-200', 3);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> CREATE UNIQUE INDEX NGM_CRT_DUP_U ON NGM_CRT_DUP(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-11058 : The row already exists in a unique index.]
+$T0> ALTER TABLE NGM_CRT_DUP
+        ADD CONSTRAINT NGM_CRT_DUP_UK UNIQUE(K);
+[ERR-11058 : The row already exists in a unique index.]
+$T0> ALTER TABLE NGM_CRT_DUP
+        ADD CONSTRAINT NGM_CRT_DUP_PK PRIMARY KEY(K);
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> SELECT COUNT(*) AS PARTIAL_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_CRT_DUP_U', 'NGM_CRT_DUP_UK', 'NGM_CRT_DUP_PK');
+PARTIAL_INDEX_COUNT  
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS HIDDEN_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGM_CRT_DUP_%';
+HIDDEN_TABLE_COUNT   
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT P, K, V FROM NGM_CRT_DUP ORDER BY P, V;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-100                             1           
+11          K-100                             2           
+21          K-200                             3           
+3 rows selected.
+
+$T0> DELETE FROM NGM_CRT_DUP WHERE P = 11;
+1 row deleted.
+$T0> CREATE UNIQUE INDEX NGM_CRT_DUP_U ON NGM_CRT_DUP(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_CRT_DUP VALUES (11, 'K-300', 4);
+1 row inserted.
+$T0> SELECT /*+ INDEX(NGM_CRT_DUP, NGM_CRT_DUP_U) */ P, K, V
+      FROM NGM_CRT_DUP ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-100                             1           
+11          K-300                             4           
+21          K-200                             3           
+3 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_DUP;
+$T0> SKIP END;
+

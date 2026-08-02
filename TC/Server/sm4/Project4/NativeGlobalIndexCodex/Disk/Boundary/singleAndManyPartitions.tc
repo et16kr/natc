@@ -1,0 +1,71 @@
+###########################################################################
+# TestCase Description = Compare Disk native indexes on one and eight partitions.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-BND-001
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_BND_MANY;
+    DROP TABLE NGD_BND_ONE;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGD_BND_ONE (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES DEFAULT)
+    TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE TABLE NGD_BND_MANY (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION P3 VALUES LESS THAN (30),
+        PARTITION P4 VALUES LESS THAN (40),
+        PARTITION P5 VALUES LESS THAN (50),
+        PARTITION P6 VALUES LESS THAN (60),
+        PARTITION P7 VALUES LESS THAN (70),
+        PARTITION P8 VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+    CREATE INDEX NGD_BND_ONE_I ON NGD_BND_ONE(K);
+    CREATE INDEX NGD_BND_MANY_I ON NGD_BND_MANY(K);
+    INSERT INTO NGD_BND_ONE VALUES (1, 101);
+    INSERT INTO NGD_BND_ONE VALUES (81, 181);
+    INSERT INTO NGD_BND_MANY VALUES (1, 101);
+    INSERT INTO NGD_BND_MANY VALUES (11, 111);
+    INSERT INTO NGD_BND_MANY VALUES (21, 121);
+    INSERT INTO NGD_BND_MANY VALUES (31, 131);
+    INSERT INTO NGD_BND_MANY VALUES (41, 141);
+    INSERT INTO NGD_BND_MANY VALUES (51, 151);
+    INSERT INTO NGD_BND_MANY VALUES (61, 161);
+    INSERT INTO NGD_BND_MANY VALUES (71, 171);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT /*+ INDEX(NGD_BND_ONE, NGD_BND_ONE_I) */ P, K
+      FROM NGD_BND_ONE ORDER BY K;
+    SELECT /*+ INDEX(NGD_BND_MANY, NGD_BND_MANY_I) */ P, K
+      FROM NGD_BND_MANY ORDER BY K;
+    SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGD_BND_ONE_I', 'NGD_BND_MANY_I')
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGD_BND_MANY;
+    DROP TABLE NGD_BND_ONE;
+    SKIP END;
+}

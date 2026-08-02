@@ -1,0 +1,105 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Protect Memory PK and UK backing indexes from FK drops.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-DDL-007
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_FK_CHILD;
+$T0> DROP TABLE NGM_DDL_FK_PARENT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_DDL_FK_PARENT
+    (P INTEGER, ID VARCHAR(32), UKEY VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> ALTER TABLE NGM_DDL_FK_PARENT
+        ADD CONSTRAINT NGM_DDL_FK_PK PRIMARY KEY(ID);
+Alter success.
+$T0> ALTER TABLE NGM_DDL_FK_PARENT
+        ADD CONSTRAINT NGM_DDL_FK_UK UNIQUE(UKEY);
+Alter success.
+$T0> CREATE TABLE NGM_DDL_FK_CHILD (ID INTEGER, UKEY VARCHAR(32))
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> ALTER TABLE NGM_DDL_FK_CHILD
+        ADD CONSTRAINT NGM_DDL_FK_C FOREIGN KEY(UKEY)
+        REFERENCES NGM_DDL_FK_PARENT(UKEY);
+Alter success.
+$T0> INSERT INTO NGM_DDL_FK_PARENT VALUES (1, 'ID-101', 'UK-201');
+1 row inserted.
+$T0> INSERT INTO NGM_DDL_FK_CHILD VALUES (1, 'UK-201');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER TABLE NGM_DDL_FK_PARENT DROP CONSTRAINT NGM_DDL_FK_UK;
+[ERR-3102A : A foreign key constraint depends on the table or column.]
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_DDL_FK_PK', 'NGM_DDL_FK_UK')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_DDL_FK_PK                                                                                                                     
+2           0           
+NGM_DDL_FK_UK                                                                                                                     
+2           0           
+2 rows selected.
+$T0> INSERT INTO NGM_DDL_FK_CHILD VALUES (2, 'UK-999');
+[ERR-31077 : The parent record was not found for NGM_DDL_FK_C.]
+$T0> SELECT ID, UKEY FROM NGM_DDL_FK_CHILD ORDER BY ID;
+ID          UKEY                              
+-------------------------------------------------
+1           UK-201                            
+1 row selected.
+
+$T0> ALTER TABLE NGM_DDL_FK_CHILD DROP CONSTRAINT NGM_DDL_FK_C;
+Alter success.
+$T0> ALTER TABLE NGM_DDL_FK_PARENT DROP CONSTRAINT NGM_DDL_FK_UK;
+Alter success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_DDL_FK_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_DDL_FK_PK                                                                                                                     
+2           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_DDL_FK_CHILD;
+$T0> DROP TABLE NGM_DDL_FK_PARENT;
+$T0> SKIP END;
+

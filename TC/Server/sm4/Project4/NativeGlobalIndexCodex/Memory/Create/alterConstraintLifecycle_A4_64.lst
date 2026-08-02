@@ -1,0 +1,122 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Maintain Memory PK, UK, and FK constraint lifecycles.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-CRT-005
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_CON_CHILD;
+$T0> DROP TABLE NGM_CRT_CON_PARENT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_CRT_CON_PARENT (P INTEGER, ID VARCHAR(32), UKEY VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE TABLE NGM_CRT_CON_CHILD (ID INTEGER, PARENT_UKEY VARCHAR(32))
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> ALTER TABLE NGM_CRT_CON_PARENT
+        ADD CONSTRAINT NGM_CRT_CON_PK PRIMARY KEY(ID);
+Alter success.
+$T0> ALTER TABLE NGM_CRT_CON_PARENT
+        ADD CONSTRAINT NGM_CRT_CON_UK UNIQUE(UKEY);
+Alter success.
+$T0> ALTER TABLE NGM_CRT_CON_CHILD
+        ADD CONSTRAINT NGM_CRT_CON_FK FOREIGN KEY(PARENT_UKEY)
+        REFERENCES NGM_CRT_CON_PARENT(UKEY);
+Alter success.
+$T0> INSERT INTO NGM_CRT_CON_PARENT VALUES (1, 'ID-101', 'UK-201');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_CON_PARENT VALUES (11, 'ID-111', 'UK-211');
+1 row inserted.
+$T0> INSERT INTO NGM_CRT_CON_CHILD VALUES (1, 'UK-201');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME IN ('NGM_CRT_CON_PK', 'NGM_CRT_CON_UK')
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_CRT_CON_PK                                                                                                                    
+2           0           
+NGM_CRT_CON_UK                                                                                                                    
+2           0           
+2 rows selected.
+
+$T0> ALTER TABLE NGM_CRT_CON_PARENT DROP CONSTRAINT NGM_CRT_CON_UK;
+[ERR-3102A : A foreign key constraint depends on the table or column.]
+$T0> SELECT P, ID, UKEY FROM NGM_CRT_CON_PARENT ORDER BY ID;
+P           ID                                UKEY                              
+------------------------------------------------------------------------------------
+1           ID-101                            UK-201                            
+11          ID-111                            UK-211                            
+2 rows selected.
+
+$T0> ALTER TABLE NGM_CRT_CON_CHILD DROP CONSTRAINT NGM_CRT_CON_FK;
+Alter success.
+$T0> ALTER TABLE NGM_CRT_CON_PARENT DROP CONSTRAINT NGM_CRT_CON_UK;
+Alter success.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_CRT_CON_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_CRT_CON_PK                                                                                                                    
+2           0           
+1 row selected.
+
+$T0> ALTER TABLE NGM_CRT_CON_PARENT
+        ADD CONSTRAINT NGM_CRT_CON_UK UNIQUE(UKEY);
+Alter success.
+$T0> ALTER TABLE NGM_CRT_CON_CHILD
+        ADD CONSTRAINT NGM_CRT_CON_FK FOREIGN KEY(PARENT_UKEY)
+        REFERENCES NGM_CRT_CON_PARENT(UKEY);
+Alter success.
+$T0> SELECT C.ID, C.PARENT_UKEY, P.P
+      FROM NGM_CRT_CON_CHILD C JOIN NGM_CRT_CON_PARENT P
+        ON C.PARENT_UKEY = P.UKEY
+     ORDER BY C.ID;
+ID          PARENT_UKEY                       P           
+--------------------------------------------------------------
+1           UK-201                            1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CRT_CON_CHILD;
+$T0> DROP TABLE NGM_CRT_CON_PARENT;
+$T0> SKIP END;
+

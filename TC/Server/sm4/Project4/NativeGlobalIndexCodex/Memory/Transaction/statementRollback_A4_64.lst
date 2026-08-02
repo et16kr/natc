@@ -1,0 +1,108 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve Memory native entries after a failed statement.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-TRX-001
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_STMT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGM_TRX_STMT (P INTEGER, UKEY INTEGER, V VARCHAR(16))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE UNIQUE INDEX NGM_TRX_STMT_U ON NGM_TRX_STMT(UKEY)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_TRX_STMT VALUES (1, 101, 'BASE-1');
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_STMT VALUES (11, 111, 'BASE-2');
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_STMT VALUES (21, 121, 'BASE-3');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> INSERT INTO NGM_TRX_STMT VALUES (5, 105, 'PENDING');
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_STMT VALUES (15, 111, 'DUPLICATE');
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> SELECT /*+ INDEX(NGM_TRX_STMT, NGM_TRX_STMT_U) */ P, UKEY, V
+      FROM NGM_TRX_STMT
+     ORDER BY UKEY;
+P           UKEY        V                 
+----------------------------------------------
+1           101         BASE-1            
+5           105         PENDING           
+11          111         BASE-2            
+21          121         BASE-3            
+4 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGM_TRX_STMT) */ P, UKEY, V
+      FROM NGM_TRX_STMT
+     ORDER BY UKEY;
+P           UKEY        V                 
+----------------------------------------------
+1           101         BASE-1            
+5           105         PENDING           
+11          111         BASE-2            
+21          121         BASE-3            
+4 rows selected.
+
+$T0> ROLLBACK;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+$T0> SELECT P, UKEY, V FROM NGM_TRX_STMT ORDER BY UKEY;
+P           UKEY        V                 
+----------------------------------------------
+1           101         BASE-1            
+11          111         BASE-2            
+21          121         BASE-3            
+3 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_TRX_STMT_U';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGM_TRX_STMT_U                                                                                                                    
+2           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_STMT;
+$T0> SKIP END;
+

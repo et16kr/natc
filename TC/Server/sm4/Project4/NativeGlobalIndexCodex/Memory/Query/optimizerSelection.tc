@@ -1,0 +1,59 @@
+###########################################################################
+# TestCase Description = Compare unhinted, local, native, and full Memory scans.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-QRY-005
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_OPT;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE NGM_QRY_OPT (P INTEGER, GKEY VARCHAR(32), LKEY INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_QRY_OPT_G ON NGM_QRY_OPT(GKEY)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_QRY_OPT_L ON NGM_QRY_OPT(LKEY) LOCAL;
+    INSERT INTO NGM_QRY_OPT VALUES (1, 'K-101', 1, 10);
+    INSERT INTO NGM_QRY_OPT VALUES (5, 'K-105', 5, 20);
+    INSERT INTO NGM_QRY_OPT VALUES (11, 'K-111', 1, 30);
+    INSERT INTO NGM_QRY_OPT VALUES (15, 'K-115', 5, 40);
+    INSERT INTO NGM_QRY_OPT VALUES (21, 'K-121', 1, 50);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+    SELECT P, GKEY, LKEY, V FROM NGM_QRY_OPT
+     WHERE GKEY BETWEEN 'K-105' AND 'K-121' ORDER BY GKEY;
+    SELECT /*+ INDEX(NGM_QRY_OPT, NGM_QRY_OPT_G) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_OPT WHERE GKEY BETWEEN 'K-105' AND 'K-121' ORDER BY GKEY;
+    SELECT /*+ FULL SCAN(NGM_QRY_OPT) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_OPT WHERE GKEY BETWEEN 'K-105' AND 'K-121' ORDER BY GKEY;
+    SELECT /*+ INDEX(NGM_QRY_OPT, NGM_QRY_OPT_L) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_OPT WHERE LKEY = 1 ORDER BY GKEY;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_OPT;
+    SKIP END;
+}

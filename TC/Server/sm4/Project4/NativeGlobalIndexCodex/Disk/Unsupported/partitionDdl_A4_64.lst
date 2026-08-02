@@ -1,0 +1,83 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject Disk partition topology and reset DDL.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_PART;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_NEG_PART (P INTEGER, K INTEGER)
+    PARTITION BY HASH(P)
+    (
+        PARTITION P1,
+        PARTITION P2,
+        PARTITION P3
+    )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE INDEX NGD_NEG_PART_I ON NGD_NEG_PART(K);
+Create success.
+
+$T0> INSERT INTO NGD_NEG_PART VALUES (1, 101);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_PART VALUES (2, 102);
+1 row inserted.
+$T0> INSERT INTO NGD_NEG_PART VALUES (3, 103);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> ALTER TABLE NGD_NEG_PART ADD PARTITION P4;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGD_NEG_PART_I ).]
+$T0> ALTER TABLE NGD_NEG_PART COALESCE PARTITION;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGD_NEG_PART_I ).]
+$T0> ALTER TABLE NGD_NEG_PART TRUNCATE PARTITION P1;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGD_NEG_PART_I ).]
+$T0> ALTER TABLE NGD_NEG_PART DROP PARTITION P1;
+[ERR-31481 : A rollbackable DDL execution fails, because the table has global non partitioned index ( NGD_NEG_PART_I ).]
+
+$T0> SELECT P, K FROM NGD_NEG_PART ORDER BY K;
+P           K           
+---------------------------
+1           101         
+2           102         
+3           103         
+3 rows selected.
+
+$T0> SELECT INDEX_NAME, INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_NEG_PART_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+NGD_NEG_PART_I                                                                                                                    
+3           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_NEG_PART;
+$T0> SKIP END;
+
