@@ -1,0 +1,151 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Build and rebuild a Disk native global index on 65 partitions.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-BND-005
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> # SQL/iSQL references  = altidev4_gi/docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> #                        altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_BND_PART65;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE NGD_BND_PART65 (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P01 VALUES LESS THAN (1),
+        PARTITION P02 VALUES LESS THAN (2),
+        PARTITION P03 VALUES LESS THAN (3),
+        PARTITION P04 VALUES LESS THAN (4),
+        PARTITION P05 VALUES LESS THAN (5),
+        PARTITION P06 VALUES LESS THAN (6),
+        PARTITION P07 VALUES LESS THAN (7),
+        PARTITION P08 VALUES LESS THAN (8),
+        PARTITION P09 VALUES LESS THAN (9),
+        PARTITION P10 VALUES LESS THAN (10),
+        PARTITION P11 VALUES LESS THAN (11),
+        PARTITION P12 VALUES LESS THAN (12),
+        PARTITION P13 VALUES LESS THAN (13),
+        PARTITION P14 VALUES LESS THAN (14),
+        PARTITION P15 VALUES LESS THAN (15),
+        PARTITION P16 VALUES LESS THAN (16),
+        PARTITION P17 VALUES LESS THAN (17),
+        PARTITION P18 VALUES LESS THAN (18),
+        PARTITION P19 VALUES LESS THAN (19),
+        PARTITION P20 VALUES LESS THAN (20),
+        PARTITION P21 VALUES LESS THAN (21),
+        PARTITION P22 VALUES LESS THAN (22),
+        PARTITION P23 VALUES LESS THAN (23),
+        PARTITION P24 VALUES LESS THAN (24),
+        PARTITION P25 VALUES LESS THAN (25),
+        PARTITION P26 VALUES LESS THAN (26),
+        PARTITION P27 VALUES LESS THAN (27),
+        PARTITION P28 VALUES LESS THAN (28),
+        PARTITION P29 VALUES LESS THAN (29),
+        PARTITION P30 VALUES LESS THAN (30),
+        PARTITION P31 VALUES LESS THAN (31),
+        PARTITION P32 VALUES LESS THAN (32),
+        PARTITION P33 VALUES LESS THAN (33),
+        PARTITION P34 VALUES LESS THAN (34),
+        PARTITION P35 VALUES LESS THAN (35),
+        PARTITION P36 VALUES LESS THAN (36),
+        PARTITION P37 VALUES LESS THAN (37),
+        PARTITION P38 VALUES LESS THAN (38),
+        PARTITION P39 VALUES LESS THAN (39),
+        PARTITION P40 VALUES LESS THAN (40),
+        PARTITION P41 VALUES LESS THAN (41),
+        PARTITION P42 VALUES LESS THAN (42),
+        PARTITION P43 VALUES LESS THAN (43),
+        PARTITION P44 VALUES LESS THAN (44),
+        PARTITION P45 VALUES LESS THAN (45),
+        PARTITION P46 VALUES LESS THAN (46),
+        PARTITION P47 VALUES LESS THAN (47),
+        PARTITION P48 VALUES LESS THAN (48),
+        PARTITION P49 VALUES LESS THAN (49),
+        PARTITION P50 VALUES LESS THAN (50),
+        PARTITION P51 VALUES LESS THAN (51),
+        PARTITION P52 VALUES LESS THAN (52),
+        PARTITION P53 VALUES LESS THAN (53),
+        PARTITION P54 VALUES LESS THAN (54),
+        PARTITION P55 VALUES LESS THAN (55),
+        PARTITION P56 VALUES LESS THAN (56),
+        PARTITION P57 VALUES LESS THAN (57),
+        PARTITION P58 VALUES LESS THAN (58),
+        PARTITION P59 VALUES LESS THAN (59),
+        PARTITION P60 VALUES LESS THAN (60),
+        PARTITION P61 VALUES LESS THAN (61),
+        PARTITION P62 VALUES LESS THAN (62),
+        PARTITION P63 VALUES LESS THAN (63),
+        PARTITION P64 VALUES LESS THAN (64),
+        PARTITION P65 VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE UNIQUE INDEX NGD_BND_PART65_I ON NGD_BND_PART65(K);
+Create success.
+$T0> INSERT INTO NGD_BND_PART65 VALUES (0, 100);
+1 row inserted.
+$T0> INSERT INTO NGD_BND_PART65 VALUES (32, 132);
+1 row inserted.
+$T0> INSERT INTO NGD_BND_PART65 VALUES (64, 164);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGD_BND_PART65, NGD_BND_PART65_I) */ P, K
+      FROM NGD_BND_PART65 ORDER BY K;
+P           K           
+---------------------------
+0           100         
+32          132         
+64          164         
+3 rows selected.
+$T0> ALTER INDEX NGD_BND_PART65_I REBUILD;
+Alter success.
+$T0> SELECT /*+ INDEX(NGD_BND_PART65, NGD_BND_PART65_I) */ COUNT(*)
+      FROM NGD_BND_PART65 WHERE K BETWEEN 100 AND 164;
+COUNT                
+-----------------------
+3                    
+1 row selected.
+$T0> SELECT COUNT(*) AS PARTITION_COUNT
+      FROM SYSTEM_.SYS_TABLE_PARTITIONS_
+     WHERE TABLE_ID = (SELECT TABLE_ID
+                         FROM SYSTEM_.SYS_TABLES_
+                        WHERE USER_ID = USER_ID()
+                          AND TABLE_NAME = 'NGD_BND_PART65');
+PARTITION_COUNT      
+-----------------------
+65                   
+1 row selected.
+$T0> SELECT INDEX_IMPL_TYPE, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGD_BND_PART65_I';
+INDEX_IMPL_TYPE INDEX_TABLE_ID 
+----------------------------------
+3           0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_BND_PART65;
+$T0> SKIP END;
+
