@@ -1,0 +1,178 @@
+###########################################################################
+# TestCase Description = 글로벌 유니크 인덱스를 정합성 검사기로 사용한다.
+#                        인덱스가 어느 파티션의 키를 빠뜨리면 중복 삽입이
+#                        성공해 버리므로, 실패해야 할 삽입이 실패하는지가
+#                        곧 인덱스 완전성의 증거다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+#
+# 한 값을 세 파티션 각각에 넣어 본다. 첫 삽입만 성공하고 나머지는
+# 전부 유니크 위반이어야 한다.
+#
+DEF PROBE_ALL_PARTITIONS( @aValue )
+{
+  insert into t1 values (10,  @{aValue}, 1, 1);
+  insert into t1 values (150, @{aValue}, 2, 2);
+  insert into t1 values (250, @{aValue}, 3, 3);
+  commit;
+
+  select i1, i2 from t1 where i2 = @{aValue} order by i1;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; SINGLE TABLESPACE
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create unique index t1_uk on t1(i2);
+
+# p1 에 먼저 넣고, p2/p3 에 같은 값 -> 각각 실패해야 한다
+CALL PROBE_ALL_PARTITIONS( 500 );
+
+# 반대 순서: p3 에 먼저
+insert into t1 values (250, 600, 3, 3);
+commit;
+insert into t1 values (10,  600, 1, 1);
+insert into t1 values (150, 600, 2, 2);
+commit;
+
+select i1, i2 from t1 where i2 = 600 order by i1;
+
+##################################
+# SECTOR; MULTI TABLESPACE
+##################################
+# 파티션이 서로 다른 메모리 테이블스페이스에 있는 구성.
+# rowOID 는 TBS 안에서만 유일하므로, tie-break 가 (tableOID, rowOID) 로
+# 확장되지 않았다면 서로 다른 파티션의 두 키를 같은 것으로 오인할 수
+# 있다. 그런 상태에서는 유니크 판정도 어긋난다.
+
+CALL CREATE_MEM_PART_TABLE_MULTI_TBS( "range", "integer", "integer" );
+
+create unique index t1_uk on t1(i2);
+
+CALL PROBE_ALL_PARTITIONS( 700 );
+
+# 파티션마다 여러 값을 넣어 트리를 키운 뒤 다시 확인
+insert into t1 select level,       level + 1000, level, level from dual connect by level <= 50;
+insert into t1 select level + 100, level + 2000, level, level from dual connect by level <= 50;
+insert into t1 select level + 200, level + 3000, level, level from dual connect by level <= 50;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+# 각 파티션의 기존 값을 다른 파티션에 넣어 본다 -> 전부 실패해야 한다
+insert into t1 values (150, 1001, 0, 0);
+insert into t1 values (250, 2001, 0, 0);
+insert into t1 values (10,  3001, 0, 0);
+commit;
+
+select count(*) from t1;
+
+##################################
+# SECTOR; UNIQUE AFTER DELETE
+##################################
+# 지운 값은 즉시 재사용할 수 있어야 한다. ager 가 키를 나중에 지우더라도
+# 커밋된 삭제 이후의 삽입은 성공해야 한다.
+
+delete from t1 where i2 = 1001;
+commit;
+
+insert into t1 values (250, 1001, 9, 9);
+commit;
+
+select i1, i2 from t1 where i2 = 1001 order by i1;
+
+##################################
+# SECTOR; UNIQUE AND ROLLBACK
+##################################
+# 롤백된 삽입의 키는 남으면 안 된다. 남아 있으면 뒤이은 삽입이
+# 잘못 실패한다.
+
+insert into t1 values (10, 9999, 1, 1);
+rollback;
+
+# 롤백했으므로 성공해야 한다
+insert into t1 values (150, 9999, 2, 2);
+commit;
+
+select i1, i2 from t1 where i2 = 9999 order by i1;
+
+# 이제는 커밋됐으므로 실패해야 한다
+insert into t1 values (250, 9999, 3, 3);
+
+commit;
+
+##################################
+# SECTOR; UNIQUE AND SAVEPOINT
+##################################
+# savepoint 는 트랜잭션 안에서만 산다. 자동 커밋 상태에서는 문장마다
+# 커밋되어 savepoint 가 즉시 사라지고, rollback to savepoint 가
+# ERR-11016(Savepoint not found) 이 된다. 그래서 이 섹터는 자동 커밋을 끈다.
+alter session set autocommit = false;
+
+savepoint sp1;
+insert into t1 values (10, 8888, 1, 1);
+rollback to savepoint sp1;
+
+# savepoint 롤백으로 키가 사라졌으므로 성공해야 한다
+insert into t1 values (250, 8888, 3, 3);
+commit;
+
+alter session set autocommit = true;
+
+select i1, i2 from t1 where i2 = 8888 order by i1;
+
+##################################
+# SECTOR; NON-UNIQUE INDEX ALLOWS DUPLICATES
+##################################
+# 대조군. 유니크가 아닌 글로벌 인덱스는 중복을 허용해야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index t1_idx on t1(i2);
+
+insert into t1 values (10,  777, 1, 1);
+insert into t1 values (150, 777, 2, 2);
+insert into t1 values (250, 777, 3, 3);
+commit;
+
+select i1, i2 from t1 where i2 = 777 order by i1;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_idx", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

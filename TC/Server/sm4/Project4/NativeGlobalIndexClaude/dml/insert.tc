@@ -1,0 +1,152 @@
+###########################################################################
+# TestCase Description = 파티션드 테이블에 대한 INSERT 가 부모의 글로벌
+#                        인덱스에도 반영되는지 확인한다. range/hash/list
+#                        전 파티션 방식.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; RANGE PARTITION
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3, i2);
+create index lidx1 on t1(i4) local;
+
+# 파티션 하나씩 채우면서 매번 확인한다
+insert into t1 select level, level, level * 2, level * 3 from dual connect by level <= 30;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+insert into t1 select level + 100, level + 100, level * 2, level * 3 from dual connect by level <= 30;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+insert into t1 select level + 200, level + 200, level * 2, level * 3 from dual connect by level <= 30;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx2", "i1, i3", "i3" );
+
+##################################
+# SECTOR; HASH PARTITION
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "hash", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_HASH_DATA();
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; LIST PARTITION
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "list", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_LIST_DATA();
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; INSERT INTO SPECIFIC PARTITION
+##################################
+# 파티션을 지정해서 넣어도 글로벌 인덱스에 반영되어야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+insert into t1 partition (p1) values (10, 10, 1, 1);
+insert into t1 partition (p2) values (110, 110, 2, 2);
+insert into t1 partition (p3) values (210, 210, 3, 3);
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; INSERT SELECT
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+insert into t1 select i1 + 1000, i2 + 1000, i3, i4 from t1 where i1 < 20;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; MANY ROWS
+##################################
+# 트리가 여러 노드로 커지고 split 이 일어나는 규모.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+insert into t1 select level,       level,        level, level from dual connect by level <= 99;
+insert into t1 select level + 100, level + 1000, level, level from dual connect by level <= 99;
+insert into t1 select level + 200, level + 2000, level, level from dual connect by level <= 99;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; INSERT AND ROLLBACK
+##################################
+# 롤백된 삽입의 키는 남으면 안 된다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+insert into t1 select level + 500, level + 5000, level, level from dual connect by level <= 20;
+rollback;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+select count(*) from t1 where i2 >= 5000;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

@@ -1,0 +1,260 @@
+###########################################################################
+# TestCase Description = ADD PARTITION 과 TRUNCATE PARTITION.
+#                        ADD 는 키 작업이 없는 가장 안전한 DDL 이고,
+#                        TRUNCATE 는 DROP 과 같은 키 제거가 필요하지만
+#                        파티션 자체는 남는다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; ADD RANGE PARTITION
+##################################
+# range 파티션 추가. 새 파티션은 비어 있으므로 인덱스에 넣을 키가 없다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200)
+)
+tablespace sys_tbs_mem_data;
+
+create index gidx1 on t1(i2);
+
+insert into t1 select level,       level,       level, level from dual connect by level <= 30;
+insert into t1 select level + 100, level + 100, level, level from dual connect by level <= 30;
+commit;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+alter table t1 add partition p3 values less than (300);
+
+# 추가 직후 기존 데이터는 그대로여야 한다
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+# 새 파티션에 즉시 DML
+insert into t1 select level + 200, level + 200, level, level from dual connect by level <= 30;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; ADD PARTITION WITH TABLESPACE
+##################################
+# 기존 파티션과 다른 테이블스페이스에 추가한다.
+#
+# ★ 기본(default) 파티션은 나중에 추가할 수 없다. qcply.y 의
+#   add_partition_spec 에서 "TR_PARTITION TI_IDENTIFIER TR_VALUES TR_DEFAULT"
+#   가지가 통째로 주석 처리돼 있고 옆에 /* todo : default partition */ 이
+#   달려 있다. 그래서 경계값을 주는 형태로 시험한다.
+
+alter table t1 add partition p4 values less than (400) tablespace mem1;
+
+insert into t1 select level + 300, level + 300, level, level from dual connect by level <= 30;
+commit;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 between 301 and 330;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; ADD LIST PARTITION
+##################################
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+# ★ 리스트 파티션드 테이블에는 ADD PARTITION 을 쓸 수 없다.
+#   qcply.y 의 add_partition_spec 에서 VALUES 뒤에 올 수 있는 것은
+#   LESS THAN 뿐이고, 값 집합 형태는 파서가 받지 않는다
+#   ("values (300)" 의 여는 괄호에서 parse error). 그래서 이 섹터는
+#   RANGE 로 시험한다.
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200)
+)
+tablespace sys_tbs_mem_data;
+
+create index gidx1 on t1(i2);
+
+insert into t1 values (10, 1, 1, 1);
+insert into t1 values (150, 2, 2, 2);
+commit;
+
+alter table t1 add partition p3 values less than (300);
+
+insert into t1 values (300, 3, 3, 3);
+commit;
+
+select i1, i2 from t1 order by i1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; ADD PARTITION WITH UNIQUE INDEX
+##################################
+# 추가한 파티션에 기존 값과 중복되는 키를 넣으면 실패해야 한다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200)
+)
+tablespace sys_tbs_mem_data;
+
+create unique index t1_uk on t1(i2);
+
+insert into t1 values (10, 1000, 1, 1);
+commit;
+
+# 위와 같은 이유로 default 가 아니라 경계값을 준다.
+alter table t1 add partition p3 values less than (300);
+
+# 새 파티션에 기존 값 -> 실패해야 한다
+insert into t1 values (250, 1000, 3, 3);
+
+# 새 값 -> 성공
+insert into t1 values (250, 2000, 3, 3);
+commit;
+
+select i1, i2 from t1 order by i1;
+
+##################################
+# SECTOR; TRUNCATE PARTITION
+##################################
+# 파티션의 데이터만 비운다. 파티션 자체는 남으므로 이후 삽입이 가능하다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+alter table t1 truncate partition p2;
+
+# p2 의 키(101~130)는 사라져야 한다
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 between 101 and 130;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 between 101 and 130;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+# 비운 파티션에 다시 넣는다
+insert into t1 select level + 100, level + 100, level, level from dual connect by level <= 30;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; TRUNCATE ALL PARTITIONS
+##################################
+
+alter table t1 truncate partition p1;
+alter table t1 truncate partition p2;
+alter table t1 truncate partition p3;
+
+select count(*) from t1;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; TRUNCATE WITH UNIQUE INDEX
+##################################
+# 비운 파티션의 값을 다시 쓸 수 있어야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create unique index t1_uk on t1(i2);
+
+insert into t1 values (10, 1000, 1, 1);
+insert into t1 values (150, 2000, 2, 2);
+commit;
+
+alter table t1 truncate partition p2;
+
+# 2000 이 사라졌으므로 다른 파티션에 넣을 수 있어야 한다
+insert into t1 values (250, 2000, 3, 3);
+commit;
+
+select i1, i2 from t1 order by i1;
+
+# 1000 은 살아 있으므로 실패해야 한다
+insert into t1 values (250, 1000, 3, 3);
+
+commit;
+
+##################################
+# SECTOR; TRUNCATE TABLE
+##################################
+# 테이블 전체 truncate.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+truncate table t1;
+
+select count(*) from t1;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

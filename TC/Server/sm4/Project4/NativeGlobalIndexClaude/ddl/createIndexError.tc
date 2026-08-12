@@ -1,0 +1,258 @@
+###########################################################################
+# TestCase Description = 네이티브 글로벌 인덱스 생성이 거부되어야 하는
+#                        조합들. 각 항목은 서버가 "명시적 에러"로 막기로 한
+#                        지점이다.
+#
+#   현재 살아 있는 거부 (altidev4 소스 기준):
+#     ERR-314AB  MEDIA MISMATCH   qdx.cpp:10464, 10541-10543
+#                                 논리 테이블/파티션의 매체가 섞인 경우.
+#                                 hybrid, volatile 파티션도 여기로 온다.
+#     ERR-313D0  PROPERTY OFF     qdx.cpp:10537-10539
+#                                 기존 메시지. 프로퍼티가 꺼진 상태의
+#                                 메모리 파티션드 테이블 non-partitioned
+#                                 index 는 종전대로 거부된다.
+#     ERR-314AD  UNSUPPORTED_KEY  qdx.cpp:2038(DIRECT KEY), 2041(PERSISTENT),
+#                                 2048(COMPRESSED key column)
+#     ERR-314AC  COUNT_EXCEEDED   qdx.cpp:2072  (indexBudget.tc 로 분리)
+#     ERR-314B2  ALL INDEX        qdbAlter.cpp:2011  (allIndexAndTablespace.tc)
+#     ERR-314B3  REPLICATION      qdx.cpp:2113       (replicationReject.tc)
+#
+#   V2 가 걷어낸 거부 (더 이상 나오지 않는다 — 성공해야 한다):
+#     SPLIT / MERGE / ADD HASH / COALESCE      (구 ERR-314AE)
+#     ADD / DROP / MODIFY / REORGANIZE COLUMN  (구 ERR-314AF)
+#     TRUNCATE TABLE, CREATE TABLE ... FROM TABLE SCHEMA (구 ERR-314B0)
+#
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+SKIP BEGIN;
+drop tablespace disk1 including contents and datafiles;
+drop tablespace vol1 including contents and datafiles;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+
+create tablespace disk1 datafile 'disk1.dbf' size 10M autoextend on;
+create volatile tablespace vol1 size 32M autoextend on;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; MEDIA MISMATCH
+##################################
+# 논리 테이블의 테이블스페이스 매체와 파티션 매체가 다르면 커서를 열 수
+# 없다. 인덱스 모듈은 테이블 타입으로 선택되는데, 논리 테이블이 다른
+# 매체에 있으면 모듈과 테이블 타입이 어긋나기 때문이다.
+# 인덱스는 만들어지는데 조회가 안 되는 상태가 되면 안 되므로 생성에서
+# 막아야 한다. -> ERR-314AB
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace mem1,
+  partition p2 values default tablespace mem2
+)
+tablespace sys_tbs_disk_data;
+
+# 논리 테이블은 디스크, 파티션은 메모리 -> 거부되어야 한다
+create index idx1 on t1(i2);
+
+##################################
+# SECTOR; HYBRID PARTITIONED TABLE
+##################################
+# 메모리 파티션과 디스크 파티션이 섞인 테이블. V1/V2 범위 밖이며
+# 같은 매체 검사에 걸린다. -> ERR-314AB
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace mem1,
+  partition p2 values default tablespace disk1
+);
+
+create index idx1 on t1(i2);
+
+##################################
+# SECTOR; VOLATILE PARTITION
+##################################
+# 파티션이 휘발성 테이블스페이스에 있는 구성.
+#
+# 주의: 'create volatile table' 이라는 구문은 없다. 휘발성 테이블은
+#       'create volatile tablespace' 로 만든 테이블스페이스에 테이블을
+#       두는 방식이다. 파티션드가 아닌 휘발성 테이블은 애초에 글로벌/로컬
+#       구분이 없으므로 이 섹터의 시험 대상이 아니다.
+#
+# 기대: ERR-314AB. 메시지의 *Cause 가 "in a disk or volatile tablespace,
+#       so a single index cannot span them" 이라고 명시한다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+# 전 파티션이 휘발성
+create table t1( i1 integer, i2 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace vol1,
+  partition p2 values default tablespace vol1
+);
+
+create index idx1 on t1(i2);
+
+# 로컬 인덱스는 되어야 한다
+create index idx2 on t1(i2) local;
+
+desc t1;
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+# 메모리 파티션과 휘발성 파티션이 섞인 구성
+create table t1( i1 integer, i2 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace mem1,
+  partition p2 values default tablespace vol1
+);
+
+create index idx1 on t1(i2);
+
+##################################
+# SECTOR; DIRECTKEY INDEX
+##################################
+# direct key 인덱스는 글로벌로 만들 수 없다.
+#
+# 주의: 키워드는 DIRECTKEY 다(qcply.y:14941). 그리고 파티션드 테이블에
+#       대해서는 기존 검사가 먼저 걸릴 수 있어, 여기서 보이는 것이
+#       ERR-314AD 가 아닐 수 있다. 어느 쪽이 나오든 "거부된다"는 사실을
+#       이 섹터가 고정한다. .lst 생성 때 실제 코드를 기록할 것.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index idx1 on t1(i2) directkey;
+
+##################################
+# SECTOR; PERSISTENT INDEX
+##################################
+# PERSISTENT 는 CREATE INDEX 의 옵션이 아니다 -- qcply.y 에서 그 키워드는
+# alter_index_set_clause(ALTER INDEX ~ PERSISTENT ON/OFF) 에만 있다.
+# 그래서 만들 때가 아니라 만든 뒤에 켜는 것으로 시험한다.
+# 기대: ERR-314AD (UNSUPPORTED_KEY: PERSISTENT).
+
+create index idx1 on t1(i2);
+
+alter index idx1 persistent on;
+
+drop index idx1;
+
+##################################
+# SECTOR; COMPRESSED KEY COLUMN
+##################################
+# ERR-314AD (UNSUPPORTED_KEY: COMPRESSED key column)
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+# 압축은 컬럼 뒤에 붙이는 키워드가 아니라 테이블 수준 COMPRESS 절이다.
+create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values default
+)
+tablespace sys_tbs_mem_data
+compress ( i2 );
+
+create index idx1 on t1(i2);
+
+# 압축이 아닌 컬럼은 되어야 한다
+create index idx2 on t1(i3);
+
+desc t1;
+
+##################################
+# SECTOR; PROPERTY OFF
+##################################
+# 프로퍼티가 꺼져 있으면 메모리 파티션드 테이블의 non-partitioned index
+# 는 기존과 동일하게 거부되어야 한다. -> ERR-313D0
+
+CALL DISABLE_GLOBAL_INDEX();
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index idx1 on t1(i2);
+
+# LOCAL 은 프로퍼티와 무관하게 되어야 한다
+create index idx2 on t1(i3) local;
+
+desc t1;
+
+CALL ENABLE_GLOBAL_INDEX();
+
+##################################
+# SECTOR; NON-PARTITIONED TABLE
+##################################
+# 파티션드 테이블이 아니면 글로벌/로컬 구분 자체가 없다.
+# 기존 동작 그대로여야 한다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+
+create table t2( i1 integer, i2 integer ) tablespace sys_tbs_mem_data;
+
+create index idx1 on t2(i2);
+
+desc t2;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

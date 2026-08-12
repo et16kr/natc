@@ -1,0 +1,206 @@
+###########################################################################
+# TestCase Description = 인덱스 비트 예산 (ERR-314AC).
+#
+#   DML 커서는 파티션 하나를 열고 인덱스별 비트를 ULong 하나에 담는다.
+#   그래서 전체 예산이 64 개다(SMI_INDEX_BIT_BUDGET).
+#
+#   비트 배치:
+#     로컬 인덱스 i   -> 비트 (63 - i)
+#     글로벌 인덱스 g -> 비트 (63 - sIndexCnt - g)
+#
+#   검사식 (qdx.cpp:2072):
+#     ( 파티션들 중 최대 로컬 인덱스 수 ) + ( 글로벌 인덱스 수 ) + 1 > 64
+#   -> ERR-314AC
+#
+#   경계가 정확한지가 이 파일의 초점이다. 63 + 0 + 1 = 64 는 통과하고
+#   64 + 0 + 1 = 65 는 거부되어야 한다. 한 칸 어긋나면 비트가 겹쳐
+#   조용히 엉뚱한 인덱스를 건드린다.
+#
+#   프로젝트 회귀 스크립트에는 이 경계를 실제로 미는 케이스가 없다.
+#
+#   주의: 이 케이스는 인덱스를 수십 개 만든다. 다른 케이스보다 느리다.
+#
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+#
+# 컬럼이 많은 메모리 파티션드 테이블.
+#
+DEF CREATE_WIDE_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, c1 integer, c2 integer, c3 integer, c4 integer, c5 integer, c6 integer, c7 integer, c8 integer, c9 integer, c10 integer, c11 integer, c12 integer, c13 integer, c14 integer, c15 integer, c16 integer, c17 integer, c18 integer, c19 integer, c20 integer, c21 integer, c22 integer, c23 integer, c24 integer, c25 integer, c26 integer, c27 integer, c28 integer, c29 integer, c30 integer, c31 integer, c32 integer, c33 integer, c34 integer, c35 integer, c36 integer, c37 integer, c38 integer, c39 integer, c40 integer, c41 integer, c42 integer, c43 integer, c44 integer, c45 integer, c46 integer, c47 integer, c48 integer, c49 integer, c50 integer, c51 integer, c52 integer, c53 integer, c54 integer, c55 integer, c56 integer, c57 integer, c58 integer, c59 integer, c60 integer, c61 integer, c62 integer, c63 integer, c64 integer, c65 integer, c66 integer, c67 integer, c68 integer, c69 integer, c70 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values default
+)
+tablespace sys_tbs_mem_data;
+}
+
+#
+# 로컬 인덱스 하나. 컬럼 번호와 인덱스 이름을 맞춘다.
+#
+DEF CREATE_ONE_LOCAL_INDEX( @aN )
+{
+NODISPLAY ON;
+create index lidx@{aN} on t1(c@{aN}) local;
+NODISPLAY OFF;
+}
+
+#
+# 로컬 인덱스 63 개. 여기에 글로벌 하나를 더하면 정확히 예산이다.
+#
+DEF CREATE_63_LOCAL_INDEXES()
+{
+FOR $sIdx IN 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63
+{
+NODISPLAY ON;
+--@create index lidx${sIdx} on t1(c${sIdx}) local;
+NODISPLAY OFF;
+}
+}
+
+#
+# 지금 테이블에 인덱스가 몇 개인지.
+#
+DEF COUNT_INDEXES()
+{
+  select count(*) index_cnt
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = 'T1'
+    and t.user_id = user_id();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; AT THE BOUNDARY - 63 LOCAL + 1 GLOBAL
+##################################
+# 63 + 0 + 1 = 64. 예산과 정확히 같으므로 통과해야 한다.
+
+CALL CREATE_WIDE_TABLE();
+CALL CREATE_63_LOCAL_INDEXES();
+CALL COUNT_INDEXES();
+
+create index gidx1 on t1(c70);
+
+CALL COUNT_INDEXES();
+
+# 만들어졌으면 동작해야 한다
+insert into t1 (i1, c70) values (10, 1);
+insert into t1 (i1, c70) values (150, 2);
+commit;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where c70 >= 0;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where c70 >= 0;
+
+##################################
+# SECTOR; ONE OVER - A SECOND GLOBAL INDEX
+##################################
+# 63 + 1 + 1 = 65 > 64. 거부되어야 한다 (ERR-314AC).
+
+create index gidx2 on t1(c69);
+
+CALL COUNT_INDEXES();
+
+# 첫 글로벌 인덱스는 그대로 살아 있어야 한다
+select /*+ index(t1, gidx1) */ count(*) from t1 where c70 >= 0;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where c70 >= 0;
+
+##################################
+# SECTOR; OVER THE BOUNDARY - 64 LOCAL + 1 GLOBAL
+##################################
+# 64 + 0 + 1 = 65 > 64. 거부되어야 한다 (ERR-314AC).
+
+CALL CREATE_WIDE_TABLE();
+CALL CREATE_63_LOCAL_INDEXES();
+CALL CREATE_ONE_LOCAL_INDEX( 64 );
+CALL COUNT_INDEXES();
+
+create index gidx1 on t1(c70);
+
+CALL COUNT_INDEXES();
+
+##################################
+# SECTOR; LOCAL INDEXES ALONE ARE NOT LIMITED BY THIS CHECK
+##################################
+# 이 검사는 네이티브 글로벌 인덱스 생성 경로에만 있다. 로컬만 만드는
+# 것은 종전 그대로여야 한다(다른 한계에 걸릴 수는 있다).
+
+CALL CREATE_ONE_LOCAL_INDEX( 65 );
+CALL CREATE_ONE_LOCAL_INDEX( 66 );
+CALL CREATE_ONE_LOCAL_INDEX( 67 );
+CALL COUNT_INDEXES();
+
+insert into t1 (i1, c1) values (10, 1);
+commit;
+select count(*) from t1;
+
+##################################
+# SECTOR; DROPPING A LOCAL INDEX MAKES ROOM
+##################################
+# 64 -> 63 이 되면 글로벌 하나가 다시 들어갈 수 있어야 한다.
+# 검사식이 실시간 카운트를 쓰는지가 여기서 드러난다.
+
+CALL CREATE_WIDE_TABLE();
+CALL CREATE_63_LOCAL_INDEXES();
+CALL CREATE_ONE_LOCAL_INDEX( 64 );
+
+# 지금은 거부
+create index gidx1 on t1(c70);
+
+drop index lidx64;
+
+# 이제는 통과해야 한다
+create index gidx1 on t1(c70);
+
+CALL COUNT_INDEXES();
+
+##################################
+# SECTOR; PROPERTY OFF DOES NOT CHANGE THE LOCAL PATH
+##################################
+
+CALL DISABLE_GLOBAL_INDEX();
+
+CALL CREATE_WIDE_TABLE();
+CALL CREATE_63_LOCAL_INDEXES();
+CALL CREATE_ONE_LOCAL_INDEX( 64 );
+CALL COUNT_INDEXES();
+
+CALL ENABLE_GLOBAL_INDEX();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

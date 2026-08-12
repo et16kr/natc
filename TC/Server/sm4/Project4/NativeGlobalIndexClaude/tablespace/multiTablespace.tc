@@ -1,0 +1,183 @@
+###########################################################################
+# TestCase Description = 파티션이 서로 다른 메모리 테이블스페이스에 있는
+#                        구성. 이 스위트에서 가장 위험한 조합이다.
+#
+#                        rowOID 는 (pageID * PAGE_SIZE + offset) 이라
+#                        테이블스페이스 안에서만 유일하다. 서로 다른 TBS 의
+#                        두 로우가 같은 rowOID 를 가질 수 있고, 키 값이
+#                        같을 때의 순서 판정이 rowOID 단독이면 두 키를 같은
+#                        것으로 오인한다. 그러면 탐색과 삭제가 엉뚱한 슬롯에
+#                        도달한다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; BASIC MULTI TABLESPACE
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_MEM_PART_TABLE_MULTI_TBS( $sPartType, "integer", "integer" );
+
+  create index gidx1 on t1(i2);
+
+  if ( $sPartType == "range" )
+  {
+    CALL FILL_RANGE_DATA();
+  }
+  elsif ( $sPartType == "hash" )
+  {
+    CALL FILL_HASH_DATA();
+  }
+  else
+  {
+    CALL FILL_LIST_DATA();
+  }
+
+  CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+}
+
+##################################
+# SECTOR; DUPLICATE KEY ACROSS TABLESPACES
+##################################
+# 같은 키 값을 가진 로우를 서로 다른 테이블스페이스의 파티션에 넣는다.
+# 키 값이 같으면 순서 판정이 로우 위치로 넘어가는데, 그 위치 비교가
+# 테이블스페이스를 구분하지 못하면 여기서 드러난다.
+
+CALL CREATE_MEM_PART_TABLE_MULTI_TBS( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+# i2 = 777 인 로우를 세 파티션(=세 TBS)에 하나씩
+insert into t1 values (10,  777, 1, 1);
+insert into t1 values (150, 777, 2, 2);
+insert into t1 values (250, 777, 3, 3);
+commit;
+
+select /*+ index(t1, gidx1) */ i1, i2, i3 from t1 where i2 = 777 order by i1;
+select /*+ FULL SCAN(t1) */ i1, i2, i3 from t1 where i2 = 777 order by i1;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 777;
+
+##################################
+# SECTOR; MANY DUPLICATES ACROSS TABLESPACES
+##################################
+# 중복 키를 대량으로 만든다. 중복 키 체인이 길어지면 위치 비교가
+# 더 자주 일어난다.
+
+CALL CREATE_MEM_PART_TABLE_MULTI_TBS( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+# 각 파티션에 같은 값 100개씩
+insert into t1 select level,       500, level, level from dual connect by level <= 99;
+insert into t1 select level + 100, 500, level, level from dual connect by level <= 99;
+insert into t1 select level + 200, 500, level, level from dual connect by level <= 99;
+commit;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 500;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 = 500;
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+# 중복 키 일부를 지운다. 위치 비교가 틀리면 엉뚱한 로우가 지워진다.
+delete from t1 where i1 < 50;
+commit;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 500;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 = 500;
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+# 남은 로우가 어느 파티션 것인지 확인
+select 'P1' part_name, count(*) cnt from t1 partition (p1)
+union all
+select 'P2', count(*) from t1 partition (p2)
+union all
+select 'P3', count(*) from t1 partition (p3)
+order by 1;
+
+##################################
+# SECTOR; DELETE ONE PARTITION WORTH OF DUPLICATES
+##################################
+# 한 파티션의 중복 키만 전부 지운다.
+
+delete from t1 partition (p2);
+commit;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 500;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 = 500;
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+##################################
+# SECTOR; UNIQUE ACROSS TABLESPACES
+##################################
+# 유니크 인덱스가 테이블스페이스 경계를 넘어 동작하는지.
+
+CALL CREATE_MEM_PART_TABLE_MULTI_TBS( "range", "integer", "integer" );
+
+create unique index t1_uk on t1(i2);
+
+insert into t1 select level,       level, level, level from dual connect by level <= 50;
+insert into t1 select level + 100, level + 1000, level, level from dual connect by level <= 50;
+insert into t1 select level + 200, level + 2000, level, level from dual connect by level <= 50;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+# mem1 의 값을 mem3 파티션에 -> 실패해야 한다
+insert into t1 values (250, 1, 0, 0);
+
+# mem3 의 값을 mem1 파티션에 -> 실패해야 한다
+insert into t1 values (10, 2001, 0, 0);
+
+commit;
+
+select count(*) from t1;
+
+##################################
+# SECTOR; REBUILD AFTER MULTI TBS DML
+##################################
+# 대량 DML 후 인덱스를 다시 만들어 정합을 확인한다.
+
+drop index t1_uk;
+create index gidx1 on t1(i2);
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+update t1 set i2 = i2 + 1;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

@@ -1,0 +1,189 @@
+###########################################################################
+# TestCase Description = ALTER INDEX 계열 중 REBUILD 를 제외한 것과 인덱스
+#                        생성 옵션. 구버전 DDL/alter_index.tc, index_name.tc,
+#                        reserved_name.tc 에 해당한다.
+#
+#                        REBUILD 는 alterIndexRebuild.tc 로 분리했다.
+#                        한때 그것이 서버를 죽였기 때문에 나눴고, 고쳐진
+#                        뒤에도 나눠 둔다 -- 리빌드는 트리를 통째로 다시
+#                        만드는 유일한 문장이라 실패 양상이 다르다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+INCLUDE ../include/selectMeta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; INDEX TABLESPACE OPTION
+##################################
+# 인덱스 자체를 어느 테이블스페이스에 둘지 지정한다.
+# 테이블(파티션)의 테이블스페이스와 인덱스의 테이블스페이스는 별개다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2) tablespace sys_tbs_mem_data;
+create index gidx2 on t1(i3) tablespace mem1;
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx2", "i1, i3", "i3" );
+
+##################################
+# SECTOR; RENAME INDEX
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+alter index gidx1 rename to gidx1_new;
+
+CALL SELECT_INDEX_META( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1_new", "i1, i2", "i2" );
+
+# 옛 이름으로는 찾을 수 없어야 한다.
+# 이름 조회가 먼저 실패하므로 실행 경로에는 닿지 않는다.
+alter index gidx1 rename to gidx1_other;
+
+# 새 이름으로 다시 바꾼다
+alter index gidx1_new rename to gidx1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; AGING
+##################################
+# 인덱스 aging. 메모리 인덱스는 정리 대상 슬롯을 회수한다.
+#
+# 확인됨: 네이티브 글로벌 인덱스에 대한 AGING 은 validate 에서 거부된다.
+#         qdx::validateAgingIndex 가 파티션 목록의 디스크 파티션 수를 세고
+#         0 이면 ERR "unsupported index type" 을 낸다(qdx.cpp:3188).
+#         메모리 전용인 네이티브 글로벌은 항상 0 이다. 즉 조용한 no-op 이
+#         아니라 명시적 거부다. executeAgingIndex 의 이분법에는 닿지 않는다.
+
+delete from t1 where i1 < 20;
+commit;
+
+alter index gidx1 aging;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# aging 후 DML
+insert into t1 select level, level, level, level from dual connect by level <= 19;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; INDEX NAME
+##################################
+# 이름 길이 경계와 예약 이름.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+# 긴 이름
+create index abcdefghij0123456789abcdefghij0123456789 on t1(i2);
+CALL SELECT_SYS_INDICES( "t1" );
+drop index abcdefghij0123456789abcdefghij0123456789;
+
+# 따옴표로 감싼 이름
+create index "gIdxMixedCase" on t1(i2);
+CALL SELECT_SYS_INDICES( "t1" );
+drop index "gIdxMixedCase";
+
+# 숨김 객체 접두어를 흉내 낸 이름. 네이티브는 숨김 객체를 만들지
+# 않으므로 이런 이름과 충돌할 일이 없어야 한다.
+create index "$GIT_FAKE" on t1(i2);
+CALL SELECT_SYS_INDICES( "t1" );
+CALL CHECK_NO_HIDDEN_OBJECT();
+drop index "$GIT_FAKE";
+
+##################################
+# SECTOR; DIRECTKEY AND PERSISTENT OPTIONS
+##################################
+# 글로벌과 결합할 수 없는 인덱스 옵션들.
+#
+# DIRECTKEY: 파티션드 테이블에 대해서는 기존 검사가 먼저 걸린다
+#            (smERR_ABORT_NonDirectKeyOption 계열). 즉 여기서 보이는 것은
+#            네이티브 글로벌의 ERR-314AD 가 아닐 수 있다. 어느 쪽이 나오든
+#            "거부된다"는 사실이 이 섹터가 고정하는 것이다.
+# PERSISTENT: qdx::validateNativeGlobalIndexOption 의 ERR_PERSISTENT ->
+#            ERR-314AD (UNSUPPORTED_KEY: PERSISTENT).
+
+create index gidx_dk on t1(i2) directkey;
+
+# PERSISTENT 는 CREATE 옵션이 아니라 ALTER INDEX 전용이다.
+create index gidx_pst on t1(i2);
+alter index gidx_pst persistent on;
+drop index gidx_pst;
+
+# 로컬 인덱스로는 기존대로 되어야 한다
+create index lidx_dk on t1(i2) local directkey;
+
+desc t1;
+
+##################################
+# SECTOR; COMPRESSED KEY COLUMN
+##################################
+# 압축 컬럼을 키로 쓰면 거부된다.
+# ERR-314AD (UNSUPPORTED_KEY: COMPRESSED key column).
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+# 압축은 컬럼 뒤에 붙이는 키워드가 아니라 테이블 수준 COMPRESS 절이다.
+create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values default
+)
+tablespace sys_tbs_mem_data
+compress ( i2 );
+
+create index gidx_cmp on t1(i2);
+
+# 압축이 아닌 컬럼은 되어야 한다
+create index gidx_ok on t1(i3);
+
+CALL SELECT_INDEX_META( "t1" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

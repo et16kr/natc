@@ -1,0 +1,206 @@
+###########################################################################
+# TestCase Description = 회귀 0 게이트.
+#
+#                        이 프로젝트의 최상위 제약은 "글로벌 인덱스가 없는
+#                        데이터베이스는 동작이 완전히 동일하다" 이다.
+#                        네이티브 글로벌 인덱스를 쓰지 않는 모든 경로가
+#                        이전과 같은지 확인한다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+INCLUDE ../include/selectMeta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t3;
+SKIP END;
+CALL SHOW_PLAN_OFF();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+# 이 케이스는 프로퍼티를 끈 상태로 시작한다
+CALL DISABLE_GLOBAL_INDEX();
+CALL SHOW_GLOBAL_INDEX_PROPERTY();
+
+# 이 케이스는 explain plan 전사를 기대값으로 갖는다. 그런데 플랜의
+# ACCESS 카운터와 '* SIMPLE QUERY PLAN' / '* FAST EXECUTED' 두 줄은
+# 글로벌 인덱스가 아니라 PROJ-2551 의 EXECUTOR_FAST_SIMPLE_QUERY 에
+# 달려 있다(qciMisc::checkExecFast 가 읽는 유일한 입력이다).
+#   0 = fast 경로 없음      -> 실행 후 플랜, ACCESS 는 실제 접근 수
+#   1 = 비파티션드까지      -> 실행 전 플랜(ACCESS 0) + 위 두 줄
+#   2 = 파티션드까지(기본)  -> 같은 표시가 PARTITION-COORDINATOR 에도
+# 기대파일을 처음 뜰 때 이 값이 0 인 인스턴스였고(7.1 판 템플릿 값),
+# 이 트리가 배포하는 값은 2 라서 네 자리가 어긋나 있었다. 기대값이
+# 인스턴스의 주변 설정에 매달리지 않도록 여기서 못박는다 — 2 는 이
+# 트리의 파일 기본값이자 내장 기본값이므로 되돌릴 것이 없고, 뒤
+# 케이스로 새어도 그것이 기본값이다.
+alter system set EXECUTOR_FAST_SIMPLE_QUERY = 2;
+select name, value1 from v$property where name = 'EXECUTOR_FAST_SIMPLE_QUERY';
+
+##################################
+# SECTOR; MEMORY PARTITIONED WITH LOCAL INDEX
+##################################
+# 프로퍼티가 꺼져 있으면 메모리 파티션드 테이블의 로컬 인덱스는
+# 기존과 완전히 같아야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index lidx1 on t1(i2) local;
+create index lidx2 on t1(i3, i4) local;
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+CALL FILL_RANGE_DATA();
+
+select count(*) from t1;
+select i1, i2 from t1 where i2 = 15 order by i1;
+select i1, i2 from t1 where i1 < 20 order by i1;
+
+alter session set explain plan = on;
+select i1, i2 from t1 where i1 = 15;
+select i1, i2 from t1 where i2 = 15;
+alter session set explain plan = off;
+
+update t1 set i2 = i2 + 1 where i1 < 10;
+commit;
+delete from t1 where i1 > 220;
+commit;
+
+select count(*) from t1;
+
+##################################
+# SECTOR; GLOBAL INDEX STILL REJECTED WHEN OFF
+##################################
+# 프로퍼티가 꺼져 있으면 메모리 파티션드 테이블의 글로벌 인덱스는
+# 기존과 동일하게 거부되어야 한다.
+
+create index gidx1 on t1(i2);
+
+alter table t1 add constraint t1_pk primary key (i2);
+
+desc t1;
+
+##################################
+# SECTOR; NON-PARTITIONED TABLE
+##################################
+# 파티션드가 아닌 메모리 테이블. 이 프로젝트와 무관한 경로다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+
+create table t2( i1 integer, i2 integer, i3 varchar(100) )
+tablespace sys_tbs_mem_data;
+
+create index t2_idx1 on t2(i2);
+create unique index t2_uk on t2(i3);
+alter table t2 add constraint t2_pk primary key (i1);
+
+desc t2;
+CALL SELECT_INDEX_META( "t2" );
+
+insert into t2 select level, level, 'v' || level from dual connect by level <= 100;
+commit;
+
+select count(*) from t2;
+select i1, i2 from t2 where i2 = 50;
+select i1, i3 from t2 where i3 = 'v50';
+
+# 유니크 위반
+insert into t2 values (200, 200, 'v50');
+insert into t2 values (1, 999, 'v999');
+
+commit;
+
+alter session set explain plan = on;
+select i1, i2 from t2 where i2 = 50;
+select i1, i3 from t2 where i3 = 'v50';
+alter session set explain plan = off;
+
+##################################
+# SECTOR; DISK PARTITIONED TABLE
+##################################
+# 디스크 파티션드 테이블은 이 프로젝트(메모리 V1)의 대상이 아니다.
+# 기존 방식이 그대로 동작해야 한다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t3;
+SKIP END;
+NODISPLAY OFF;
+
+create table t3( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index t3_lidx on t3(i2) local;
+
+insert into t3 select level,       level,       level from dual connect by level <= 30;
+insert into t3 select level + 100, level + 100, level from dual connect by level <= 30;
+insert into t3 select level + 200, level + 200, level from dual connect by level <= 30;
+commit;
+
+select count(*) from t3;
+select i1, i2 from t3 where i2 = 15 order by i1;
+
+desc t3;
+
+##################################
+# SECTOR; PROPERTY ON DOES NOT CHANGE LOCAL PATHS
+##################################
+# 프로퍼티를 켜도 글로벌 인덱스를 만들지 않은 테이블은 동작이
+# 그대로여야 한다.
+
+CALL ENABLE_GLOBAL_INDEX();
+
+select count(*) from t1;
+select i1, i2 from t1 where i2 = 16 order by i1;
+
+alter session set explain plan = on;
+select i1, i2 from t1 where i1 = 16;
+select i1, i2 from t1 where i2 = 16;
+alter session set explain plan = off;
+
+update t1 set i2 = i2 + 1 where i1 < 10;
+commit;
+select count(*) from t1;
+
+select count(*) from t2;
+select i1, i2 from t2 where i2 = 50;
+
+select count(*) from t3;
+select i1, i2 from t3 where i2 = 15 order by i1;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

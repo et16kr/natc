@@ -1,0 +1,298 @@
+###########################################################################
+# TestCase Description = ALTER TABLE 컬럼 DDL 과 글로벌 인덱스.
+#
+#                        메모리 글로벌 인덱스는 키 컬럼을 로우에서 직접 읽고,
+#                        그 위치를 인덱스 헤더에 복사해 둔 컬럼 서술자 하나로
+#                        해석한다. 서술자는 모든 파티션에 공통으로 쓰이므로
+#                        파티션들의 컬럼 배치가 같아야 한다.
+#                        컬럼 추가/삭제는 그 배치를 바꾸는 유일한 DDL 이다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+INCLUDE ../include/selectMeta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+#
+# 컬럼이 많은 테이블. 중간 컬럼을 지워 배치를 흔들기 위한 것이다.
+#
+DEF CREATE_WIDE_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1
+(
+  i1 integer,
+  i2 integer,
+  i3 integer,
+  i4 integer,
+  i5 integer,
+  i6 varchar(50),
+  i7 integer,
+  i8 varchar(50)
+)
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+}
+
+DEF FILL_WIDE_TABLE()
+{
+insert into t1 select level,       level,       level, level, level, 'a' || level, level, 'x' || level
+  from dual connect by level <= 30;
+insert into t1 select level + 100, level + 100, level, level, level, 'b' || level, level, 'y' || level
+  from dual connect by level <= 30;
+insert into t1 select level + 200, level + 200, level, level, level, 'c' || level, level, 'z' || level
+  from dual connect by level <= 30;
+commit;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; ADD COLUMN WITH GLOBAL INDEX PRESENT
+##################################
+# 글로벌 인덱스가 있는 상태에서 컬럼을 추가한다. 추가된 컬럼은 로우
+# 뒤에 붙으므로 기존 키 컬럼의 위치는 바뀌지 않아야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3, i4);
+
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter table t1 add column (i5 integer);
+
+desc t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx2", "i1, i3", "i3" );
+
+# 추가된 컬럼에 값을 넣어도 기존 인덱스는 정합이어야 한다
+update t1 set i5 = i1 * 2;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# 추가된 컬럼에 새 글로벌 인덱스를 만든다
+create index gidx3 on t1(i5);
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx3", "i1, i5", "i5" );
+
+##################################
+# SECTOR; ADD COLUMN WITH CONSTRAINT
+##################################
+# 컬럼 추가와 동시에 PK/UK 를 준다. 메모리 파티션드 테이블에서는
+# 이것이 글로벌 인덱스 생성이다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index lidx1 on t1(i2) local;
+
+alter table t1 add column (i5 integer constraint t1_pk primary key);
+alter table t1 add column (i6 integer constraint t1_uk unique);
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+insert into t1 values (10, 1, 1, 1, 100, 200);
+commit;
+
+# 다른 파티션에 같은 PK 값 -> 실패해야 한다
+insert into t1 values (150, 2, 2, 2, 100, 300);
+
+# 다른 파티션에 같은 UK 값 -> 실패해야 한다
+insert into t1 values (150, 2, 2, 2, 400, 200);
+
+# 새 값 -> 성공
+insert into t1 values (150, 2, 2, 2, 400, 300);
+commit;
+
+select i1, i5, i6 from t1 order by i1;
+
+##################################
+# SECTOR; ADD MULTIPLE COLUMNS
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+alter table t1 add column (i5 integer, i6 varchar(30), i7 integer);
+
+desc t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; DROP COLUMN AFTER THE KEY
+##################################
+# 키 컬럼보다 뒤에 있는 컬럼을 지운다. 키 위치는 영향받지 않아야 한다.
+
+CALL CREATE_WIDE_TABLE();
+
+create index gidx1 on t1(i2);
+
+CALL FILL_WIDE_TABLE();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter table t1 drop column (i7);
+
+desc t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter table t1 drop column (i8);
+
+desc t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; DROP COLUMN BEFORE THE KEY
+##################################
+# 키 컬럼보다 앞에 있는 컬럼을 지운다. 이 경우 키 컬럼의 로우 내 위치가
+# 바뀔 수 있다. 인덱스가 옛 위치를 계속 쓰면 엉뚱한 값을 읽는다.
+
+CALL CREATE_WIDE_TABLE();
+
+create index gidx1 on t1(i5);
+create index gidx2 on t1(i6);
+
+CALL FILL_WIDE_TABLE();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i5", "i5" );
+
+# i5 보다 앞의 컬럼을 지운다
+alter table t1 drop column (i3);
+
+desc t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i5", "i5" );
+CALL CHECK_INDEX_SCAN( "t1", "gidx2", "i1, i6", "i6 is not null" );
+
+# 값 자체가 옳게 읽히는지
+select /*+ index(t1, gidx1) */ i1, i5 from t1 where i5 <= 3 order by i1;
+select /*+ FULL SCAN(t1) */ i1, i5 from t1 where i5 <= 3 order by i1;
+
+select /*+ index(t1, gidx2) */ i1, i6 from t1 where i6 like 'a1%' order by i1;
+select /*+ FULL SCAN(t1) */ i1, i6 from t1 where i6 like 'a1%' order by i1;
+
+# 여러 개를 한 번에 지운다
+alter table t1 drop column (i4, i7);
+
+desc t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i5", "i5" );
+CALL CHECK_INDEX_SCAN( "t1", "gidx2", "i1, i6", "i6 is not null" );
+
+# 지운 뒤 DML
+insert into t1 values (50, 50, 500, 'a500', 'x500');
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i5", "i5" );
+
+update t1 set i5 = i5 + 1 where i1 < 20;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i5", "i5" );
+
+##################################
+# SECTOR; DROP THE KEY COLUMN ITSELF
+##################################
+# 인덱스 키 컬럼을 지우면 그 인덱스도 함께 사라져야 한다.
+
+CALL CREATE_WIDE_TABLE();
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3, i4);
+
+CALL FILL_WIDE_TABLE();
+CALL SELECT_INDEX_META( "t1" );
+
+alter table t1 drop column (i2);
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+# 남은 인덱스는 정합이어야 한다
+CALL CHECK_INDEX_SCAN( "t1", "gidx2", "i1, i3", "i3 is not null" );
+
+# 복합 키의 일부만 지운다
+alter table t1 drop column (i4);
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+##################################
+# SECTOR; RENAME COLUMN
+##################################
+# 이름만 바뀌고 위치는 그대로다. 인덱스는 영향받지 않아야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+alter table t1 rename column i2 to k2;
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+select /*+ index(t1, gidx1) */ i1, k2 from t1 where k2 <= 3 order by i1;
+select /*+ FULL SCAN(t1) */ i1, k2 from t1 where k2 <= 3 order by i1;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, k2", "k2 is not null" );
+
+##################################
+# SECTOR; MODIFY COLUMN TYPE
+##################################
+# 키 컬럼의 타입/길이를 바꾼다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "varchar(20)" );
+
+create index gidx1 on t1(i2);
+
+insert into t1 values (10, 'aaa', 'x', 'y');
+insert into t1 values (150, 'bbb', 'x', 'y');
+insert into t1 values (250, 'ccc', 'x', 'y');
+commit;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+alter table t1 modify column (i2 varchar(100));
+
+desc t1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 order by i1;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

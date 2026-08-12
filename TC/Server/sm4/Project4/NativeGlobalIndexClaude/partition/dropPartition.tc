@@ -1,0 +1,239 @@
+###########################################################################
+# TestCase Description = DROP PARTITION 후 글로벌 인덱스에 사라진 파티션의
+#                        키가 남지 않는지 확인한다. 메모리 인덱스의 리프
+#                        슬롯은 로우를 가리키는 생 포인터이므로, 키를 지우기
+#                        전에 페이지가 free 되면 그 슬롯은 재사용된 메모리를
+#                        가리키게 된다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/createMemPartTable.i;
+INCLUDE ../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+#
+# 파티션 4개짜리 테이블. 하나를 지워도 3개가 남는다.
+#
+DEF CREATE_FOUR_PART_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values less than (300),
+  partition p4 values default
+)
+tablespace sys_tbs_mem_data;
+}
+
+DEF FILL_FOUR_PART()
+{
+insert into t1 select level,       level,       level, level from dual connect by level <= 30;
+insert into t1 select level + 100, level + 100, level, level from dual connect by level <= 30;
+insert into t1 select level + 200, level + 200, level, level from dual connect by level <= 30;
+insert into t1 select level + 300, level + 300, level, level from dual connect by level <= 30;
+commit;
+}
+
+DEF CHECK_FOUR_PART_COUNT()
+{
+select count(*) total_cnt from t1;
+
+select 'P1' part_name, count(*) part_cnt from t1 partition (p1)
+union all
+select 'P2', count(*) from t1 partition (p2)
+union all
+select 'P3', count(*) from t1 partition (p3)
+union all
+select 'P4', count(*) from t1 partition (p4)
+order by 1;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; DROP MIDDLE PARTITION
+##################################
+# 가운데 파티션을 지운다. 지워진 파티션의 키만 사라지고 나머지는
+# 그대로여야 한다.
+
+CALL CREATE_FOUR_PART_TABLE();
+
+create index gidx1 on t1(i2);
+
+CALL FILL_FOUR_PART();
+
+CALL CHECK_FOUR_PART_COUNT();
+select /*+ index(t1, gidx1) */ count(i2) from t1 where i2 is not null;
+
+alter table t1 drop partition p2;
+
+# p2 의 키(100~130)는 인덱스에서 사라져야 한다
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 between 100 and 130;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 between 100 and 130;
+
+# 나머지 파티션은 그대로
+select /*+ index(t1, gidx1) */ count(i2) from t1 where i2 is not null;
+select /*+ FULL SCAN(t1) */ count(i2) from t1 where i2 is not null;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; SCAN IMMEDIATELY AFTER DROP
+##################################
+# 지운 직후의 스캔이 안전해야 한다. 인덱스 키 purge 가 페이지 free 보다
+# 먼저 끝나지 않으면 여기서 이상한 값이 나오거나 죽는다.
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 < 20 order by i1, i2;
+select /*+ index(t1, gidx1) */ min(i2), max(i2), count(*) from t1 where i2 is not null;
+
+##################################
+# SECTOR; DML AFTER DROP
+##################################
+# 지운 뒤 남은 파티션에 DML 을 한다.
+
+insert into t1 values (10, 5000, 1, 1);
+insert into t1 values (250, 6000, 3, 3);
+commit;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+update t1 set i2 = i2 + 1 where i1 < 20;
+commit;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+delete from t1 where i1 > 320;
+commit;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; DROP FIRST AND LAST
+##################################
+
+CALL CREATE_FOUR_PART_TABLE();
+
+create index gidx1 on t1(i2);
+
+CALL FILL_FOUR_PART();
+
+alter table t1 drop partition p1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+alter table t1 drop partition p4;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+select /*+ index(t1, gidx1) */ min(i2), max(i2), count(*) from t1 where i2 is not null;
+
+##################################
+# SECTOR; DROP DOWN TO ONE PARTITION
+##################################
+# 마지막 하나만 남을 때까지 지운다.
+
+alter table t1 drop partition p2;
+
+select count(*) from t1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; DROP WITH UNIQUE INDEX
+##################################
+# 유니크 인덱스에서 파티션을 지우면 그 값을 다시 넣을 수 있어야 한다.
+# 키가 남아 있으면 잘못 실패한다.
+
+CALL CREATE_FOUR_PART_TABLE();
+
+create unique index t1_uk on t1(i2);
+
+insert into t1 values (10, 1000, 1, 1);
+insert into t1 values (110, 2000, 2, 2);
+insert into t1 values (210, 3000, 3, 3);
+commit;
+
+# p2 를 지우면 2000 이 사라진다
+alter table t1 drop partition p2;
+
+# 이제 2000 을 다시 넣을 수 있어야 한다
+insert into t1 values (310, 2000, 4, 4);
+commit;
+
+select i1, i2 from t1 order by i1;
+
+# 살아 있는 파티션의 값은 여전히 유니크여야 한다
+insert into t1 values (310, 1000, 4, 4);
+
+commit;
+
+##################################
+# SECTOR; DROP PARTITION MULTI TABLESPACE
+##################################
+# 파티션이 서로 다른 테이블스페이스에 있을 때. 지워진 파티션의
+# 테이블스페이스가 회수되어도 인덱스가 그 위치를 참조하면 안 된다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace mem1,
+  partition p2 values less than (200) tablespace mem2,
+  partition p3 values default tablespace mem3
+);
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter table t1 drop partition p2;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 between 100 and 130;
+
+# 남은 파티션에 대량 삽입 -> 회수된 메모리를 다시 쓰게 만든다
+insert into t1 select level + 200, level + 5000, level, level from dual connect by level <= 100;
+commit;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

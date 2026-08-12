@@ -1,0 +1,967 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # Native Global Index - environment helpers
+$T0> #
+$T0> # 네이티브 글로벌 인덱스는 프로퍼티로 게이트된다.
+$T0> # 이름은 MEM_GLOBAL_INDEX_ENABLE 로 확정됐다(idpDescResource.cpp).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 으로 바꾼 값은 재기동하면
+$T0> #   파일 값(기본 0)으로 돌아간다. 그래서 각 케이스가 자기 PREPARE 에서
+$T0> #   켜야 하고, FINALIZE 에서 꺼서 다음 케이스에 새지 않게 해야 한다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 네이티브 글로벌 인덱스 생성을 허용한다.
+$T0> #
+
+$T0> #
+$T0> # 네이티브 글로벌 인덱스 생성을 막는다(기존 동작).
+$T0> # off 상태에서 메모리 파티션드 테이블의 non-partitioned index는
+$T0> # 기존과 동일하게 거부되어야 한다.
+$T0> #
+
+$T0> #
+$T0> # 현재 설정 확인.
+$T0> #
+$T0> ###########################################################################
+$T0> # Native Global Index - memory partitioned table helpers
+$T0> #
+$T0> # 구버전(PROJ-1624) 테스트는 파티션드 테이블을 전부 디스크
+$T0> # (tablespace sys_tbs_disk_data)에 만들었다. 당시 서버가 메모리 파티션드
+$T0> # 테이블의 글로벌 인덱스를 전면 금지했기 때문이다.
+$T0> #
+$T0> # 이 스위트가 검증하는 것은 그 반대다. 여기서 만드는 테이블은 전부
+$T0> # 메모리 테이블스페이스에 있다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 단일 메모리 테이블스페이스에 파티션 3개를 만든다.
+$T0> #
+$T0> # @aPartType : range | hash | list
+$T0> # @aKeyType  : 파티션 키 컬럼 타입
+$T0> # @aColType  : 나머지 컬럼 타입
+$T0> #
+$T0> # 컬럼 구성: i1(파티션 키), i2, i3, i4
+$T0> #
+
+$T0> #
+$T0> # 파티션을 서로 다른 메모리 테이블스페이스에 흩어 놓는다.
+$T0> #
+$T0> # 이 구성이 네이티브 글로벌 인덱스에서 가장 위험하다:
+$T0> #   - rowOID 는 테이블스페이스 안에서만 유일하다. 서로 다른 TBS 의 두
+$T0> #     로우가 같은 rowOID 를 가질 수 있고, tie-break 가 (tableOID, rowOID)
+$T0> #     로 확장되지 않았다면 두 키를 같은 것으로 오인한다.
+$T0> #   - variable 컬럼의 out-of-row piece 접근은 컬럼 서술자의 colSpace 로
+$T0> #     테이블스페이스를 고른다. 보정이 없으면 다른 파티션 로우의 값을
+$T0> #     엉뚱한 TBS 에서 읽는다(크래시가 아니라 조용한 오독).
+$T0> #
+$T0> # PREPARE_MEM_TBS() 로 만든 mem1/mem2/mem3 를 쓴다.
+$T0> #
+
+$T0> #
+$T0> # 다중 TBS 테스트용 메모리 테이블스페이스를 만든다.
+$T0> #
+
+$T0> #
+$T0> # range 파티션 기준으로 세 파티션에 고르게 데이터를 넣는다.
+$T0> # i1: 파티션 키, i2/i3/i4: 값
+$T0> #
+
+$T0> #
+$T0> # hash/list 파티션 테이블에 데이터를 넣는다.
+$T0> #
+
+$T0> ###########################################################################
+$T0> # Native Global Index - integrity check helpers
+$T0> #
+$T0> # 구버전(PROJ-1624)은 숨김 테이블 $GIT_ 와 베이스 테이블을 FULL OUTER JOIN
+$T0> # 해서 정합성을 검사했다. 네이티브 글로벌 인덱스에는 조인할 테이블이 없고
+$T0> # 인덱스 내용을 SQL로 직접 볼 수 없으므로, 아래 세 가지를 조합해서 같은
+$T0> # 목적을 달성한다.
+$T0> #
+$T0> #   1. 인덱스 경유 결과 vs 풀스캔 결과의 양방향 차집합 (CHECK_INDEX_SCAN)
+$T0> #   2. 카운트/집계 교차 확인                          (CHECK_INDEX_COUNT)
+$T0> #   3. 유니크 제약을 살아 있는 검사기로 사용          (각 케이스에서 직접)
+$T0> #
+$T0> # ★ 1번과 2번은 index 힌트가 실제로 글로벌 인덱스를 잡았을 때만 의미가
+$T0> #   있다. 잡지 못하면 "풀스캔 minus 풀스캔" 이 되어 무조건 0행이고, 아무것도
+$T0> #   시험하지 않으면서 통과한다.
+$T0> #
+$T0> #   옵티마이저가 글로벌 SCAN 후보를 아예 내지 않는 조합이 있다
+$T0> #   (qmoPartition::isUsableNativeGlobalIndex):
+$T0> #
+$T0> #     (a) memory variable 컬럼(varchar/nvarchar/...)의 colSpace 가 논리
+$T0> #         테이블과 파티션 사이에서 다를 때. 파티션이 서로 다른 메모리
+$T0> #         테이블스페이스에 있으면 여기 걸린다. 키 컬럼이 아니어도,
+$T0> #         테이블에 그런 컬럼이 하나라도 있으면 닫힌다.
+$T0> #     (b) 파티션 프루닝이 일어났고 인덱스 키 컬럼에 variable 이 있을 때.
+$T0> #     (c) PARALLEL 힌트가 붙었을 때.
+$T0> #
+$T0> #   이 경우 인덱스 자체는 살아 있고 유니크 제약도 계속 강제된다.
+$T0> #   스캔 플랜만 후보에서 빠지고 종전대로 PCRD 가 선택된다.
+$T0> #
+$T0> #   그래서 위 조합에서는 CHECK_INDEX_SCAN 대신
+$T0> #   CHECK_INDEX_SCAN_CLOSED_GATE 를 쓴다 — 플랜에 GLOBAL-INDEX 가
+$T0> #   "없다"는 것을 .lst 에 명시적으로 남기고, 정합성은 유니크 제약과
+$T0> #   풀스캔 집계로만 판정한다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 플랜 출력을 켠다. 어떤 접근 경로가 선택됐는지 .lst 에 남긴다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스 경유 결과와 풀스캔 결과가 완전히 같은지 양방향으로 확인한다.
+$T0> # 두 select 모두 0행이어야 정상이다.
+$T0> #
+$T0> # @aTable  : 테이블 이름
+$T0> # @aIndex  : 글로벌 인덱스 이름
+$T0> # @aCols   : 비교할 컬럼 목록 (예: "i1, i2")
+$T0> # @aPred   : where 절 술어 (예: "i2 >= 0 or i2 is null")
+$T0> #
+$T0> # 바깥 ORDER BY 는 이름이 아니라 **위치**로 준다. @aCols 에 substr(...) 같은
+$T0> # 표현식이 들어갈 수 있는데, 파생 테이블의 컬럼은 표현식 이름으로 참조할 수
+$T0> # 없다(ERR-31058). 두 select 모두 0행이 정상이므로 정렬은 실패했을 때의
+$T0> # 출력을 위한 것뿐이다.
+$T0> #
+$T0> # 주의: 인덱스 컬럼에 null 이 있으면 인덱스 스캔이 null 행을 건너뛸 수
+$T0> #       있다. @aPred 를 null 행까지 포함하도록 주거나, null 케이스는
+$T0> #       CHECK_INDEX_SCAN_NOTNULL 로 나눠서 확인한다.
+$T0> #
+
+$T0> #
+$T0> # null 행을 제외하고 비교한다. 키 컬럼에 null 이 섞인 경우에 쓴다.
+$T0> #
+
+$T0> #
+$T0> # 플랜이 열리는 조합에서 쓴다.
+$T0> # 차집합 비교 앞에 플랜을 먼저 남겨, 힌트가 실제로 글로벌 인덱스를
+$T0> # 잡았다는 증거를 .lst 에 박아 둔다. 플랜에 GLOBAL-INDEX 가 사라지면
+$T0> # 차집합이 0행이어도 이 케이스는 FAIL 이 된다.
+$T0> #
+
+$T0> #
+$T0> # 플랜 게이트가 닫히는 조합에서 쓴다(위 (a)/(b)/(c)).
+$T0> #
+$T0> # 여기서는 차집합 비교가 무의미하다 — 양쪽 다 풀스캔이 되어 항상 0행이다.
+$T0> # 대신 두 가지를 기록한다:
+$T0> #   1. 힌트를 줘도 플랜에 GLOBAL-INDEX 가 나오지 않는다는 사실
+$T0> #      (게이트 판정이 바뀌면 여기서 드러난다)
+$T0> #   2. 값 자체는 풀스캔으로 확인
+$T0> #
+$T0> # 인덱스가 실제로 정합인지는 이 조합에서 유니크 제약으로만 증명할 수 있다.
+$T0> # 호출하는 쪽에서 중복 삽입 시험을 반드시 함께 둘 것.
+$T0> #
+
+$T0> #
+$T0> # 카운트와 집계를 교차 확인한다.
+$T0> # 인덱스가 어떤 파티션의 키를 빠뜨리거나 유령 키를 갖고 있으면 어긋난다.
+$T0> #
+
+$T0> #
+$T0> # 파티션별 행 수의 합이 전체와 같은지 확인한다.
+$T0> # 파티션 3개 + default 구성(p1,p2,p3)을 전제한다.
+$T0> #
+
+$T0> #
+$T0> # 위 검사를 한 번에 수행한다. 시나리오 끝마다 호출한다.
+$T0> #
+$T0> ###########################################################################
+$T0> # Native Global Index - catalog inspection helpers
+$T0> #
+$T0> # 구버전(PROJ-1624)의 meta 테스트는 "숨김 객체가 이렇게 보인다"를
+$T0> # 검증했다. 네이티브에서는 검증 방향이 정반대다: 숨김 객체가
+$T0> # 생기지 않아야 하고, 대신 SYS_PART_INDICES_ 에 판별자 행이 하나 있어야
+$T0> # 한다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 숨김 글로벌 인덱스 객체가 하나도 없어야 한다.
+$T0> # 구버전은 여기서 $GIT_/$GIK_/$GIR_ 가 줄줄이 나왔다.
+$T0> #
+
+$T0> #
+$T0> # SYS_INDICES_ 에서 본 글로벌 인덱스의 모습.
+$T0> #
+$T0> # 네이티브 글로벌 인덱스는 숨김 방식과 마찬가지로 IS_PARTITIONED = 'F'
+$T0> # 이지만, INDEX_TABLE_ID 가 0 이어야 한다(숨김 테이블이 없으므로).
+$T0> # 숨김 방식은 INDEX_TABLE_ID 가 0 이 아니다. 이것이 두 방식의
+$T0> # 카탈로그 상 구분점이다.
+$T0> #
+
+$T0> #
+$T0> # SYS_PART_INDICES_ 의 판별자 행.
+$T0> #
+$T0> # 네이티브 글로벌 인덱스는 여기에 행을 하나 남긴다. 캐시 로더가
+$T0> # IS_PARTITIONED='F' 를 보고 무조건 non-partitioned 로 하드코딩하기
+$T0> # 때문에, 재기동 후에도 네이티브임을 알아보려면 이 행이 필요하다.
+$T0> # 숨김 방식은 이 행을 만들지 않는다.
+$T0> #
+
+$T0> #
+$T0> # SYS_INDEX_PARTITIONS_ 에는 행이 없어야 한다.
+$T0> # 물리 인덱스가 파티션별로 존재하지 않는 것이 로컬 인덱스와의 구분점이다.
+$T0> #
+
+$T0> #
+$T0> # 한 테이블의 인덱스 카탈로그 전경.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ALL INDEX ENABLE/DISABLE 와 테이블스페이스
+$T0> #                        OFFLINE/ONLINE.
+$T0> #
+$T0> #   코드 리뷰 P1-1 이 지목한 두 지점이다. 둘 다 런타임 인덱스 헤더를
+$T0> #   다시 만드는 경로이고, 네이티브 글로벌 인덱스는 그 경로에 파티션
+$T0> #   디렉터리를 다시 세우는 진입점이 아직 없다.
+$T0> #
+$T0> #     ALL INDEX ENABLE/DISABLE -> ERR-314B2 로 명시 거부
+$T0> #                                 (qdbAlter.cpp:2011, 2046-2048)
+$T0> #     TABLESPACE OFFLINE/ONLINE -> 인덱스를 fail-closed 로 닫고 ONLINE 은
+$T0> #                                 성공한다. 닫힌 인덱스로 조회하면 에러가
+$T0> #                                 나야지, 조용히 틀린 답이 나오면 안 된다.
+$T0> #
+$T0> #   V2 의 J13/J14 가 이 둘을 기능으로 대체하기로 되어 있다. 그때 기대가
+$T0> #   "거부" 에서 "성공" 으로 바뀌므로, 이 파일은 그 전환을 감시하는
+$T0> #   자리이기도 하다.
+$T0> #
+$T0> # Project ID           = Native Global Index (memory)
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> SKIP END;
+$T0> SKIP BEGIN;
+$T0> drop tablespace mem1 including contents and datafiles;
+$T0> drop tablespace mem2 including contents and datafiles;
+$T0> drop tablespace mem3 including contents and datafiles;
+$T0> SKIP END;
+$T0> SKIP BEGIN;
+$T0> drop tablespace memoff including contents and datafiles;
+$T0> SKIP END;
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> SKIP BEGIN;
+$T0> drop tablespace mem1 including contents and datafiles;
+$T0> drop tablespace mem2 including contents and datafiles;
+$T0> drop tablespace mem3 including contents and datafiles;
+$T0> SKIP END;
+
+$T0> create memory tablespace mem1 size 32M autoextend on checkpoint path 'dbs';
+Create success.
+$T0> create memory tablespace mem2 size 32M autoextend on checkpoint path 'dbs';
+Create success.
+$T0> create memory tablespace mem3 size 32M autoextend on checkpoint path 'dbs';
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; ALL INDEX ON A TABLE WITH A GLOBAL INDEX
+$T0> ##################################
+$T0> # ERR-314B2 로 거부되어야 한다.
+
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+Create success.
+
+
+
+$T0> create index gidx1 on t1(i2);
+Create success.
+
+$T0> insert into t1 select level,        level,        level * 2, level * 3 from dual connect by level <= 30;
+30 rows inserted.
+$T0> insert into t1 select level + 100,  level + 100,  level * 2, level * 3 from dual connect by level <= 30;
+30 rows inserted.
+$T0> insert into t1 select level + 200,  level + 200,  level * 2, level * 3 from dual connect by level <= 30;
+30 rows inserted.
+$T0> commit;
+Commit success.
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+COUNT                
+-----------------------
+90                   
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.GIDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 90, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # 인덱스 경유 결과에만 있는 행 (없어야 정상)
+$T0> select * from
+  (
+    select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 is not null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 is not null
+  )
+  order by 1;
+I1          I2          
+---------------------------
+No rows selected.
+
+$T0> # 풀스캔 결과에만 있는 행 (없어야 정상)
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 is not null
+    minus
+    select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 is not null
+  )
+  order by 1;
+I1          I2          
+---------------------------
+No rows selected.
+
+$T0> alter table t1 all index disable;
+Alter success.
+
+$T0> alter table t1 all index enable;
+Alter success.
+
+$T0> # 거부됐으므로 인덱스는 그대로 살아 있어야 한다
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+COUNT                
+-----------------------
+90                   
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.GIDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 90, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> # 인덱스 경유 결과에만 있는 행 (없어야 정상)
+$T0> select * from
+  (
+    select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 is not null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 is not null
+  )
+  order by 1;
+I1          I2          
+---------------------------
+No rows selected.
+
+$T0> # 풀스캔 결과에만 있는 행 (없어야 정상)
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 is not null
+    minus
+    select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 is not null
+  )
+  order by 1;
+I1          I2          
+---------------------------
+No rows selected.
+$T0> select i.index_name,
+         i.is_unique,
+         i.is_partitioned,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IS_UNIQUE  IS_PARTITIONED  INDEX_TABLE_ID_KIND  
+----------------------------------------------------
+GIDX1                                                                                                                             
+F  F  ZERO     
+1 row selected.
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+GIDX1                                                                                                                             
+101         
+1 row selected.
+$T0> select i.index_name, count(*) part_index_cnt
+  from system_.sys_index_partitions_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  group by i.index_name
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PART_INDEX_CNT       
+-----------------------
+No rows selected.
+$T0> # 숨김 인덱스 테이블 ($GIT_) - 없어야 정상
+$T0> select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_name like '$GIT[_]%' escape '['
+    and t.user_id = u.user_id
+  order by t.table_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  
+--------------
+No rows selected.
+
+$T0> # 숨김 인덱스 테이블의 인덱스 ($GIK_, $GIR_) - 없어야 정상
+$T0> select u.user_name, i.index_name
+  from system_.sys_indices_ i, system_.sys_users_ u
+  where ( i.index_name like '$GIK[_]%' escape '['
+       or i.index_name like '$GIR[_]%' escape '[' )
+    and i.user_id = u.user_id
+  order by i.index_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; ALL INDEX WITH BOTH GLOBAL AND LOCAL
+$T0> ##################################
+$T0> # 로컬 인덱스가 섞여 있어도 글로벌이 하나라도 있으면 거부되어야 한다.
+
+$T0> create index lidx1 on t1(i3) local;
+Create success.
+
+$T0> alter table t1 all index disable;
+Alter success.
+$T0> alter table t1 all index enable;
+Alter success.
+
+$T0> select i.index_name,
+         i.is_unique,
+         i.is_partitioned,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IS_UNIQUE  IS_PARTITIONED  INDEX_TABLE_ID_KIND  
+----------------------------------------------------
+GIDX1                                                                                                                             
+F  F  ZERO     
+LIDX1                                                                                                                             
+F  T  ZERO     
+2 rows selected.
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+GIDX1                                                                                                                             
+101         
+LIDX1                                                                                                                             
+0           
+2 rows selected.
+$T0> select i.index_name, count(*) part_index_cnt
+  from system_.sys_index_partitions_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  group by i.index_name
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PART_INDEX_CNT       
+-----------------------
+LIDX1                                                                                                                             
+3                    
+1 row selected.
+$T0> # 숨김 인덱스 테이블 ($GIT_) - 없어야 정상
+$T0> select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_name like '$GIT[_]%' escape '['
+    and t.user_id = u.user_id
+  order by t.table_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  
+--------------
+No rows selected.
+
+$T0> # 숨김 인덱스 테이블의 인덱스 ($GIK_, $GIR_) - 없어야 정상
+$T0> select u.user_name, i.index_name
+  from system_.sys_indices_ i, system_.sys_users_ u
+  where ( i.index_name like '$GIK[_]%' escape '['
+       or i.index_name like '$GIR[_]%' escape '[' )
+    and i.user_id = u.user_id
+  order by i.index_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; ALL INDEX AFTER DROPPING THE GLOBAL INDEX
+$T0> ##################################
+$T0> # 글로벌 인덱스가 없어지면 기존 동작으로 돌아가야 한다.
+
+$T0> drop index gidx1;
+Drop success.
+
+$T0> alter table t1 all index disable;
+Alter success.
+$T0> alter table t1 all index enable;
+Alter success.
+
+$T0> select i.index_name,
+         i.is_unique,
+         i.is_partitioned,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IS_UNIQUE  IS_PARTITIONED  INDEX_TABLE_ID_KIND  
+----------------------------------------------------
+LIDX1                                                                                                                             
+F  T  ZERO     
+1 row selected.
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+LIDX1                                                                                                                             
+0           
+1 row selected.
+$T0> select i.index_name, count(*) part_index_cnt
+  from system_.sys_index_partitions_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  group by i.index_name
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PART_INDEX_CNT       
+-----------------------
+LIDX1                                                                                                                             
+3                    
+1 row selected.
+$T0> # 숨김 인덱스 테이블 ($GIT_) - 없어야 정상
+$T0> select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_name like '$GIT[_]%' escape '['
+    and t.user_id = u.user_id
+  order by t.table_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  
+--------------
+No rows selected.
+
+$T0> # 숨김 인덱스 테이블의 인덱스 ($GIK_, $GIR_) - 없어야 정상
+$T0> select u.user_name, i.index_name
+  from system_.sys_indices_ i, system_.sys_users_ u
+  where ( i.index_name like '$GIK[_]%' escape '['
+       or i.index_name like '$GIR[_]%' escape '[' )
+    and i.user_id = u.user_id
+  order by i.index_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> # 인덱스 경유 결과에만 있는 행 (없어야 정상)
+$T0> select * from
+  (
+    select /*+ index(t1, lidx1) */ i1, i3 from t1 where i3 is not null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i3 from t1 where i3 is not null
+  )
+  order by 1;
+I1          I3          
+---------------------------
+No rows selected.
+
+$T0> # 풀스캔 결과에만 있는 행 (없어야 정상)
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i3 from t1 where i3 is not null
+    minus
+    select /*+ index(t1, lidx1) */ i1, i3 from t1 where i3 is not null
+  )
+  order by 1;
+I1          I3          
+---------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; ALL INDEX ON A LOCAL-ONLY TABLE (회귀)
+$T0> ##################################
+$T0> # 글로벌 인덱스가 전혀 없는 테이블은 종전 그대로여야 한다.
+
+
+$T0> create table t2( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values default
+)
+tablespace sys_tbs_mem_data;
+Create success.
+
+$T0> create index lidx2 on t2(i2) local;
+Create success.
+
+$T0> insert into t2 select level, level, level from dual connect by level <= 50;
+50 rows inserted.
+$T0> commit;
+Commit success.
+
+$T0> alter table t2 all index disable;
+Alter success.
+$T0> alter table t2 all index enable;
+Alter success.
+
+$T0> select count(*) from t2;
+COUNT                
+-----------------------
+50                   
+1 row selected.
+$T0> select i.index_name,
+         i.is_unique,
+         i.is_partitioned,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t2')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IS_UNIQUE  IS_PARTITIONED  INDEX_TABLE_ID_KIND  
+----------------------------------------------------
+LIDX2                                                                                                                             
+F  T  ZERO     
+1 row selected.
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t2')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+LIDX2                                                                                                                             
+0           
+1 row selected.
+$T0> select i.index_name, count(*) part_index_cnt
+  from system_.sys_index_partitions_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t2')
+    and t.user_id = user_id()
+  group by i.index_name
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PART_INDEX_CNT       
+-----------------------
+LIDX2                                                                                                                             
+2                    
+1 row selected.
+$T0> # 숨김 인덱스 테이블 ($GIT_) - 없어야 정상
+$T0> select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_name like '$GIT[_]%' escape '['
+    and t.user_id = u.user_id
+  order by t.table_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  
+--------------
+No rows selected.
+
+$T0> # 숨김 인덱스 테이블의 인덱스 ($GIK_, $GIR_) - 없어야 정상
+$T0> select u.user_name, i.index_name
+  from system_.sys_indices_ i, system_.sys_users_ u
+  where ( i.index_name like '$GIK[_]%' escape '['
+       or i.index_name like '$GIR[_]%' escape '[' )
+    and i.user_id = u.user_id
+  order by i.index_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; TABLESPACE OFFLINE / ONLINE
+$T0> ##################################
+$T0> # 파티션 하나가 별도 테이블스페이스에 있고, 그 테이블스페이스를 내렸다
+$T0> # 올린다.
+$T0> #
+$T0> # 이전에는 ONLINE 경로가 런타임 인덱스 헤더를 다시 만들면서 네이티브
+$T0> # 글로벌 인덱스를 처리하지 못해 테이블스페이스가 영영 못 올라왔다.
+$T0> # 지금은 인덱스를 fail-closed 로 닫고 ONLINE 자체는 성공해야 한다.
+
+
+$T0> create memory tablespace memoff size 32M autoextend on checkpoint path 'dbs';
+Create success.
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace sys_tbs_mem_data,
+  partition p2 values default tablespace memoff
+);
+Create success.
+
+$T0> create index gidx1 on t1(i2);
+Create success.
+
+$T0> insert into t1 values (10,  1, 1);
+1 row inserted.
+$T0> insert into t1 values (150, 2, 2);
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> # 내리기 전에는 정상
+$T0> select /*+ index(t1, gidx1) */ count(*) from t1 where i2 >= 0;
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> alter tablespace memoff offline;
+Alter success.
+
+$T0> # 내려간 동안의 조회. 조용히 틀린 답이 나오면 안 된다.
+$T0> select /*+ index(t1, gidx1) */ count(*) from t1 where i2 >= 0;
+[ERR-11110 : The index is inconsistent]
+$T0> select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 >= 0;
+[ERR-110FB : Unable to use an offline tablespace. (NAME=MEMOFF)]
+
+$T0> alter tablespace memoff online;
+Alter success.
+
+$T0> # 올라온 뒤에는 다시 정상이어야 한다
+$T0> select /*+ index(t1, gidx1) */ count(*) from t1 where i2 >= 0;
+[ERR-11110 : The index is inconsistent]
+$T0> select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 >= 0;
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> select i.index_name,
+         i.is_unique,
+         i.is_partitioned,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IS_UNIQUE  IS_PARTITIONED  INDEX_TABLE_ID_KIND  
+----------------------------------------------------
+GIDX1                                                                                                                             
+F  F  ZERO     
+1 row selected.
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+GIDX1                                                                                                                             
+101         
+1 row selected.
+$T0> select i.index_name, count(*) part_index_cnt
+  from system_.sys_index_partitions_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  group by i.index_name
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PART_INDEX_CNT       
+-----------------------
+No rows selected.
+$T0> # 숨김 인덱스 테이블 ($GIT_) - 없어야 정상
+$T0> select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_name like '$GIT[_]%' escape '['
+    and t.user_id = u.user_id
+  order by t.table_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  
+--------------
+No rows selected.
+
+$T0> # 숨김 인덱스 테이블의 인덱스 ($GIK_, $GIR_) - 없어야 정상
+$T0> select u.user_name, i.index_name
+  from system_.sys_indices_ i, system_.sys_users_ u
+  where ( i.index_name like '$GIK[_]%' escape '['
+       or i.index_name like '$GIR[_]%' escape '[' )
+    and i.user_id = u.user_id
+  order by i.index_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> # 올라온 뒤 DML
+$T0> insert into t1 values (160, 3, 3);
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> select /*+ FULL SCAN(t1) */ i1, i2 from t1 order by i1;
+I1          I2          
+---------------------------
+10          1           
+150         2           
+160         3           
+3 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; OFFLINE / ONLINE WITH A UNIQUE GLOBAL INDEX
+$T0> ##################################
+$T0> # 유일성 강제가 되살아나는지가 이 섹터의 초점이다.
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace sys_tbs_mem_data,
+  partition p2 values default tablespace memoff
+);
+Create success.
+
+$T0> create unique index t1_uk on t1(i2);
+Create success.
+
+$T0> insert into t1 values (10,  100, 1);
+1 row inserted.
+$T0> insert into t1 values (150, 200, 2);
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> alter tablespace memoff offline;
+Alter success.
+$T0> alter tablespace memoff online;
+Alter success.
+
+$T0> # 파티션을 넘는 중복 -> 여전히 실패해야 한다
+$T0> insert into t1 values (250, 100, 3);
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> # 새 값 -> 성공
+$T0> insert into t1 values (250, 300, 3);
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> select /*+ FULL SCAN(t1) */ i1, i2 from t1 order by i1;
+I1          I2          
+---------------------------
+10          100         
+150         200         
+250         300         
+3 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> SKIP END;
+$T0> SKIP BEGIN;
+$T0> drop tablespace mem1 including contents and datafiles;
+$T0> drop tablespace mem2 including contents and datafiles;
+$T0> drop tablespace mem3 including contents and datafiles;
+$T0> SKIP END;
+$T0> SKIP BEGIN;
+$T0> drop tablespace memoff including contents and datafiles;
+$T0> SKIP END;
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+
