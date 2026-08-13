@@ -1,0 +1,173 @@
+###########################################################################
+# TestCase Description = NULL 키가 네이티브 글로벌 인덱스에 실리고 보이는가
+#
+#   원본: qp4/Project3/PROJ-1624-GlobalIndex/basic/null_value.tc
+#
+#   ★ 이 케이스는 셋 중 가장 크게 다시 쓴 것이다. 원본은 힙과
+#     "$GIT_T1_IDX1" 을 PSM 안에서 rid 로 짝지어 "한쪽에만 있는 행"을
+#     찍었다. 네이티브에는 그 테이블이 없고 rid 를 SQL 로 볼 수 없다.
+#     게다가 원본의 그 PSM 도, 옆의 FULL OUTER JOIN 도 디스크 테이블에서
+#     _PROWID 를 쓰기 때문에 실제로는 동작한 적이 없다(ERR-31385) --
+#     v3-natc-port.md 3.1.
+#
+#   그래서 같은 질문("NULL 키 행이 트리에 실리는가, 지워지는가")을
+#   인덱스 스캔으로 직접 묻는다:
+#     - 인덱스 경유 결과와 풀스캔 결과의 양방향 차집합이 0행인가
+#     - NULL 키 행이 인덱스 스캔에 보이는가 (i2 is null)
+#     - 카운트가 맞는가
+#   힌트가 실제로 글로벌 인덱스를 잡았다는 플랜 증거를 매번 먼저 남긴다.
+#
+#   ★ 전제: DISK_GLOBAL_INDEX_ENABLE = 1. PREPARATION 이 못박는다.
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+SKIP END;
+
+CALL RESTORE_DISK_DEFAULT();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+CALL PIN_DISK_NATIVE();
+}
+
+#
+# 트리와 힙이 일치하는가. 원본 check_index() 의 자리다.
+#
+DEF CHECK_INDEX()
+{
+  set linesize 200;
+
+  # 힌트가 실제로 글로벌 인덱스를 잡았는가 (이것이 없으면 아래는
+  # 풀스캔 minus 풀스캔이 되어 무조건 0행이다)
+  alter session set explain plan = on;
+  select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+  alter session set explain plan = off;
+
+  # 인덱스 경유에만 있는 행 (없어야 정상)
+  select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2;
+
+  # 풀스캔에만 있는 행 (없어야 정상)
+  select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2;
+
+  # 카운트 교차 확인 -- 중복·유령까지 잡는다
+  select /*+ index(t1, t1_idx1) */ count(*) c, count(i2) c_notnull, sum(i1) s1, sum(i2) s2
+  from t1 where i2 is not null or i2 is null;
+
+  select /*+ FULL SCAN(t1) */ count(*) c, count(i2) c_notnull, sum(i1) s1, sum(i2) s2
+  from t1;
+
+  # NULL 키 행이 인덱스 스캔에 보이는가
+  select /*+ index(t1, t1_idx1) */ i1, i2 from t1 where i2 is null order by 1;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+(
+  i1 integer,
+  i2 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+
+create index t1_idx1 on t1(i2);
+
+desc t1;
+
+##################################
+# SECTOR; MEDIA
+##################################
+
+# 원본은 여기서 desc "$GIT_T1_IDX1" 로 숨김 테이블의 모양을 찍었다.
+# 네이티브에는 그런 객체가 없다는 것이 이 자리의 기대다.
+CALL SHOW_INDEX_MEDIA( "T1" );
+CALL SHOW_NO_HIDDEN_TABLE();
+
+CALL CHECK_INDEX();
+
+##################################
+# SECTOR; INSERT
+##################################
+
+insert into t1 values (1, null);
+insert into t1 values (2, null);
+insert into t1 values (3, null);
+insert into t1 values (4, null);
+
+CALL CHECK_INDEX();
+
+insert into t1 values (5, 5);
+
+CALL CHECK_INDEX();
+
+##################################
+# SECTOR; UPDATE
+##################################
+
+update t1 set i2=1 where i1=1;
+
+CALL CHECK_INDEX();
+
+update t1 set i2=null where i1=5;
+
+CALL CHECK_INDEX();
+
+##################################
+# SECTOR; DELETE
+##################################
+
+delete from t1 where i1=1;
+
+CALL CHECK_INDEX();
+
+delete from t1 where i1=2;
+
+CALL CHECK_INDEX();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

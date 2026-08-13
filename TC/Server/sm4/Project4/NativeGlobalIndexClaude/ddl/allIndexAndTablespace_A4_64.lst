@@ -928,6 +928,29 @@ Alter success.
 $T0> alter tablespace memoff online;
 Alter success.
 
+$T0> # ★ 2026-08-13 (V3 D-3 / O-4) 이후 이 자리의 기대가 바뀌었다.
+$T0> #
+$T0> #   ONLINE 은 외부(다른 테이블스페이스) 멤버 파티션을 가진 글로벌 인덱스를
+$T0> #   재구축하지 못하고 INVALID 로 닫는다. 그 상태에서 DML 의 UNIQUE 검사가
+$T0> #   그 인덱스를 계속 읽던 것이 O-4 였다 -- 파티션을 넘는 중복이 조용히
+$T0> #   커밋되고 그 인스턴스가 다시 뜨지 못했다.
+$T0> #
+$T0> #   수정 뒤에는 INVALID 인덱스를 건드리는 DML 이 전부 ERR-11110 으로
+$T0> #   막힌다(fail-closed). 그래서 이 섹터는 두 상태를 나눠 잰다:
+$T0> #     1. INVALID 동안: 중복이든 새 값이든 DML 은 거부된다
+$T0> #     2. REBUILD 뒤  : 유일성 강제가 되살아난다
+$T0> #   근거: v3-online-invalid-unique.md 8.3, v3-gr03-layers.md
+
+$T0> # 1. INVALID 동안 -- 중복도 새 값도 ERR-11110
+$T0> insert into t1 values (250, 100, 3);
+[ERR-11110 : The index is inconsistent]
+$T0> insert into t1 values (250, 300, 3);
+[ERR-11110 : The index is inconsistent]
+
+$T0> # 2. 되살린다
+$T0> alter index t1_uk rebuild;
+Alter success.
+
 $T0> # 파티션을 넘는 중복 -> 여전히 실패해야 한다
 $T0> insert into t1 values (250, 100, 3);
 [ERR-11058 : The row already exists in a unique index.]

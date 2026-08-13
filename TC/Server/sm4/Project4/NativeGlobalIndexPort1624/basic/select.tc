@@ -1,0 +1,217 @@
+###########################################################################
+# TestCase Description = 디스크 파티션드 테이블의 네이티브 글로벌 인덱스 SELECT / 호스트 변수 / FOR UPDATE
+#
+#   원본: qp4/Project3/PROJ-1624-GlobalIndex/basic/select.tc
+#   원본은 같은 문장을 $GIT_ 숨김 테이블 구현으로 잰다. 이 파일은
+#   같은 문장을 **네이티브 글로벌 인덱스**로 잰다.
+#
+#   ★ 전제: DISK_GLOBAL_INDEX_ENABLE = 1.
+#     PREPARATION 이 못박고 v$property 로 전사에 남긴다. 기본값에 기대지
+#     않는다 -- 기본값이 움직이면 잰다고 적어 놓은 것과 실제로 재는 것이
+#     갈리기 때문이다(disk-natc.md 6, F07).
+#
+#   ★ 원본의 결함 하나를 고쳤다. LIST 섹터가
+#       create index t3_idx1 on t1(i2, i3);
+#     처럼 t3 의 인덱스를 t1 에 만들고 있어, t3 섹터가 인덱스 없는
+#     테이블을 재고 있었다(초록이지만 아무것도 시험하지 않는다).
+#     여기서는 t3 에 만든다 -- v3-natc-port.md 3.3.
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t3;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+
+CALL RESTORE_DISK_DEFAULT();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+CALL PIN_DISK_NATIVE();
+}
+
+DEF SELECT( @aTable )
+{
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+##################################
+# SECTOR; SELECT
+##################################
+
+select * from @{aTable};
+select * from @{aTable} order by i2, i3;
+select * from @{aTable} order by i2, i3 desc;
+
+select * from @{aTable} where i2 = 10 and i3 = 1 and i4 = 1;
+select * from @{aTable} where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3;
+select * from @{aTable} where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+
+select * from @{aTable} where i2 >= 20 and i3 = 1 and i4 = 1;
+select * from @{aTable} where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3;
+select * from @{aTable} where i2 >= 20 and i3 = 1 and i4 = 1 order by i2, i3 desc;
+
+##################################
+# SECTOR; HOST VARIABLE
+##################################
+
+var v2 integer;
+var v3 integer;
+var v4 integer;
+
+exec :v2 := 10;
+exec :v3 := 1;
+exec :v4 := 1;
+
+prepare select * from @{aTable} where i2 = :v2 and i3 = :v3 and i4 = :v4;
+prepare select * from @{aTable} where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+prepare select * from @{aTable} where i2 = :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+
+exec :v2 := 20;
+
+prepare select * from @{aTable} where i2 >= :v2 and i3 = :v3 and i4 = :v4;
+prepare select * from @{aTable} where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3;
+prepare select * from @{aTable} where i2 >= :v2 and i3 = :v3 and i4 = :v4 order by i2, i3 desc;
+
+##################################
+# SECTOR; SELECT FOR UPDATE
+##################################
+
+select * from @{aTable} for update;
+select * from @{aTable} order by i2, i3 for update;
+select * from @{aTable} order by i2, i3 desc for update;
+
+select * from @{aTable} where i2 = 10 and i3 = 1 and i4 = 1 for update;
+select * from @{aTable} where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 for update;
+select * from @{aTable} where i2 = 10 and i3 = 1 and i4 = 1 order by i2, i3 desc for update;
+
+alter session set explain plan = off;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; RANGE PARTITION
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+create index t1_idx1 on t1(i2, i3);
+create index t1_idx2 on t1(i2, i3 desc);
+
+desc t1;
+
+CALL SHOW_INDEX_MEDIA( "t1" );
+CALL SHOW_NO_HIDDEN_TABLE();
+
+CALL SELECT( "t1" );
+
+##################################
+# SECTOR; HASH PARTITION
+##################################
+
+create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition p5
+)
+tablespace sys_tbs_disk_data;
+
+insert into t2 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+create index t2_idx1 on t2(i2, i3);
+create index t2_idx2 on t2(i2, i3 desc);
+
+desc t2;
+
+CALL SHOW_INDEX_MEDIA( "t2" );
+CALL SHOW_NO_HIDDEN_TABLE();
+
+CALL SELECT( "t2" );
+
+##################################
+# SECTOR; LIST PARTITION
+##################################
+
+create table t3
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t3 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+create index t3_idx1 on t3(i2, i3);
+create index t3_idx2 on t3(i2, i3 desc);
+
+desc t3;
+
+CALL SHOW_INDEX_MEDIA( "t3" );
+CALL SHOW_NO_HIDDEN_TABLE();
+
+CALL SELECT( "t3" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

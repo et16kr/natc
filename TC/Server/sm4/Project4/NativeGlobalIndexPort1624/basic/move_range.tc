@@ -1,0 +1,161 @@
+###########################################################################
+# TestCase Description = RANGE -> HASH MOVE 후 두 테이블의 글로벌 인덱스 정합성
+#
+#   원본: qp4/Project3/PROJ-1624-GlobalIndex/basic/move_range.tc
+#   원본은 같은 문장을 $GIT_ 숨김 테이블 구현으로 잰다. 이 파일은
+#   같은 문장을 **네이티브 글로벌 인덱스**로 잰다.
+#
+#   ★ 전제: DISK_GLOBAL_INDEX_ENABLE = 1.
+#     PREPARATION 이 못박고 v$property 로 전사에 남긴다. 기본값에 기대지
+#     않는다 -- 기본값이 움직이면 잰다고 적어 놓은 것과 실제로 재는 것이
+#     갈리기 때문이다(disk-natc.md 6, F07).
+#
+#   ★ 정합성 검사는 이식이 아니라 재작성이다. 원본의 FULL OUTER JOIN 은
+#     디스크 테이블에서 _PROWID 를 쓰기 때문에 한 번도 동작한 적이
+#     없다(ERR-31385) -- 수와 근거는 v3-natc-port.md 3.1.
+#     대체물은 ../include/checkGlobalIndex.i.
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+CALL RESTORE_DISK_DEFAULT();
+
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t3;
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+CALL PIN_DISK_NATIVE();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; RANGE PARTITION
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+insert into t1 values ( 0, 0, 0, 1 );
+insert into t1 values ( 0, 1, null, null );
+insert into t1 values ( 101, 0, null, null );
+
+alter table t1 add constraint t1_pk primary key (i2, i1);
+alter table t1 add constraint t1_uk unique (i3, i2, i1);
+
+create index t1_idx1 on t1(i2);
+create index t1_idx2 on t1(i2, i3, i4);
+create index t1_idx3 on t1(i3, i2);
+create index t1_idx4 on t1(i4, i3);
+create index t1_idx5 on t1(i4);
+
+desc t1;
+
+create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition pd
+)
+tablespace sys_tbs_disk_data;
+
+alter table t2 add constraint t2_pk primary key (i2, i1);
+alter table t2 add constraint t2_uk unique (i3, i2, i1);
+
+create index t2_idx1 on t2(i2);
+create index t2_idx2 on t2(i2, i3, i4);
+create index t2_idx3 on t2(i3, i2);
+create index t2_idx4 on t2(i4, i3);
+create index t2_idx5 on t2(i4);
+
+desc t2;
+
+##################################
+# SECTOR; DELETE
+##################################
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+select * from t1;
+select * from t2;
+
+CALL CHECK_GLOBAL_INDEX( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t2" );
+
+move into t2 from t1 where i3 = 2;
+
+select * from t1;
+select * from t2;
+
+CALL CHECK_GLOBAL_INDEX( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t2" );
+
+move into t2 from t1 where i2 between 20 and 30;
+
+select * from t1;
+select * from t2;
+
+CALL CHECK_GLOBAL_INDEX( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t2" );
+
+move into t2 from t1 where i1 < 30;
+
+select * from t1;
+select * from t2;
+
+CALL CHECK_GLOBAL_INDEX( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

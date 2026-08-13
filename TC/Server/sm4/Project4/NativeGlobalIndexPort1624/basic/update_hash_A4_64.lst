@@ -1,0 +1,3704 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 정합성 검사
+$T0> #
+$T0> # 원본(PROJ-1624)의 basic/check_global_index.i 를 대신한다.
+$T0> #
+$T0> # ★ 원본은 이식할 수 없다. 두 가지 이유가 겹친다.
+$T0> #
+$T0> #   1. 조인할 테이블이 없다. 원본은 힙(파티션별 SELECT)과 숨김 테이블
+$T0> #      "$GIT_T1_IDX1" 을 FULL OUTER JOIN 해서 한쪽에만 있는 행을 찾았다.
+$T0> #      네이티브에는 그 테이블이 없고 b-tree 내용을 SQL 로 볼 수 없다.
+$T0> #
+$T0> #   2. 원본의 그 검사는 **한 번도 동작한 적이 없다.** 힙 쪽 SELECT 가
+$T0> #      cast(_prowid as bigint) 를 쓰는데 디스크 테이블은 _PROWID 를
+$T0> #      지원하지 않는다. 원본 .lst 22 개가 전부
+$T0> #      [ERR-31385 : _PROWID is not supported.] 로 굳어 있다 --
+$T0> #      "이 패턴이 울리는 변경"이 존재하지 않는 감시자였다.
+$T0> #      근거와 수는 v3-natc-port.md 3.1.
+$T0> #
+$T0> # 그래서 목적(트리와 힙이 일치하는가)만 이어받고 방법은 새로 세운다.
+$T0> # NativeGlobalIndexClaude/include/checkGlobalIndex.i 가 메모리 쪽에서 쓰는
+$T0> # 것과 같은 세 겹이다:
+$T0> #
+$T0> #   1. 인덱스 경유 결과와 풀스캔 결과의 양방향 차집합  (행의 유무)
+$T0> #   2. 카운트와 합계의 교차 확인                        (행의 중복·유령)
+$T0> #   3. 힌트가 실제로 그 글로벌 인덱스를 잡았다는 플랜 증거
+$T0> #
+$T0> # ★ 3 이 없으면 1·2 는 "풀스캔 minus 풀스캔"이 되어 무조건 0행이다.
+$T0> #   그것이 원본이 빠진 함정의 다른 얼굴이므로, 매 인덱스마다 플랜을
+$T0> #   먼저 전사에 남긴다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 인덱스 하나를 검사한다.
+$T0> #
+$T0> # @aTable : 테이블 이름
+$T0> # @aIndex : 글로벌 인덱스 이름
+$T0> # @aPred  : 그 인덱스를 태울 술어. 전 행(널 포함)을 덮어야 한다.
+$T0> #
+
+$T0> #
+$T0> # 원본 fixture(i1..i4 + idx1..idx5)의 전 글로벌 인덱스를 검사한다.
+$T0> #
+$T0> # 호출 규약은 원본과 같은 자리에서 부르되 테이블을 인자로 받는다 --
+$T0> # 원본은 t1 전용 check_global_index.i 와 t2 전용 check_global_index_t2.i
+$T0> # 두 파일이었다.
+$T0> #
+$T0> # 인덱스별 선두 컬럼:
+$T0> #   idx1(i2) idx2(i2,i3,i4) idx3(i3,i2) idx4(i4,i3) idx5(i4)
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = HASH 파티션 UPDATE (로우 이동 유/무) 후 글로벌 인덱스 정합성
+$T0> #
+$T0> #   원본: qp4/Project3/PROJ-1624-GlobalIndex/basic/update_hash.tc
+$T0> #   원본은 같은 문장을 $GIT_ 숨김 테이블 구현으로 잰다. 이 파일은
+$T0> #   같은 문장을 **네이티브 글로벌 인덱스**로 잰다.
+$T0> #
+$T0> #   ★ 전제: DISK_GLOBAL_INDEX_ENABLE = 1.
+$T0> #     PREPARATION 이 못박고 v$property 로 전사에 남긴다. 기본값에 기대지
+$T0> #     않는다 -- 기본값이 움직이면 잰다고 적어 놓은 것과 실제로 재는 것이
+$T0> #     갈리기 때문이다(disk-natc.md 6, F07).
+$T0> #
+$T0> #   ★ 정합성 검사는 이식이 아니라 재작성이다. 원본의 FULL OUTER JOIN 은
+$T0> #     디스크 테이블에서 _PROWID 를 쓰기 때문에 한 번도 동작한 적이
+$T0> #     없다(ERR-31385) -- 수와 근거는 v3-natc-port.md 3.1.
+$T0> #     대체물은 ../include/checkGlobalIndex.i.
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; HASH PARTITION
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition pd
+)
+disable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+
+$T0> insert into t1 values ( 0, 0, 0, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 0, 1, null, null );
+1 row inserted.
+$T0> insert into t1 values ( 101, 0, null, null );
+1 row inserted.
+
+$T0> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3, i4);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i2);
+Create success.
+$T0> create index t1_idx4 on t1(i4, i3);
+Create success.
+$T0> create index t1_idx5 on t1(i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T1_IDX1                                  BTREE                  I2 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 ASC
+T1_IDX4                                  BTREE                  I4 ASC,
+                                                                I3 ASC
+T1_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+5           1           2           1           
+9           3           0           1           
+12          4           0           1           
+14          4           2           1           
+18          6           0           1           
+23          7           2           1           
+27          9           0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+45          15          0           1           
+48          16          0           1           
+56          18          2           1           
+57          19          0           1           
+66          22          0           1           
+86          28          2           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+1           0           1           1           
+3           1           0           1           
+13          4           1           1           
+21          7           0           1           
+30          10          0           1           
+40          13          1           1           
+51          17          0           1           
+52          17          1           1           
+58          19          1           1           
+69          23          0           1           
+71          23          2           1           
+76          25          1           1           
+85          28          1           1           
+87          29          0           1           
+92          30          2           1           
+97          32          1           1           
+98          32          2           1           
+0           0           0           1           
+0           1                                   
+4           1           1           1           
+8           2           2           1           
+17          5           2           1           
+25          8           1           1           
+26          8           2           1           
+35          11          2           1           
+46          15          1           1           
+49          16          1           1           
+53          17          2           1           
+61          20          1           1           
+62          20          2           1           
+64          21          1           1           
+65          21          2           1           
+68          22          2           1           
+73          24          1           1           
+77          25          2           1           
+80          26          2           1           
+83          27          2           1           
+84          28          0           1           
+90          30          0           1           
+93          31          0           1           
+101         0                                   
+2           0           2           1           
+6           2           0           1           
+7           2           1           1           
+10          3           1           1           
+11          3           2           1           
+16          5           1           1           
+22          7           1           1           
+28          9           1           1           
+29          9           2           1           
+36          12          0           1           
+37          12          1           1           
+39          13          0           1           
+42          14          0           1           
+44          14          2           1           
+50          16          2           1           
+59          19          2           1           
+63          21          0           1           
+70          23          1           1           
+74          24          2           1           
+75          25          0           1           
+79          26          1           1           
+81          27          0           1           
+99          33          0           1           
+15          5           0           1           
+19          6           1           1           
+20          6           2           1           
+24          8           0           1           
+34          11          1           1           
+38          12          2           1           
+41          13          2           1           
+43          14          1           1           
+47          15          2           1           
+54          18          0           1           
+55          18          1           1           
+60          20          0           1           
+67          22          1           1           
+72          24          0           1           
+78          26          0           1           
+82          27          1           1           
+89          29          2           1           
+95          31          2           1           
+96          32          0           1           
+100         33          1           1           
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+T1_PK                 LOCAL             0           T  0           
+T1_UK                 LOCAL             0           T  0           
+7 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 100                  101                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 100                  101                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i2=i2+1;
+103 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+5           2           2           1           
+9           4           0           1           
+12          5           0           1           
+14          5           2           1           
+18          7           0           1           
+23          8           2           1           
+27          10          0           1           
+31          11          1           1           
+32          11          2           1           
+33          12          0           1           
+45          16          0           1           
+48          17          0           1           
+56          19          2           1           
+57          20          0           1           
+66          23          0           1           
+86          29          2           1           
+88          30          1           1           
+91          31          1           1           
+94          32          1           1           
+1           1           1           1           
+3           2           0           1           
+13          5           1           1           
+21          8           0           1           
+30          11          0           1           
+40          14          1           1           
+51          18          0           1           
+52          18          1           1           
+58          20          1           1           
+69          24          0           1           
+71          24          2           1           
+76          26          1           1           
+85          29          1           1           
+87          30          0           1           
+92          31          2           1           
+97          33          1           1           
+98          33          2           1           
+0           1           0           1           
+0           2                                   
+4           2           1           1           
+8           3           2           1           
+17          6           2           1           
+25          9           1           1           
+26          9           2           1           
+35          12          2           1           
+46          16          1           1           
+49          17          1           1           
+53          18          2           1           
+61          21          1           1           
+62          21          2           1           
+64          22          1           1           
+65          22          2           1           
+68          23          2           1           
+73          25          1           1           
+77          26          2           1           
+80          27          2           1           
+83          28          2           1           
+84          29          0           1           
+90          31          0           1           
+93          32          0           1           
+101         1                                   
+2           1           2           1           
+6           3           0           1           
+7           3           1           1           
+10          4           1           1           
+11          4           2           1           
+16          6           1           1           
+22          8           1           1           
+28          10          1           1           
+29          10          2           1           
+36          13          0           1           
+37          13          1           1           
+39          14          0           1           
+42          15          0           1           
+44          15          2           1           
+50          17          2           1           
+59          20          2           1           
+63          22          0           1           
+70          24          1           1           
+74          25          2           1           
+75          26          0           1           
+79          27          1           1           
+81          28          0           1           
+99          34          0           1           
+15          6           0           1           
+19          7           1           1           
+20          7           2           1           
+24          9           0           1           
+34          12          1           1           
+38          13          2           1           
+41          14          2           1           
+43          15          1           1           
+47          16          2           1           
+54          19          0           1           
+55          19          1           1           
+60          21          0           1           
+67          23          1           1           
+72          25          0           1           
+78          27          0           1           
+82          28          1           1           
+89          30          2           1           
+95          32          2           1           
+96          33          0           1           
+100         34          1           1           
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+T1_PK                 LOCAL             0           T  0           
+T1_UK                 LOCAL             0           T  0           
+7 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 100                  101                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 100                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 100                  101                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i3=i3+1;
+103 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+5           2           3           1           
+9           4           1           1           
+12          5           1           1           
+14          5           3           1           
+18          7           1           1           
+23          8           3           1           
+27          10          1           1           
+31          11          2           1           
+32          11          3           1           
+33          12          1           1           
+45          16          1           1           
+48          17          1           1           
+56          19          3           1           
+57          20          1           1           
+66          23          1           1           
+86          29          3           1           
+88          30          2           1           
+91          31          2           1           
+94          32          2           1           
+1           1           2           1           
+3           2           1           1           
+13          5           2           1           
+21          8           1           1           
+30          11          1           1           
+40          14          2           1           
+51          18          1           1           
+52          18          2           1           
+58          20          2           1           
+69          24          1           1           
+71          24          3           1           
+76          26          2           1           
+85          29          2           1           
+87          30          1           1           
+92          31          3           1           
+97          33          2           1           
+98          33          3           1           
+0           1           1           1           
+0           2                                   
+4           2           2           1           
+8           3           3           1           
+17          6           3           1           
+25          9           2           1           
+26          9           3           1           
+35          12          3           1           
+46          16          2           1           
+49          17          2           1           
+53          18          3           1           
+61          21          2           1           
+62          21          3           1           
+64          22          2           1           
+65          22          3           1           
+68          23          3           1           
+73          25          2           1           
+77          26          3           1           
+80          27          3           1           
+83          28          3           1           
+84          29          1           1           
+90          31          1           1           
+93          32          1           1           
+101         1                                   
+2           1           3           1           
+6           3           1           1           
+7           3           2           1           
+10          4           2           1           
+11          4           3           1           
+16          6           2           1           
+22          8           2           1           
+28          10          2           1           
+29          10          3           1           
+36          13          1           1           
+37          13          2           1           
+39          14          1           1           
+42          15          1           1           
+44          15          3           1           
+50          17          3           1           
+59          20          3           1           
+63          22          1           1           
+70          24          2           1           
+74          25          3           1           
+75          26          1           1           
+79          27          2           1           
+81          28          1           1           
+99          34          1           1           
+15          6           1           1           
+19          7           2           1           
+20          7           3           1           
+24          9           1           1           
+34          12          2           1           
+38          13          3           1           
+41          14          3           1           
+43          15          2           1           
+47          16          3           1           
+54          19          1           1           
+55          19          2           1           
+60          21          1           1           
+67          23          2           1           
+72          25          1           1           
+78          27          1           1           
+82          28          2           1           
+89          30          3           1           
+95          32          3           1           
+96          33          1           1           
+100         34          2           1           
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+T1_PK                 LOCAL             0           T  0           
+T1_UK                 LOCAL             0           T  0           
+7 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 201                  101                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 201                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 201                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 201                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 201                  101                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1754                 201                  101                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i2=i2-1, i3=i3-2, i4=2;
+103 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+5           1           1           2           
+9           3           -1          2           
+12          4           -1          2           
+14          4           1           2           
+18          6           -1          2           
+23          7           1           2           
+27          9           -1          2           
+31          10          0           2           
+32          10          1           2           
+33          11          -1          2           
+45          15          -1          2           
+48          16          -1          2           
+56          18          1           2           
+57          19          -1          2           
+66          22          -1          2           
+86          28          1           2           
+88          29          0           2           
+91          30          0           2           
+94          31          0           2           
+1           0           0           2           
+3           1           -1          2           
+13          4           0           2           
+21          7           -1          2           
+30          10          -1          2           
+40          13          0           2           
+51          17          -1          2           
+52          17          0           2           
+58          19          0           2           
+69          23          -1          2           
+71          23          1           2           
+76          25          0           2           
+85          28          0           2           
+87          29          -1          2           
+92          30          1           2           
+97          32          0           2           
+98          32          1           2           
+0           0           -1          2           
+0           1                       2           
+4           1           0           2           
+8           2           1           2           
+17          5           1           2           
+25          8           0           2           
+26          8           1           2           
+35          11          1           2           
+46          15          0           2           
+49          16          0           2           
+53          17          1           2           
+61          20          0           2           
+62          20          1           2           
+64          21          0           2           
+65          21          1           2           
+68          22          1           2           
+73          24          0           2           
+77          25          1           2           
+80          26          1           2           
+83          27          1           2           
+84          28          -1          2           
+90          30          -1          2           
+93          31          -1          2           
+101         0                       2           
+2           0           1           2           
+6           2           -1          2           
+7           2           0           2           
+10          3           0           2           
+11          3           1           2           
+16          5           0           2           
+22          7           0           2           
+28          9           0           2           
+29          9           1           2           
+36          12          -1          2           
+37          12          0           2           
+39          13          -1          2           
+42          14          -1          2           
+44          14          1           2           
+50          16          1           2           
+59          19          1           2           
+63          21          -1          2           
+70          23          0           2           
+74          24          1           2           
+75          25          -1          2           
+79          26          0           2           
+81          27          -1          2           
+99          33          -1          2           
+15          5           -1          2           
+19          6           0           2           
+20          6           1           2           
+24          8           -1          2           
+34          11          0           2           
+38          12          1           2           
+41          13          1           2           
+43          14          0           2           
+47          15          1           2           
+54          18          -1          2           
+55          18          0           2           
+60          20          -1          2           
+67          22          0           2           
+72          24          -1          2           
+78          26          -1          2           
+82          27          0           2           
+89          29          1           2           
+95          31          1           2           
+96          32          -1          2           
+100         33          0           2           
+103 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 103, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 22, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+T1_PK                 LOCAL             0           T  0           
+T1_UK                 LOCAL             0           T  0           
+7 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 -1                   206                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 -1                   206                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 -1                   206                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 -1                   206                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 -1                   206                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+103                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 103, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+103                  5151                 1651                 -1                   206                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; HASH PARTITION, ROW MOVEMENT
+$T0> ##################################
+
+$T0> drop table t1;
+Drop success.
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition pd
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+100 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T1 )
+ PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 26, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 100, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 100
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3, i4);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i2);
+Create success.
+$T0> create index t1_idx4 on t1(i4, i3);
+Create success.
+$T0> create index t1_idx5 on t1(i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I2 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 ASC,
+                                                                I4 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 ASC
+T1_IDX4                                  BTREE                  I4 ASC,
+                                                                I3 ASC
+T1_IDX5                                  BTREE                  I4 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+5           1           2           1           
+9           3           0           1           
+12          4           0           1           
+14          4           2           1           
+18          6           0           1           
+23          7           2           1           
+27          9           0           1           
+31          10          1           1           
+32          10          2           1           
+33          11          0           1           
+45          15          0           1           
+48          16          0           1           
+56          18          2           1           
+57          19          0           1           
+66          22          0           1           
+86          28          2           1           
+88          29          1           1           
+91          30          1           1           
+94          31          1           1           
+1           0           1           1           
+3           1           0           1           
+13          4           1           1           
+21          7           0           1           
+30          10          0           1           
+40          13          1           1           
+51          17          0           1           
+52          17          1           1           
+58          19          1           1           
+69          23          0           1           
+71          23          2           1           
+76          25          1           1           
+85          28          1           1           
+87          29          0           1           
+92          30          2           1           
+97          32          1           1           
+98          32          2           1           
+4           1           1           1           
+8           2           2           1           
+17          5           2           1           
+25          8           1           1           
+26          8           2           1           
+35          11          2           1           
+46          15          1           1           
+49          16          1           1           
+53          17          2           1           
+61          20          1           1           
+62          20          2           1           
+64          21          1           1           
+65          21          2           1           
+68          22          2           1           
+73          24          1           1           
+77          25          2           1           
+80          26          2           1           
+83          27          2           1           
+84          28          0           1           
+90          30          0           1           
+93          31          0           1           
+2           0           2           1           
+6           2           0           1           
+7           2           1           1           
+10          3           1           1           
+11          3           2           1           
+16          5           1           1           
+22          7           1           1           
+28          9           1           1           
+29          9           2           1           
+36          12          0           1           
+37          12          1           1           
+39          13          0           1           
+42          14          0           1           
+44          14          2           1           
+50          16          2           1           
+59          19          2           1           
+63          21          0           1           
+70          23          1           1           
+74          24          2           1           
+75          25          0           1           
+79          26          1           1           
+81          27          0           1           
+99          33          0           1           
+15          5           0           1           
+19          6           1           1           
+20          6           2           1           
+24          8           0           1           
+34          11          1           1           
+38          12          2           1           
+41          13          2           1           
+43          14          1           1           
+47          15          2           1           
+54          18          0           1           
+55          18          1           1           
+60          20          0           1           
+67          22          1           1           
+72          24          0           1           
+78          26          0           1           
+82          27          1           1           
+89          29          2           1           
+95          31          2           1           
+96          32          0           1           
+100         33          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+5 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  100                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  100                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i1=i1+10, i2=i2+1;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+33          8           2           1           
+66          19          2           1           
+104         32          1           1           
+23          5           1           1           
+31          8           0           1           
+86          26          1           1           
+14          2           1           1           
+18          3           2           1           
+27          6           2           1           
+45          12          2           1           
+56          16          1           1           
+94          29          0           1           
+12          1           2           1           
+32          8           1           1           
+91          28          0           1           
+48          13          2           1           
+57          16          2           1           
+88          27          0           1           
+13          2           0           1           
+40          11          0           1           
+97          30          0           1           
+107         33          1           1           
+108         33          2           1           
+58          17          0           1           
+76          23          0           1           
+98          30          1           1           
+71          21          1           1           
+87          26          2           1           
+21          4           2           1           
+52          15          0           1           
+69          20          2           1           
+85          26          0           1           
+30          7           2           1           
+51          14          2           1           
+92          28          1           1           
+105         32          2           1           
+110         34          1           1           
+35          9           1           1           
+83          25          1           1           
+90          27          2           1           
+93          28          2           1           
+101         31          1           1           
+61          18          0           1           
+62          18          1           1           
+68          20          1           1           
+102         31          2           1           
+17          3           1           1           
+26          6           1           1           
+46          13          0           1           
+49          14          0           1           
+73          22          0           1           
+80          24          1           1           
+84          25          2           1           
+109         34          0           1           
+25          6           0           1           
+53          15          1           1           
+64          19          0           1           
+65          19          1           1           
+77          23          1           1           
+106         33          0           1           
+16          3           0           1           
+39          10          2           1           
+22          5           0           1           
+28          7           0           1           
+37          10          0           1           
+42          11          2           1           
+11          1           1           1           
+50          14          1           1           
+79          24          0           1           
+81          24          2           1           
+36          9           2           1           
+59          17          1           1           
+63          18          2           1           
+74          22          1           1           
+75          22          2           1           
+29          7           1           1           
+44          12          1           1           
+70          21          0           1           
+99          30          2           1           
+34          9           0           1           
+82          25          0           1           
+15          2           2           1           
+19          4           0           1           
+24          5           2           1           
+41          11          1           1           
+43          12          0           1           
+55          16          0           1           
+67          20          0           1           
+96          29          2           1           
+95          29          1           1           
+72          21          2           1           
+78          23          2           1           
+100         31          0           1           
+103         32          0           1           
+20          4           1           1           
+38          10          1           1           
+47          13          1           1           
+54          15          2           1           
+60          17          2           1           
+89          27          1           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 18, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+5 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1750                 100                  100                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1750                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1750                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1750                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1750                 100                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1750                 100                  100                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i1=i1-10, i3=i3+1;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 18, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+23          8           3           1           
+56          19          3           1           
+94          32          2           1           
+48          17          1           1           
+66          23          1           1           
+88          30          2           1           
+91          31          2           1           
+12          5           1           1           
+18          7           1           1           
+27          10          1           1           
+32          11          3           1           
+5           2           3           1           
+9           4           1           1           
+14          5           3           1           
+31          11          2           1           
+33          12          1           1           
+45          16          1           1           
+57          20          1           1           
+86          29          3           1           
+3           2           1           1           
+30          11          1           1           
+87          30          1           1           
+97          33          2           1           
+98          33          3           1           
+13          5           2           1           
+21          8           1           1           
+76          26          2           1           
+51          18          1           1           
+52          18          2           1           
+58          20          2           1           
+92          31          3           1           
+1           1           2           1           
+40          14          2           1           
+69          24          1           1           
+71          24          3           1           
+85          29          2           1           
+25          9           2           1           
+73          25          2           1           
+80          27          3           1           
+83          28          3           1           
+4           2           2           1           
+8           3           3           1           
+17          6           3           1           
+35          12          3           1           
+46          16          2           1           
+84          29          1           1           
+61          21          2           1           
+77          26          3           1           
+26          9           3           1           
+49          17          2           1           
+53          18          3           1           
+64          22          2           1           
+65          22          3           1           
+62          21          3           1           
+68          23          3           1           
+90          31          1           1           
+93          32          1           1           
+6           3           1           1           
+29          10          3           1           
+2           1           3           1           
+22          8           2           1           
+81          28          1           1           
+11          4           3           1           
+42          15          1           1           
+59          20          3           1           
+75          26          1           1           
+7           3           2           1           
+16          6           2           1           
+36          13          1           1           
+39          14          1           1           
+63          22          1           1           
+70          24          2           1           
+74          25          3           1           
+99          34          1           1           
+10          4           2           1           
+28          10          2           1           
+37          13          2           1           
+44          15          3           1           
+50          17          3           1           
+79          27          2           1           
+24          9           1           1           
+72          25          1           1           
+38          13          3           1           
+47          16          3           1           
+78          27          1           1           
+20          7           3           1           
+41          14          3           1           
+82          28          2           1           
+95          32          3           1           
+100         34          2           1           
+15          6           1           1           
+43          15          2           1           
+54          19          1           1           
+55          19          2           1           
+67          23          2           1           
+96          33          1           1           
+19          7           2           1           
+34          12          2           1           
+60          21          1           1           
+89          30          3           1           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+5 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 200                  100                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 200                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 200                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 200                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 200                  100                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 200                  100                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i1=i1+10, i2=i2-1, i3=i3-2, i4=2;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 17, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+33          7           1           2           
+66          18          1           2           
+104         31          0           2           
+23          4           0           2           
+31          7           -1          2           
+86          25          0           2           
+14          1           0           2           
+18          2           1           2           
+27          5           1           2           
+45          11          1           2           
+56          15          0           2           
+94          28          -1          2           
+12          0           1           2           
+32          7           0           2           
+91          27          -1          2           
+48          12          1           2           
+57          15          1           2           
+88          26          -1          2           
+13          1           -1          2           
+40          10          -1          2           
+97          29          -1          2           
+107         32          0           2           
+108         32          1           2           
+58          16          -1          2           
+76          22          -1          2           
+98          29          0           2           
+71          20          0           2           
+87          25          1           2           
+21          3           1           2           
+52          14          -1          2           
+69          19          1           2           
+85          25          -1          2           
+30          6           1           2           
+51          13          1           2           
+92          27          0           2           
+105         31          1           2           
+110         33          0           2           
+35          8           0           2           
+83          24          0           2           
+90          26          1           2           
+93          27          1           2           
+101         30          0           2           
+61          17          -1          2           
+62          17          0           2           
+68          19          0           2           
+102         30          1           2           
+17          2           0           2           
+26          5           0           2           
+46          12          -1          2           
+49          13          -1          2           
+73          21          -1          2           
+80          23          0           2           
+84          24          1           2           
+109         33          -1          2           
+25          5           -1          2           
+53          14          0           2           
+64          18          -1          2           
+65          18          0           2           
+77          22          0           2           
+106         32          -1          2           
+16          2           -1          2           
+39          9           1           2           
+22          4           -1          2           
+28          6           -1          2           
+37          9           -1          2           
+42          10          1           2           
+11          0           0           2           
+50          13          0           2           
+79          23          -1          2           
+81          23          1           2           
+36          8           1           2           
+59          16          0           2           
+63          17          1           2           
+74          21          0           2           
+75          21          1           2           
+29          6           0           2           
+44          11          0           2           
+70          20          -1          2           
+99          29          1           2           
+34          8           -1          2           
+82          24          -1          2           
+15          1           1           2           
+19          3           -1          2           
+24          4           1           2           
+41          10          0           2           
+43          11          -1          2           
+55          15          -1          2           
+67          19          -1          2           
+96          28          1           2           
+95          28          0           2           
+72          20          1           2           
+78          22          1           2           
+100         30          -1          2           
+103         31          -1          2           
+20          3           0           2           
+38          9           0           2           
+47          12          0           2           
+54          14          1           2           
+60          16          1           2           
+89          26          0           2           
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 18, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 23, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX1               NATIVE-GLOBAL     0           F  101         
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+T1_IDX4               NATIVE-GLOBAL     0           F  101         
+T1_IDX5               NATIVE-GLOBAL     0           F  101         
+5 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1650                 0                    200                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx1) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1650                 0                    200                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx2) */ count(*) from t1 where i2 is not null or i2 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 IS NOT NULL
+     I2 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+    minus
+    select /*+ index(t1, t1_idx2) */ i1, i2, i3, i4 from t1 where i2 is not null or i2 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx2) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i2 is not null or i2 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1650                 0                    200                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx3) */ count(*) from t1 where i3 is not null or i3 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 IS NOT NULL
+     I3 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+    minus
+    select /*+ index(t1, t1_idx3) */ i1, i2, i3, i4 from t1 where i3 is not null or i3 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx3) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i3 is not null or i3 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1650                 0                    200                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx4) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx4) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx4) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1650                 0                    200                  
+1 row selected.
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_idx5) */ count(*) from t1 where i4 is not null or i4 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I4 IS NOT NULL
+     I4 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+    minus
+    select /*+ index(t1, t1_idx5) */ i1, i2, i3, i4 from t1 where i4 is not null or i4 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_idx5) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i4 is not null or i4 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  6050                 1650                 0                    200                  
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+$T0> SKIP END;
+
