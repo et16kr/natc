@@ -228,7 +228,7 @@ $T0> #       2. REPLICATION_DDL_ENABLE 을 1 로 올렸는가
 $T0> #     둘 중 하나라도 어긋나면 전사가 달라지므로 케이스가 붉게 운다.
 $T0> #     '재는 것이 없는데 초록' 은 이제 만들어지지 않는다.
 $T0> #
-$T0> #   ★ 기대가 **두 번** 뒤집혔다.
+$T0> #   ★ 기대가 **세 번** 뒤집혔다. 지금은 거부가 하나도 남지 않았다.
 $T0> #
 $T0> #     ① V1 은 두 방향을 모두 ERR-314B3 으로 막았고, V2 의 J18 이 그 전면
 $T0> #        거부를 걷었다. **PK 가 아닌 글로벌 인덱스는 복제 테이블에서
@@ -242,17 +242,19 @@ $T0> #        복제 메타가 파티션의 PK 를 읽던 것이 뿌리였고, �
 $T0> #        논리 테이블 PK 폴백(B-1) · 와이어의 PK 스코프(B-2) · receiver 의
 $T0> #        글로벌 트리 탐색과 owner handoff(B-3) 가 들어갔다.
 $T0> #
-$T0> #     그래서 **ERR-314B4 는 지금 더 좁은 것을 가리킨다**:
+$T0> #     ③ 그때 좁게 남았던 마지막 조합 — "글로벌 PK **그리고** ROW MOVEMENT" —
+$T0> #        를 **V4 의 C-1·C-2 가 걷었다.** 남겼던 이유는 이동이 대상 파티션
+$T0> #        INSERT → 원본 파티션 DELETE 두 연산이고 receiver 가 그 둘을 각자
+$T0> #        판정해서, 그 사이에 글로벌 PK 가 아직 살아 있는 원본을 보고 INSERT
+$T0> #        를 중복으로 버려 로우가 사라지는 것이었다(D2). C-1 이 그 두 반쪽의
+$T0> #        **순서를 뒤집어**(원본 DELETE 먼저) 충돌할 옛 로우를 없앴고, C-2 가
+$T0> #        rpcValidate 의 조건을 지웠다.
 $T0> #
-$T0> #       글로벌 PK 와 ROW MOVEMENT 를 함께 쓰는 테이블은 복제할 수 없다
+$T0> #     그래서 **ERR-314B4 는 이제 아무 데서도 나지 않는다.** 메시지 파일의
+$T0> #     1204 번은 은퇴 표기(*Cause: Retired)로 남아 있을 뿐이다.
 $T0> #
-$T0> #     이동은 대상 파티션 INSERT → 원본 파티션 DELETE 두 연산인데 receiver 가
-$T0> #     그 둘을 각자 판정해서, 그 사이에 글로벌 PK 가 아직 살아 있는 원본을
-$T0> #     보고 INSERT 를 중복으로 버린다 — 로우가 사라진다. 그 조합만 남았다.
-$T0> #
-$T0> #     아래는 그 선의 **양쪽**을 다 찍는다: row movement 가 없는 글로벌 PK
-$T0> #     테이블은 복제 객체가 만들어지고, 켜져 있으면 ERR-314B4 다. 둘 중
-$T0> #     하나라도 뒤집히면 여기서 붉어진다.
+$T0> #     아래는 row movement 를 켠 것과 끈 것 **둘 다** 찍는다. 지금 둘은 같은
+$T0> #     답을 내고, 그 같음이 단언이다 — 갈라지는 날 거부가 돌아온 것이다.
 $T0> #
 $T0> #   주의: 복제 객체를 만드는 것만으로는 상대 서버가 필요 없다. START 는
 $T0> #         하지 않는다 — 이 파일은 한 인스턴스에서 판정되는 DDL 게이트만
@@ -262,7 +264,7 @@ $T0> #         거부는 M60~M65 가) 이미 재고 있다.
 $T0> #
 $T0> #   주의: 복제 하나는 상대 host:port 를 독점한다. 서로 다른 복제에 같은
 $T0> #         '127.0.0.1', <port> 를 주면 ERR-6110C 로 먼저 죽는다 — 그래서
-$T0> #         아래는 복제마다 다른 포트를 쓴다. 40001~40004 는 아무도 듣지
+$T0> #         아래는 복제마다 다른 포트를 쓴다. 40001~40005 는 아무도 듣지
 $T0> #         않는 포트이며, START 를 하지 않으므로 접속되지 않아도 된다.
 $T0> #
 $T0> # Project ID           = Native Global Index (memory)
@@ -291,7 +293,8 @@ $T0> # V3 의 B-1~B-4 이후 이 모양은 **복제할 수 있다.**
 $T0> #
 
 $T0> #
-$T0> # 같은 것에 ROW MOVEMENT 를 켠 것. 지금 ERR-314B4 를 재는 유일한 픽스처다.
+$T0> # 같은 것에 ROW MOVEMENT 를 켠 것. V3 까지 ERR-314B4 를 재던 유일한
+$T0> # 픽스처였고, V4 C-2 뒤로는 "켜도 같은 답이 나온다"를 재는 자리다.
 $T0> #
 $T0> # 문법 순서에 주의: ENABLE ROW MOVEMENT 는 파티션 절 다음, tablespace 절
 $T0> # 앞이다(qcply.y 의 table_options). 순서를 바꾸면 ERR-31001 로 먼저 죽어서
@@ -1237,13 +1240,20 @@ $T0> drop replication rep3;
 Drop success.
 
 $T0> ##################################
-$T0> # SECTOR; THE ONE SURVIVING REFUSAL - GLOBAL PRIMARY KEY + ROW MOVEMENT
+$T0> # SECTOR; GLOBAL PRIMARY KEY + ROW MOVEMENT IS REPLICABLE TOO (V4 C-2)
 $T0> ##################################
-$T0> # 남은 거부 하나. 이동은 receiver 에서 INSERT 와 DELETE 두 문장으로 따로
-$T0> # 판정되고, 그 사이에 글로벌 PK 가 아직 살아 있는 원본 로우를 보므로
-$T0> # INSERT 가 중복으로 버려지고 DELETE 만 성공한다 — 로우 소실이다
-$T0> # (v3-rp-receiver.md §5.2 결함 D2). rpcValidate 가 막지 못하면 그 소실이
-$T0> # 조용히(conflict log 에는 남지만) 진행된다.
+$T0> # V3 가 남긴 마지막 거부가 여기 있었다. 옛 순서(대상 파티션 INSERT 먼저)
+$T0> # 에서는 receiver 가 이동의 두 반쪽을 따로 판정하는 사이에 글로벌 PK 가
+$T0> # 아직 살아 있는 원본 로우를 보므로 INSERT 가 중복으로 버려지고 DELETE 만
+$T0> # 성공했다 — 로우 소실(v3-rp-receiver.md §5.2 결함 D2).
+$T0> #
+$T0> # V4 는 게이트를 넓힌 것이 아니라 뿌리를 고쳤다. C-1 이 qmnUPTE::
+$T0> # updateOneRowForRowmovement 의 순서를 뒤집어(원본 DELETE 먼저) 충돌할 옛
+$T0> # 로우를 남기지 않게 했고, C-2 가 rpcValidate 의 조건을 걷었다.
+$T0> #
+$T0> # 이 파일은 한 인스턴스의 DDL 게이트만 본다 — receiver 가 이동을 정확히 한
+$T0> # 행으로 apply 하는 것(D2 의 소멸)은 두 인스턴스가 필요하므로
+$T0> # scripts/global-index/replication-check.sh 의 N4b 가 양 매체로 잰다.
 
 
 $T0> create table t4( i1 integer not null, i2 integer not null, i3 integer,
@@ -1339,23 +1349,34 @@ T
 
 $T0> # 테이블 단위
 $T0> create replication rep4 with '127.0.0.1', 40004 from sys.t4 to sys.t4;
-[ERR-314B4 : Replication and row movement cannot both be used on a table whose PRIMARY KEY is a native global index.]
+Create success.
 
-$T0> # 파티션 단위도 같이 막혀야 한다
-$T0> create replication rep4 with '127.0.0.1', 40005
+$T0> # 파티션 단위도 된다. 이름과 상대 host:port 가 둘 다 rep4 와 달라야 한다
+$T0> # (같은 이름은 ERR-61100, 같은 host:port 는 ERR-6110C).
+$T0> create replication rep5 with '127.0.0.1', 40005
   from sys.t4 partition p1 to sys.t4 partition p1;
-[ERR-314B4 : Replication and row movement cannot both be used on a table whose PRIMARY KEY is a native global index.]
+Create success.
 
-$T0> # 아무것도 만들어지지 않았어야 한다
+$T0> # 둘 다 남아 있어야 한다
 $T0> select count(*) repl_cnt from system_.sys_replications_
- where replication_name = 'REP4';
+ where replication_name in ( 'REP4', 'REP5' );
 REPL_CNT             
 -----------------------
-0                    
+2                    
 1 row selected.
 
-$T0> # row movement 를 끄면 같은 테이블이 복제 대상이 된다 — 거부가 PK 가 아니라
-$T0> # 조합을 겨눈다는 증거다.
+$T0> drop replication rep5;
+Drop success.
+$T0> drop replication rep4;
+Drop success.
+
+$T0> # row movement 를 꺼도 답은 같다. 그 같음이 이 섹터의 단언이다 — 켠 쪽만
+$T0> # 거부되는 날 갈라진다.
+$T0> #
+$T0> # 끄는 것 자체는 복제가 걸려 있는 동안 ERR-31020 이다(복제 테이블의 DDL 을
+$T0> # 통째로 막는 제품의 기존 거부이고 글로벌 인덱스와 무관하다). 그래서 위에서
+$T0> # 먼저 떼어 냈고, 그 순서가 곧 이 조합에 들어가는 유일한 길이기도 하다 —
+$T0> # row movement 를 먼저 켜고 복제를 만든다.
 $T0> alter table t4 disable row movement;
 Alter success.
 
@@ -1382,9 +1403,10 @@ ALIVE
 $T0> ##################################
 $T0> # SECTOR; PROPERTY OFF - REPLICATION PATH UNCHANGED (회귀)
 $T0> ##################################
-$T0> # 프로퍼티가 꺼져 있으면 ERR-314B4 는 아예 나올 자리가 없다 — 그 픽스처
-$T0> # 자체가 만들어지지 않기 때문이다. 파티션 키를 포함하지 않는 PK 는
-$T0> # 프로퍼티 이전의 답인 ERR-31415 로 거부된다. 이것이 회귀 방향이다.
+$T0> # 프로퍼티가 꺼져 있으면 글로벌 PK 픽스처 자체가 만들어지지 않는다.
+$T0> # 파티션 키를 포함하지 않는 PK 는 프로퍼티 이전의 답인 ERR-31415 로
+$T0> # 거부된다. 이것이 회귀 방향이고, 위 섹터들이 전부 성공 단언이 된 지금
+$T0> # 스위치 off 를 재는 자리는 여기 하나다.
 
 $T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
 Alter success.

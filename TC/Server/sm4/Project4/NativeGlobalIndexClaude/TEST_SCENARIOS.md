@@ -82,7 +82,6 @@ SCAN ( TABLE: SYS.T, INDEX: SYS.I, GLOBAL-INDEX, [A-Z ]*SCAN, ACCESS: n, COST: .
 | `ERR-313D0` | 프로퍼티 off 상태의 메모리 파티션드 non-partitioned index | `qdx.cpp:10537-10539` |
 | `ERR-314AC` | 인덱스 비트 예산 초과: 최대로컬수 + 글로벌수 + 1 > 64 | `qdx.cpp:2072` |
 | `ERR-314AD` | DIRECT KEY / PERSISTENT / 압축 키 컬럼 | `qdx.cpp:2038, 2041, 2048` |
-| `ERR-314B4` | 복제 — PK 가 네이티브 글로벌인 테이블만 | `rpcValidate.cpp`, `rpdMeta.cpp` |
 
 ### V2 가 걷어낸 거부 — 이제 **성공**해야 한다
 
@@ -95,7 +94,8 @@ SCAN ( TABLE: SYS.T, INDEX: SYS.I, GLOBAL-INDEX, [A-Z ]*SCAN, ACCESS: n, COST: .
 | `ERR-314B0` | TRUNCATE TABLE, CREATE TABLE ... FROM TABLE SCHEMA | V2 J05 |
 | `ERR-314B1` | 글로벌 PK/UK 를 참조하는 FK | V2 J04 |
 | `ERR-314B2` | ALL INDEX ENABLE / DISABLE | V2 J13 |
-| `ERR-314B3` | 복제 전면 거부 (PK 조건만 ERR-314B4 로 남음) | V2 J18 |
+| `ERR-314B3` | 복제 전면 거부 | V2 J18 |
+| `ERR-314B4` | 복제 — PK 가 네이티브 글로벌인 테이블. V3 B-4 가 조건을 "글로벌 PK **그리고** row movement" 로 좁혔고, **V4 C-2 가 그것마저 걷었다** (뿌리는 V4 C-1 의 row movement 순서 뒤집기) | V3 B-4 → V4 C-2 |
 
 `.lst` 에 이 코드들이 나오면 회귀다.
 
