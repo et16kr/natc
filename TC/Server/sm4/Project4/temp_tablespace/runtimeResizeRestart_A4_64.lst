@@ -1,0 +1,259 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reconcile runtime-grown R with ALTER SIZE and restart.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = T==D<R, D<T<R, R-based MAX validation, restart R=P reuse.
+$T0> # Regression Focus     = SERVICE resize driver, D/R/P reconciliation, all-FREE restart state.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> # TC Shape Reference   = /home/et16/work/ataf_mini/tests/disk_temp_table
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RR_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_RR_DATA
+        DATAFILE 'sdpte_rr_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_RR_TS
+        TEMPFILE 'sdpte_rr_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_RR_U IDENTIFIED BY SDPTE_RR_U
+        DEFAULT TABLESPACE SDPTE_RR_DATA
+        TEMPORARY TABLESPACE SDPTE_RR_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_RR_U/SDPTE_RR_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_RR_SOURCE
+    (
+        ID      INTEGER,
+        K1      VARCHAR(2000)
+    ) TABLESPACE SDPTE_RR_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_RR_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; R-BASED VALIDATION
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_FIRST_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RR_SOURCE
+           ) D;
+PASS_FIRST_SPILL 
+-------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > 1024
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_R_GT_8M
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_RUNTIME_R_GT_8M 
+-----------------------
+1           
+1 row selected.
+
+$T0> # MAXSIZE is above committed D=1M but below runtime R, so it must fail.
+$T0> ALTER TABLESPACE SDPTE_RR_TS
+        ALTER TEMPFILE 'sdpte_rr_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 2M;
+[ERR-1101F : The MAXSIZE of the data file cannot be less than its current size. ( Request Max Size : 256 pages, Current Size : 7808 pages )]
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > 1024
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+               THEN 1 ELSE 0
+           END AS PASS_REJECT_MAX_BELOW_R
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_REJECT_MAX_BELOW_R 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; T EQUALS D BELOW R
+$T0> ##################################
+$T0> # D is still 1M while R is greater than 8M.  This same-definition ALTER
+$T0> # must nevertheless drive the physical shrink from R back to D.
+$T0> ALTER TABLESPACE SDPTE_RR_TS
+        ALTER TEMPFILE 'sdpte_rr_01.dbf' SIZE 1M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 128
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_T_EQ_D_LT_R
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_T_EQ_D_LT_R 
+-------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; D BELOW T BELOW R
+$T0> ##################################
+$T0> CONNECT SDPTE_RR_U/SDPTE_RR_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SECOND_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RR_SOURCE
+           ) D;
+PASS_SECOND_SPILL 
+--------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE WHEN D.CURRSIZE > 1024 THEN 1 ELSE 0 END AS PASS_SECOND_R_GT_8M
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_SECOND_R_GT_8M 
+----------------------
+1           
+1 row selected.
+
+$T0> # D=1M, T=8M, and the preceding spill established R>8M.
+$T0> ALTER TABLESPACE SDPTE_RR_TS
+        ALTER TEMPFILE 'sdpte_rr_01.dbf' SIZE 8M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 1024
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_D_LT_T_LT_R
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_D_LT_T_LT_R 
+-------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; RESTART WITH R ABOVE D
+$T0> ##################################
+$T0> CONNECT SDPTE_RR_U/SDPTE_RR_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_THIRD_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RR_SOURCE
+           ) D;
+PASS_THIRD_SPILL 
+-------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE WHEN D.CURRSIZE > 1024 THEN 1 ELSE 0 END AS PASS_PRE_RESTART_SURPLUS
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_PRE_RESTART_SURPLUS 
+---------------------------
+1           
+1 row selected.
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Existing physical surplus is reusable.  Startup must not truncate it to
+$T0> # D=8M, and all transient allocation ownership must be reset to FREE.
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > 1024
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_REUSES_R
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RR_TS';
+PASS_RESTART_REUSES_R 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RR_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

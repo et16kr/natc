@@ -1,0 +1,92 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve a tempfile on ordinary DROP and adopt it only with explicit REUSE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = DROP touch mode, existing-file rejection, explicit REUSE binding, AND DATAFILES unlink.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_DR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DR_TS
+        TEMPFILE 'sdpte_dr_01.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; ORDINARY DROP AND REUSE TEST
+$T0> ##################################
+$T0> DROP TABLESPACE SDPTE_DR_TS;
+Drop success.
+
+$T0> # Expected error: ordinary DROP leaves the physical tempfile, so CREATE
+$T0> # without REUSE must not overwrite it.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DR_TS
+        TEMPFILE 'sdpte_dr_01.dbf' SIZE 8M AUTOEXTEND OFF;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdpte_dr_01.dbf )]
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DR_TS
+        TEMPFILE 'sdpte_dr_01.dbf' SIZE 8M REUSE AUTOEXTEND OFF;
+Create success.
+
+$T0> SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.DATAFILE_COUNT = 1
+                AND D.ID = 0
+                AND D.CURRSIZE = 1024
+               THEN 1 ELSE 0
+           END AS PASS_EXPLICIT_REUSE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DR_TS';
+PASS_EXPLICIT_REUSE 
+----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; DROP INCLUDING DATAFILES
+$T0> ##################################
+$T0> DROP TABLESPACE SDPTE_DR_TS INCLUDING CONTENTS AND DATAFILES;
+Drop success.
+
+$T0> # The same path must now be available without REUSE.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DR_TS
+        TEMPFILE 'sdpte_dr_01.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END AS PASS_DATAFILES_UNLINK
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_DR_TS'
+       AND TYPE = 6
+       AND DATAFILE_COUNT = 1;
+PASS_DATAFILES_UNLINK 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_DR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

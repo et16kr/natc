@@ -1,4 +1,4 @@
-TestSuiteDescription  = Simple TEMP Tablespace Regression (Expanded 60-case matrix)
+TestSuiteDescription  = Simple TEMP Tablespace Regression (Expanded 62-case matrix)
 ###############################################################################
 createCatalog.tc
 addDropTempfile.tc
@@ -6,6 +6,8 @@ alterSizeAutoextend.tc
 runtimeAutoextend.tc
 runtimeResizeRestart.tc
 dropReuse.tc
+activeDataAliasReuse.tc
+activeTempAliasReuse.tc
 restartRecreate.tc
 unsupportedDdl.tc
 dataRoutingIsolation.tc

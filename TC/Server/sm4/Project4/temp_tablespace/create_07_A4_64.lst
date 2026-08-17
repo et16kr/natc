@@ -1,0 +1,37 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Independent CREATE TEMP case 07.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Coverage             = One isolated implementation and catalog assertion.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SECTOR 1; TEST_CREATE_07
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CRE07 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CRE07 TEMPFILE 'sdpte_create_07_01.dbf' SIZE 8M AUTOEXTEND OFF EXTENTSIZE 1M;
+Create success.
+
+$T0> SELECT CASE WHEN D.EXTENT_PAGE_COUNT=128 THEN 1 ELSE 0 END AS PASS_CREATE_07 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_CRE07' AND F.ID=0;
+PASS_CREATE_07 
+-----------------
+1           
+1 row selected.
+$T0> SECTOR 2; FINALIZATION
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CRE07 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

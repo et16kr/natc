@@ -1,0 +1,40 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Independent RESTART TEMP case 06.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Coverage             = One isolated implementation and catalog assertion.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SECTOR 1; TEST_RESTART_06
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_RST06 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_RST06 TEMPFILE 'sdpte_restart_06_01.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+$T0> DROP TABLESPACE SDPTE_RST06;
+Drop success.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_RST06 TEMPFILE 'sdpte_restart_06_01.dbf' SIZE 8M REUSE AUTOEXTEND OFF;
+Create success.
+$T0> SELECT CASE WHEN D.DATAFILE_COUNT=1 THEN 1 ELSE 0 END AS PASS_RESTART_06 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_RST06' AND F.ID=0;
+PASS_RESTART_06 
+------------------
+1           
+1 row selected.
+$T0> SECTOR 2; FINALIZATION
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_RST06 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

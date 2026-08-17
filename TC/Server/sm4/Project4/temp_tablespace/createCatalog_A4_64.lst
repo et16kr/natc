@@ -1,0 +1,133 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Create user TEMP tablespaces and verify public catalog projection.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = CREATE, multi-file definition, extent/segment attributes, public views.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CT_DISK_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CT_TS
+        TEMPFILE 'sdpte_ct_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_ct_02.dbf' SIZE 16M
+                     AUTOEXTEND ON NEXT 8M MAXSIZE 64M
+        EXTENTSIZE 512K
+        SEGMENT MANAGEMENT MANUAL;
+Create success.
+
+$T0> CREATE DISK TEMPORARY TABLESPACE SDPTE_CT_DISK_TS
+        TEMPFILE 'sdpte_ct_03.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 256K
+        SEGMENT MANAGEMENT AUTO;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT NAME,
+           TYPE,
+           STATE,
+           DATAFILE_COUNT,
+           TOTAL_PAGE_COUNT,
+           EXTENT_PAGE_COUNT,
+           SEGMENT_MANAGEMENT
+      FROM V$TABLESPACES
+     WHERE NAME IN ('SDPTE_CT_TS', 'SDPTE_CT_DISK_TS')
+     ORDER BY NAME;
+NAME                                      TYPE        STATE       DATAFILE_COUNT 
+--------------------------------------------------------------------------------------
+TOTAL_PAGE_COUNT     EXTENT_PAGE_COUNT SEGMENT_MANAGEMENT    
+-----------------------------------------------------------------
+SDPTE_CT_DISK_TS                          6           2           1           
+512                  32          AUTO                  
+SDPTE_CT_TS                               6           2           2           
+3072                 64          MANUAL                
+2 rows selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND MIN(TYPE) = 6
+                AND MAX(TYPE) = 6
+                AND MIN(STATE) = 2
+                AND MAX(STATE) = 2
+                AND SUM(DATAFILE_COUNT) = 3
+                AND SUM(TOTAL_PAGE_COUNT) = 3584
+                AND SUM(ALLOCATED_PAGE_COUNT) = 0
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_CATALOG
+      FROM V$TABLESPACES
+     WHERE NAME IN ('SDPTE_CT_TS', 'SDPTE_CT_DISK_TS');
+PASS_CREATE_CATALOG 
+----------------------
+1           
+1 row selected.
+
+$T0> SELECT T.NAME AS TBS_NAME,
+           D.ID AS FILE_ID,
+           D.INITSIZE,
+           D.CURRSIZE,
+           D.AUTOEXTEND,
+           D.NEXTSIZE,
+           D.MAXSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_CT_TS', 'SDPTE_CT_DISK_TS')
+     ORDER BY T.NAME, D.ID;
+TBS_NAME                                  FILE_ID     INITSIZE             
+-------------------------------------------------------------------------------
+CURRSIZE             AUTOEXTEND  NEXTSIZE             MAXSIZE              
+--------------------------------------------------------------------------------
+SDPTE_CT_DISK_TS                          0           512                  
+512                  0           0                    0                    
+SDPTE_CT_TS                               0           1024                 
+1024                 0           0                    0                    
+SDPTE_CT_TS                               1           2048                 
+2048                 1           1024                 8192                 
+3 rows selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 3
+                AND SUM(D.INITSIZE) = 3584
+                AND SUM(D.CURRSIZE) = 3584
+                AND SUM(CASE WHEN D.AUTOEXTEND = 1 THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_FILES
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_CT_TS', 'SDPTE_CT_DISK_TS');
+PASS_CREATE_FILES 
+--------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CT_DISK_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

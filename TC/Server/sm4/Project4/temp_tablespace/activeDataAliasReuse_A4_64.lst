@@ -1,0 +1,180 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject hard-link aliases of active DATA files from TEMP CREATE and ADD.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = Active DATA path/inode collision, non-REUSE and explicit REUSE.
+$T0> # Regression Focus     = A TEMP binding must never rewrite or truncate an active DATA inode.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_ADA_CREATE INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_ADA_TARGET INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLE SDPTE_ADA_CREATE_T;
+$T0> DROP TABLE SDPTE_ADA_ADD_T;
+$T0> DROP TABLESPACE SDPTE_ADA_CREATE_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_ADA_ADD_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ada_create_alias.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ada_add_alias.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_ADA_CREATE_DATA
+        DATAFILE 'sdpte_ada_create_data.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE TABLE SDPTE_ADA_CREATE_T
+    (
+        ID INTEGER PRIMARY KEY,
+        C1 VARCHAR(32)
+    ) TABLESPACE SDPTE_ADA_CREATE_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_ADA_CREATE_T VALUES (1, 'CREATE_SOURCE');
+1 row inserted.
+
+$T0> CREATE DISK TABLESPACE SDPTE_ADA_ADD_DATA
+        DATAFILE 'sdpte_ada_add_data.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE TABLE SDPTE_ADA_ADD_T
+    (
+        ID INTEGER PRIMARY KEY,
+        C1 VARCHAR(32)
+    ) TABLESPACE SDPTE_ADA_ADD_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_ADA_ADD_T VALUES (1, 'ADD_SOURCE');
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_ADA_TARGET
+        TEMPFILE 'sdpte_ada_target.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> LN "${ALTIBASE_HOME}/dbs/sdpte_ada_create_data.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ada_create_alias.dbf";
+$T0> LN "${ALTIBASE_HOME}/dbs/sdpte_ada_add_data.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ada_add_alias.dbf";
+
+$T0> ##################################
+$T0> SECTOR 2; ACTIVE DATA ALIAS REJECTION
+$T0> ##################################
+$T0> # Expected error: an existing active inode is never a CREATE target.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_ADA_CREATE
+        TEMPFILE 'sdpte_ada_create_alias.dbf' SIZE 4M AUTOEXTEND OFF;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdpte_ada_create_alias.dbf )]
+
+$T0> # Expected error: explicit REUSE must not authorize the active DATA inode.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_ADA_CREATE
+        TEMPFILE 'sdpte_ada_create_alias.dbf'
+            SIZE 4M REUSE AUTOEXTEND OFF;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdpte_ada_create_alias.dbf )]
+
+$T0> # Expected error: ADD applies the same active-inode rule without REUSE.
+$T0> ALTER TABLESPACE SDPTE_ADA_TARGET ADD TEMPFILE
+        'sdpte_ada_add_alias.dbf' SIZE 4M AUTOEXTEND OFF;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdpte_ada_add_alias.dbf )]
+
+$T0> # Expected error: explicit REUSE must not bypass the ADD collision check.
+$T0> ALTER TABLESPACE SDPTE_ADA_TARGET ADD TEMPFILE
+        'sdpte_ada_add_alias.dbf' SIZE 4M REUSE AUTOEXTEND OFF;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdpte_ada_add_alias.dbf )]
+
+$T0> ##################################
+$T0> SECTOR 3; VERIFY ACTIVE DATA UNCHANGED
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_ADA_CREATE_DATA OFFLINE;
+Alter success.
+$T0> ALTER TABLESPACE SDPTE_ADA_CREATE_DATA ONLINE;
+Alter success.
+$T0> ALTER TABLESPACE SDPTE_ADA_ADD_DATA OFFLINE;
+Alter success.
+$T0> ALTER TABLESPACE SDPTE_ADA_ADD_DATA ONLINE;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(C1) = 'CREATE_SOURCE'
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_SOURCE
+      FROM SDPTE_ADA_CREATE_T;
+PASS_CREATE_SOURCE 
+---------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(C1) = 'ADD_SOURCE'
+               THEN 1 ELSE 0
+           END AS PASS_ADD_SOURCE
+      FROM SDPTE_ADA_ADD_T;
+PASS_ADD_SOURCE 
+------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NO_CREATE
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_ADA_CREATE';
+PASS_NO_CREATE 
+-----------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND COUNT(D.ID) = 1
+                AND MIN(D.CURRSIZE) = 1024
+               THEN 1 ELSE 0
+           END AS PASS_NO_ADD
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_ADA_TARGET'
+     GROUP BY T.DATAFILE_COUNT;
+PASS_NO_ADD 
+--------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_ALIAS_UNREGISTERED
+      FROM V$DATAFILES
+     WHERE NAME LIKE '%sdpte_ada_create_alias.dbf'
+        OR NAME LIKE '%sdpte_ada_add_alias.dbf';
+PASS_ALIAS_UNREGISTERED 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_ADA_CREATE INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_ADA_TARGET INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLE SDPTE_ADA_CREATE_T;
+$T0> DROP TABLE SDPTE_ADA_ADD_T;
+$T0> DROP TABLESPACE SDPTE_ADA_CREATE_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_ADA_ADD_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ada_create_alias.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ada_add_alias.dbf";
+

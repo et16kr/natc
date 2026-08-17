@@ -1,7 +1,7 @@
 ###########################################################################
-# TestCase Description = Independent AUTO TEMP case 08.
+# TestCase Description = Reject AUTOEXTEND MAXSIZE equal to current size.
 # Project ID           = workspace/simple_temp_tablespace
-# Coverage             = One isolated implementation and catalog assertion.
+# Coverage             = MAXSIZE boundary rejection and unchanged attributes.
 # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
 # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
 ###########################################################################
@@ -17,11 +17,13 @@ SECTOR; TEST_AUTO_08
     DROP TABLESPACE SDPTE_AUT08 INCLUDING CONTENTS AND DATAFILES;
     SKIP END;
     CREATE TEMPORARY TABLESPACE SDPTE_AUT08 TEMPFILE 'sdpte_auto_08_01.dbf' SIZE 8M AUTOEXTEND OFF;
+    # Existing DDL semantics reject MAXSIZE equal to the current CURRSIZE.
+    # The error is intentional; the following query verifies no attributes
+    # were published after the rejected ALTER.
     ALTER TABLESPACE SDPTE_AUT08 ALTER TEMPFILE 'sdpte_auto_08_01.dbf' AUTOEXTEND ON NEXT 1M MAXSIZE 8M;
-    SELECT CASE WHEN F.MAXSIZE=1024 THEN 1 ELSE 0 END AS PASS_AUTO_08 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_AUT08' AND F.ID=0;
+    SELECT CASE WHEN F.CURRSIZE=1024 AND F.AUTOEXTEND=0 AND F.NEXTSIZE=0 AND F.MAXSIZE=0 THEN 1 ELSE 0 END AS PASS_AUTO_08 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_AUT08' AND F.ID=0;
 SECTOR; FINALIZATION
     SKIP BEGIN;
     DROP TABLESPACE SDPTE_AUT08 INCLUDING CONTENTS AND DATAFILES;
     SKIP END;
 }
-

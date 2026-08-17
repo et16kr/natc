@@ -1,0 +1,110 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Spill a user query into the new TEMP allocator and force runtime AUTOEXTEND.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = ordinary TEMP I/O, extent alloc/free, runtime AUTOEXTEND, R-based public views.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # TC Shape Reference   = /home/et16/work/ataf_mini/tests/disk_temp_table
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RT_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RT_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_RT_DATA
+        DATAFILE 'sdpte_rt_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_RT_TS
+        TEMPFILE 'sdpte_rt_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_RT_U IDENTIFIED BY SDPTE_RT_U
+        DEFAULT TABLESPACE SDPTE_RT_DATA
+        TEMPORARY TABLESPACE SDPTE_RT_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_RT_U/SDPTE_RT_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_RT_SOURCE
+    (
+        ID      INTEGER,
+        K1      VARCHAR(2000)
+    ) TABLESPACE SDPTE_RT_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_RT_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_DISTINCT_HASH
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RT_SOURCE
+           ) D;
+PASS_DISTINCT_HASH 
+---------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > 128
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_AUTOEXTEND
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RT_TS';
+PASS_RUNTIME_AUTOEXTEND 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RT_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RT_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

@@ -1,0 +1,41 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject AUTOEXTEND MAXSIZE equal to current size.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Coverage             = MAXSIZE boundary rejection and unchanged attributes.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SECTOR 1; TEST_AUTO_08
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_AUT08 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_AUT08 TEMPFILE 'sdpte_auto_08_01.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+$T0> # Existing DDL semantics reject MAXSIZE equal to the current CURRSIZE.
+$T0> # The error is intentional; the following query verifies no attributes
+$T0> # were published after the rejected ALTER.
+$T0> ALTER TABLESPACE SDPTE_AUT08 ALTER TEMPFILE 'sdpte_auto_08_01.dbf' AUTOEXTEND ON NEXT 1M MAXSIZE 8M;
+[ERR-1101F : The MAXSIZE of the data file cannot be less than its current size. ( Request Max Size : 1024 pages, Current Size : 1024 pages )]
+$T0> SELECT CASE WHEN F.CURRSIZE=1024 AND F.AUTOEXTEND=0 AND F.NEXTSIZE=0 AND F.MAXSIZE=0 THEN 1 ELSE 0 END AS PASS_AUTO_08 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_AUT08' AND F.ID=0;
+PASS_AUTO_08 
+---------------
+1           
+1 row selected.
+$T0> SECTOR 2; FINALIZATION
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_AUT08 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

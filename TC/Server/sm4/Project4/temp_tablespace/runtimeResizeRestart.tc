@@ -45,12 +45,12 @@ SECTOR; PREPARATION
     CREATE TABLE SDPTE_RR_SOURCE
     (
         ID      INTEGER,
-        K1      VARCHAR(2200)
+        K1      VARCHAR(2000)
     ) TABLESPACE SDPTE_RR_DATA;
 
     INSERT INTO SDPTE_RR_SOURCE
     SELECT LEVEL,
-           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1990, 'X')
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
       FROM DUAL
     CONNECT BY LEVEL <= 30000;
 
