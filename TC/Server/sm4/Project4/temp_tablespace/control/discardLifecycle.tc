@@ -1,0 +1,128 @@
+###########################################################################
+# TestCase Description = Discard a USER TEMP tablespace in CONTROL and drop it in SERVICE.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = USER-only discard, cache-null projection, no recreate, DROP-only lifecycle.
+# Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+# iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+# Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_DC_PROBE INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_DC_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_DC_TS
+        TEMPFILE 'sdpte_dc_01.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 32M;
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    NODISPLAY OFF;
+
+##################################
+SECTOR; CONTROL DISCARD
+##################################
+    $sPrompt = "$$EOF$$";
+
+    NODISPLAY ON;
+    EXEC SDPTE_DC_CONTROL -t 1800 $gStdIsqlSys;
+    SEND SDPTE_DC_CONTROL "startup control";
+    P_WAIT SDPTE_DC_CONTROL $sPrompt;
+    SEND SDPTE_DC_CONTROL "ALTER TABLESPACE SDPTE_DC_TS DISCARD;";
+    P_WAIT SDPTE_DC_CONTROL $sPrompt;
+
+    # SYSTEM TEMP must remain outside the DISCARD scope.
+    SEND SDPTE_DC_CONTROL "ALTER TABLESPACE SYS_TBS_DISK_TEMP DISCARD;";
+    P_WAIT SDPTE_DC_CONTROL $sPrompt;
+    SEND SDPTE_DC_CONTROL "quit";
+    P_WAIT SDPTE_DC_CONTROL;
+
+    # A discarded TEMP definition has no startup binding or recreate action.
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_dc_01.dbf";
+
+    EXEC SDPTE_DC_SERVICE -t 1800 $gStdIsqlSys;
+    SEND SDPTE_DC_SERVICE "ALTER DATABASE MYDB SERVICE;";
+    P_WAIT SDPTE_DC_SERVICE $sPrompt;
+    SEND SDPTE_DC_SERVICE "quit";
+    P_WAIT SDPTE_DC_SERVICE;
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.STATE = 1024
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.CURRSIZE = 1024
+                AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_DISCARDED_PROJECTION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DC_TS';
+
+    SELECT CASE
+               WHEN STATE <> 1024
+               THEN 1 ELSE 0
+           END AS PASS_SYSTEM_TEMP_NOT_DISCARDED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+
+    # A discarded tablespace accepts DROP TABLESPACE and nothing else.
+    NODISPLAY ON;
+    ALTER TABLESPACE SDPTE_DC_TS
+        ALTER TEMPFILE 'sdpte_dc_01.dbf' SIZE 4M;
+    NODISPLAY OFF;
+
+    SELECT CASE
+               WHEN T.STATE = 1024
+                AND D.CURRSIZE = 1024
+               THEN 1 ELSE 0
+           END AS PASS_DISCARDED_ALTER_REJECTED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DC_TS';
+
+    DROP TABLESPACE SDPTE_DC_TS;
+
+    # If SERVICE recreated the discarded missing file, this CREATE without
+    # REUSE would fail. It also proves DROP removed the old registry entry.
+    CREATE TEMPORARY TABLESPACE SDPTE_DC_PROBE
+        TEMPFILE 'sdpte_dc_01.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN D.CURRSIZE = 512
+                AND D.OPENED = 1
+               THEN 1 ELSE 0
+           END AS PASS_DROP_ONLY_LIFECYCLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DC_PROBE';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_DC_PROBE INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_DC_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_dc_01.dbf";
+}

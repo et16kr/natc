@@ -1,0 +1,184 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Change TEMP file size, AUTOEXTEND, and logging attributes.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = grow, same-size, shrink, NEXT/MAX/UNLIMITED normalization, attribute projection.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_AL_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_AL_TS
+        TEMPFILE 'sdpte_al_01.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 32M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; ALTER SIZE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' SIZE 16M;
+Alter success.
+
+$T0> SELECT CASE WHEN D.CURRSIZE = 2048 THEN 1 ELSE 0 END AS PASS_GROW
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+PASS_GROW   
+--------------
+1           
+1 row selected.
+
+$T0> # Same-size ALTER is a successful no-op on the existing public lane.
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' SIZE 16M;
+Alter success.
+
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' SIZE 12M;
+Alter success.
+
+$T0> SELECT CASE WHEN D.CURRSIZE = 1536 THEN 1 ELSE 0 END AS PASS_SHRINK
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+PASS_SHRINK 
+--------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; ALTER AUTOEXTEND
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_OFF
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+PASS_AUTOEXTEND_OFF 
+----------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf'
+            AUTOEXTEND ON NEXT 2M MAXSIZE 24M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 256
+                AND D.MAXSIZE = 3072
+                AND D.CURRSIZE = 1536
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_ON
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+PASS_AUTOEXTEND_ON 
+---------------------
+1           
+1 row selected.
+
+$T0> # Same-value ALTER retains the standard equal-image behavior.
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf'
+            AUTOEXTEND ON NEXT 2M MAXSIZE 24M;
+Alter success.
+
+$T0> ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE UNLIMITED;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE > D.CURRSIZE
+                AND D.CURRSIZE = 1536
+               THEN 1 ELSE 0
+           END AS PASS_UNLIMITED_NORMALIZED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+PASS_UNLIMITED_NORMALIZED 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; ALTER LOGGING ATTRIBUTE
+$T0> ##################################
+$T0> # TEMP defaults to COMPRESSED LOGGING. Change away from the default first
+$T0> # so both statements below are real state transitions, not equal-image
+$T0> # rejection probes.
+$T0> SELECT CASE WHEN ATTR_LOG_COMPRESS = 1 THEN 1 ELSE 0 END AS PASS_DEFAULT_COMPRESSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_AL_TS';
+PASS_DEFAULT_COMPRESSED 
+--------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTE_AL_TS UNCOMPRESSED LOGGING;
+Alter success.
+
+$T0> SELECT CASE WHEN ATTR_LOG_COMPRESS = 0 THEN 1 ELSE 0 END AS PASS_UNCOMPRESSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_AL_TS';
+PASS_UNCOMPRESSED 
+--------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTE_AL_TS COMPRESSED LOGGING;
+Alter success.
+
+$T0> SELECT CASE WHEN ATTR_LOG_COMPRESS = 1 THEN 1 ELSE 0 END AS PASS_COMPRESSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_AL_TS';
+PASS_COMPRESSED 
+------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_AL_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

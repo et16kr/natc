@@ -1,0 +1,103 @@
+###########################################################################
+# TestCase Description = Reject a foreign TEMP header repeatedly without mutating the definition.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = startup identify rejection, fail-closed reconcile, retry idempotence.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# iSQL Manual Fallback = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# ATAF Runtime         = stdFunc.i clean stop/start/kill and exact CP/MV/RM targets.
+# ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLE SDPTE_FH_UNEXPECTED;
+    DROP TABLESPACE SDPTE_FH_A INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_FH_B INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a_saved.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_FH_A
+        TEMPFILE 'sdpte_fh_a.dbf' SIZE 8M AUTOEXTEND OFF;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_FH_B
+        TEMPFILE 'sdpte_fh_b.dbf' SIZE 8M AUTOEXTEND OFF;
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    MV "${ALTIBASE_HOME}/dbs/sdpte_fh_a.dbf" "${ALTIBASE_HOME}/dbs/sdpte_fh_a_saved.dbf";
+    CP "${ALTIBASE_HOME}/dbs/sdpte_fh_b.dbf" "${ALTIBASE_HOME}/dbs/sdpte_fh_a.dbf";
+    NODISPLAY OFF;
+
+##################################
+SECTOR; TWO FAIL_CLOSED STARTUP ATTEMPTS
+##################################
+    $sPrompt = "$$EOF$$";
+
+    NODISPLAY ON;
+    EXEC SDPTE_FH_START_1 -t 1800 $gStdIsqlSys;
+    SEND SDPTE_FH_START_1 "startup";
+    P_WAIT SDPTE_FH_START_1 $sPrompt;
+    # If the invalid header were accepted and SERVICE became available, this
+    # durable marker would be created and the final assertion would fail.
+    SEND SDPTE_FH_START_1 "CREATE TABLE SDPTE_FH_UNEXPECTED (ID INTEGER);";
+    P_WAIT SDPTE_FH_START_1 $sPrompt;
+    SEND SDPTE_FH_START_1 "quit";
+    P_WAIT SDPTE_FH_START_1;
+
+    CALL stdServerKill();
+
+    EXEC SDPTE_FH_START_2 -t 1800 $gStdIsqlSys;
+    SEND SDPTE_FH_START_2 "startup";
+    P_WAIT SDPTE_FH_START_2 $sPrompt;
+    SEND SDPTE_FH_START_2 "CREATE TABLE SDPTE_FH_UNEXPECTED (ID INTEGER);";
+    P_WAIT SDPTE_FH_START_2 $sPrompt;
+    SEND SDPTE_FH_START_2 "quit";
+    P_WAIT SDPTE_FH_START_2;
+
+    CALL stdServerKill();
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a.dbf";
+    MV "${ALTIBASE_HOME}/dbs/sdpte_fh_a_saved.dbf" "${ALTIBASE_HOME}/dbs/sdpte_fh_a.dbf";
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_BOTH_STARTUPS_REJECTED
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE TABLE_NAME = 'SDPTE_FH_UNEXPECTED';
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.OPENED = 1 THEN 1 ELSE 0 END) = 2
+                AND SUM(CASE WHEN D.CURRSIZE = 1024 THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_DEFINITIONS_UNCHANGED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_FH_A', 'SDPTE_FH_B');
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE SDPTE_FH_UNEXPECTED;
+    DROP TABLESPACE SDPTE_FH_A INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_FH_B INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a_saved.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_b.dbf";
+}

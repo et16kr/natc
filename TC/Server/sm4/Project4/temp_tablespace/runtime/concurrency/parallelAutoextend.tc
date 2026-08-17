@@ -1,0 +1,133 @@
+###########################################################################
+# TestCase Description = Run two concurrent spilling sessions through one TEMP autoextend owner.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = T-RUN-06, T-RUN-09, T-RUN-14, F-02, F-03.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+# Repo Manual Fallback = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_PC_U CASCADE;
+    DROP TABLESPACE SDPTE_PC_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_PC_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_PC_DATA
+        DATAFILE 'sdpte_pc_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 512M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_PC_TS
+        TEMPFILE 'sdpte_pc_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 256M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_PC_U IDENTIFIED BY SDPTE_PC_U
+        DEFAULT TABLESPACE SDPTE_PC_DATA
+        TEMPORARY TABLESPACE SDPTE_PC_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTE_PC_U/SDPTE_PC_U;
+
+    CREATE TABLE SDPTE_PC_SOURCE
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_PC_DATA;
+
+    CREATE TABLE SDPTE_PC_RESULT
+    (
+        WORKER_ID INTEGER,
+        PASS_VALUE INTEGER
+    ) TABLESPACE SDPTE_PC_DATA;
+
+    INSERT INTO SDPTE_PC_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; PARALLEL AUTOEXTEND
+##################################
+    NODISPLAY ON;
+    CALL runParallelSpills();
+    NODISPLAY OFF;
+
+    CONNECT SDPTE_PC_U/SDPTE_PC_U;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(PASS_VALUE) = 2
+                AND COUNT(DISTINCT WORKER_ID) = 2
+               THEN 1 ELSE 0
+           END AS PASS_PARALLEL_RESULTS
+      FROM SDPTE_PC_RESULT;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 32768
+                AND D.IOCOUNT > 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_PARALLEL_RUNTIME_CLEAN
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PC_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_PC_U CASCADE;
+    DROP TABLESPACE SDPTE_PC_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_PC_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}
+
+DEF runParallelSpills()
+{
+    $sPrompt = "$$EOF$$";
+    $sClient = "${ALTIBASE_HOME}/bin/isql -s localhost -u SDPTE_PC_U -p SDPTE_PC_U -silent -noprompt -ataf";
+
+    EXEC SDPTE_PC_P1 -t 1800 $sClient;
+    EXEC SDPTE_PC_P2 -t 1800 $sClient;
+
+    SEND SDPTE_PC_P1 "INSERT INTO SDPTE_PC_RESULT SELECT 1, CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END FROM (SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1 FROM SDPTE_PC_SOURCE);";
+    SEND SDPTE_PC_P2 "INSERT INTO SDPTE_PC_RESULT SELECT 2, CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END FROM (SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1 FROM SDPTE_PC_SOURCE);";
+
+    P_WAIT SDPTE_PC_P1 $sPrompt;
+    P_WAIT SDPTE_PC_P2 $sPrompt;
+
+    SEND SDPTE_PC_P1 "COMMIT;";
+    SEND SDPTE_PC_P2 "COMMIT;";
+    P_WAIT SDPTE_PC_P1 $sPrompt;
+    P_WAIT SDPTE_PC_P2 $sPrompt;
+
+    SEND SDPTE_PC_P1 "QUIT";
+    SEND SDPTE_PC_P2 "QUIT";
+    P_WAIT SDPTE_PC_P1;
+    P_WAIT SDPTE_PC_P2;
+}

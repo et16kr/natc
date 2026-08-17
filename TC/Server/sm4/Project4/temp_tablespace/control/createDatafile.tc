@@ -1,0 +1,123 @@
+###########################################################################
+# TestCase Description = Recreate missing TEMP files with CONTROL CREATE DATAFILE.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = same-path and AS binding, existing-target rejection, post-start durability.
+# Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+# iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+# Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CD_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_existing.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_CD_TS
+        TEMPFILE 'sdpte_cd_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_cd_02.dbf' SIZE 4M
+                     AUTOEXTEND ON NEXT 4M MAXSIZE 16M;
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CP "${ALTIBASE_HOME}/dbs/sdpte_cd_02.dbf" "${ALTIBASE_HOME}/dbs/sdpte_cd_existing.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02.dbf";
+    NODISPLAY OFF;
+
+##################################
+SECTOR; CONTROL CREATE DATAFILE
+##################################
+    $sPrompt = "$$EOF$$";
+
+    NODISPLAY ON;
+    EXEC SDPTE_CD_CONTROL -t 1800 $gStdIsqlSys;
+    SEND SDPTE_CD_CONTROL "startup control";
+    P_WAIT SDPTE_CD_CONTROL $sPrompt;
+
+    SEND SDPTE_CD_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cd_01.dbf';";
+    P_WAIT SDPTE_CD_CONTROL $sPrompt;
+
+    # Existing targets are never adopted or overwritten by this command.
+    SEND SDPTE_CD_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cd_01.dbf';";
+    P_WAIT SDPTE_CD_CONTROL $sPrompt;
+    SEND SDPTE_CD_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cd_02.dbf' AS '${ALTIBASE_HOME}/dbs/sdpte_cd_existing.dbf';";
+    P_WAIT SDPTE_CD_CONTROL $sPrompt;
+
+    # The failed AS command must leave the old registered lookup intact.
+    SEND SDPTE_CD_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cd_02.dbf' AS '${ALTIBASE_HOME}/dbs/sdpte_cd_02_new.dbf';";
+    P_WAIT SDPTE_CD_CONTROL $sPrompt;
+
+    SEND SDPTE_CD_CONTROL "ALTER DATABASE MYDB SERVICE;";
+    P_WAIT SDPTE_CD_CONTROL $sPrompt;
+    SEND SDPTE_CD_CONTROL "quit";
+    P_WAIT SDPTE_CD_CONTROL;
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cd_01.dbf'
+                             AND D.CURRSIZE = 1024
+                             AND D.AUTOEXTEND = 0
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cd_02_new.dbf'
+                             AND D.CURRSIZE = 512
+                             AND D.AUTOEXTEND = 1
+                             AND D.NEXTSIZE = 512
+                             AND D.MAXSIZE = 2048
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CONTROL_CREATE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CD_TS';
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_cd_02_new.dbf' THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_AS_DURABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CD_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CD_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_existing.dbf";
+}

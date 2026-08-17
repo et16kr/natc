@@ -1,0 +1,120 @@
+###########################################################################
+# TestCase Description = Verify public TEMP file columns before and after runtime spill.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = T-DRP-02, T-DRP-03, T-DRP-08, F-03, F-06.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_VP_U CASCADE;
+    DROP TABLESPACE SDPTE_VP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_VP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_VP_DATA
+        DATAFILE 'sdpte_vp_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_VP_TS
+        TEMPFILE 'sdpte_vp_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_VP_U IDENTIFIED BY SDPTE_VP_U
+        DEFAULT TABLESPACE SDPTE_VP_DATA
+        TEMPORARY TABLESPACE SDPTE_VP_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+##################################
+SECTOR; INITIAL VIEW
+##################################
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND D.AUTOEXTEND = 1
+                AND D.OPENED = 1
+                AND D.IOCOUNT = 0
+                AND D.OLDEST_LSN_FILENO = 0
+                AND D.OLDEST_LSN_OFFSET = 0
+                AND D.CREATE_LSN_FILENO = 0
+                AND D.CREATE_LSN_OFFSET = 0
+                AND D.SM_VERSION = 0
+               THEN 1 ELSE 0
+           END AS PASS_INITIAL_FILE_PROJECTION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_VP_TS';
+
+    CONNECT SDPTE_VP_U/SDPTE_VP_U;
+
+    CREATE TABLE SDPTE_VP_SOURCE
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_VP_DATA;
+
+    INSERT INTO SDPTE_VP_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+
+##################################
+SECTOR; RUNTIME VIEW
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_VIEW_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_VP_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND D.AUTOEXTEND = 1
+                AND D.OPENED = 1
+                AND D.IOCOUNT > 0
+                AND D.OLDEST_LSN_FILENO = 0
+                AND D.OLDEST_LSN_OFFSET = 0
+                AND D.CREATE_LSN_FILENO = 0
+                AND D.CREATE_LSN_OFFSET = 0
+                AND D.SM_VERSION = 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_FILE_PROJECTION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_VP_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_VP_U CASCADE;
+    DROP TABLESPACE SDPTE_VP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_VP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

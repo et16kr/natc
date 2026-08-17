@@ -1,0 +1,54 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Independent CREATE TEMP case 08.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Coverage             = One isolated implementation and catalog assertion.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SECTOR 1; TEST_CREATE_08
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CRE08 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CRE08
+        TEMPFILE 'sdpte_create_08_01.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> ALTER TABLESPACE SDPTE_CRE08 UNCOMPRESSED LOGGING;
+Alter success.
+
+$T0> SELECT CASE WHEN D.ATTR_LOG_COMPRESS = 0 THEN 1 ELSE 0 END AS PASS_CREATE_08_UNCOMPRESSED
+      FROM V$TABLESPACES D
+     WHERE D.NAME = 'SDPTE_CRE08';
+PASS_CREATE_08_UNCOMPRESSED 
+------------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTE_CRE08 COMPRESSED LOGGING;
+Alter success.
+
+$T0> SELECT CASE WHEN D.ATTR_LOG_COMPRESS = 1 THEN 1 ELSE 0 END AS PASS_CREATE_08_COMPRESSED
+      FROM V$TABLESPACES D
+     WHERE D.NAME = 'SDPTE_CRE08';
+PASS_CREATE_08_COMPRESSED 
+----------------------------
+1           
+1 row selected.
+$T0> SECTOR 2; FINALIZATION
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CRE08 INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

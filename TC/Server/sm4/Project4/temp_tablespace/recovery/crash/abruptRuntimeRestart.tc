@@ -1,0 +1,134 @@
+###########################################################################
+# TestCase Description = Recover an autoextended TEMP runtime after an abrupt server stop.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = concurrent spill attempt, runtime R reuse, reset of transient extent ownership.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# iSQL Manual Fallback = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# ATAF Runtime         = stdFunc.i stdServerKill/stdServerStart.
+# ATAF Timing Reference= TC/Server/qp4/Project3/PROJ-1438-JobScheduler/DBLink/initialize.tc
+# ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_AR_U CASCADE;
+    DROP TABLESPACE SDPTE_AR_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_AR_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_AR_DATA
+        DATAFILE 'sdpte_ar_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_AR_TS
+        TEMPFILE 'sdpte_ar_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_AR_U IDENTIFIED BY SDPTE_AR_U
+        DEFAULT TABLESPACE SDPTE_AR_DATA
+        TEMPORARY TABLESPACE SDPTE_AR_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTE_AR_U/SDPTE_AR_U;
+
+    CREATE TABLE SDPTE_AR_SOURCE
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_AR_DATA;
+
+    INSERT INTO SDPTE_AR_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('R', 1790, 'R')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+
+    COMMIT;
+
+##################################
+SECTOR; GROW RUNTIME BEFORE ABORT
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_PRE_ABORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_AR_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.IOCOUNT > 0
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_PRE_ABORT_RUNTIME
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AR_TS';
+
+##################################
+SECTOR; ABRUPT RESTART
+##################################
+    $sPrompt = "$$EOF$$";
+    $sClient = "${ALTIBASE_HOME}/bin/isql -s localhost -u SDPTE_AR_U -p SDPTE_AR_U -silent -noprompt -ataf";
+
+    NODISPLAY ON;
+    EXEC SDPTE_AR_INFLIGHT -t 1800 $sClient;
+    SEND SDPTE_AR_INFLIGHT "SELECT COUNT(*) FROM (SELECT /*+ TEMP_TBS_DISK */ ROW_NUMBER() OVER (ORDER BY A.ID DESC, B.ID DESC) AS RN FROM SDPTE_AR_SOURCE A, SDPTE_AR_SOURCE B WHERE B.ID <= 100);";
+    # This short scheduling aid increases overlap; pass/fail depends only on
+    # the post-restart invariants below, not on a timing-specific error string.
+    sleep 1;
+    CALL stdServerKill();
+    P_WAIT SDPTE_AR_INFLIGHT $sPrompt;
+    SEND SDPTE_AR_INFLIGHT "quit";
+    P_WAIT SDPTE_AR_INFLIGHT;
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.OPENED = 1
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_ABORT_RECONCILE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AR_TS';
+
+    CONNECT SDPTE_AR_U/SDPTE_AR_U;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_POST_ABORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_AR_SOURCE
+           ) D;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_AR_U CASCADE;
+    DROP TABLESPACE SDPTE_AR_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_AR_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

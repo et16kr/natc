@@ -1,0 +1,85 @@
+###########################################################################
+# TestCase Description = Roll back all CREATE TEMP files when a later target collides.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = T-DDL-01, T-DDL-05, T-DDL-09, F-01, F-08.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CM_PROBE INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CM_ORPHAN INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CM_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cm_first.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cm_collision.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_CM_ORPHAN
+        TEMPFILE 'sdpte_cm_collision.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    # Ordinary DROP retires the definition but deliberately preserves the file.
+    DROP TABLESPACE SDPTE_CM_ORPHAN;
+
+##################################
+SECTOR; CREATE FAILURE ATOMICITY
+##################################
+    # Expected error: the second target is an existing retired tempfile.
+    # The first target must be removed and the tablespace must not be published.
+    NODISPLAY ON;
+    CREATE TEMPORARY TABLESPACE SDPTE_CM_TS
+        TEMPFILE 'sdpte_cm_first.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdpte_cm_collision.dbf' SIZE 4M AUTOEXTEND OFF;
+    NODISPLAY OFF;
+
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NO_PARTIAL_TBS
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_CM_TS';
+
+    # Success without REUSE proves the aborted first target was removed.
+    CREATE TEMPORARY TABLESPACE SDPTE_CM_PROBE
+        TEMPFILE 'sdpte_cm_first.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND D.ID = 0
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_FIRST_TARGET_CLEANED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CM_PROBE';
+
+    DROP TABLESPACE SDPTE_CM_PROBE INCLUDING CONTENTS AND DATAFILES;
+
+    # The collision file is still a reusable complete tempfile.
+    CREATE TEMPORARY TABLESPACE SDPTE_CM_ORPHAN
+        TEMPFILE 'sdpte_cm_collision.dbf' SIZE 4M REUSE AUTOEXTEND OFF;
+
+    SELECT CASE WHEN DATAFILE_COUNT = 1 THEN 1 ELSE 0 END AS PASS_COLLISION_PRESERVED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_CM_ORPHAN';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CM_PROBE INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CM_ORPHAN INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CM_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cm_first.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cm_collision.dbf";
+}

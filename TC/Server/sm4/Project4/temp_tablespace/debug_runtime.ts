@@ -1,2 +1,2 @@
 TestSuiteDescription = TEMP tablespace focused runtime debug
-runtimeAutoextend.tc
+runtime/spill/runtimeAutoextend.tc

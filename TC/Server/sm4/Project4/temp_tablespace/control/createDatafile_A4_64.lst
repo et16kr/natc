@@ -1,0 +1,106 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Recreate missing TEMP files with CONTROL CREATE DATAFILE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = same-path and AS binding, existing-target rejection, post-start durability.
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02_new.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_existing.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CD_TS
+        TEMPFILE 'sdpte_cd_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_cd_02.dbf' SIZE 4M
+                     AUTOEXTEND ON NEXT 4M MAXSIZE 16M;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; CONTROL CREATE DATAFILE
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cd_01.dbf'
+                             AND D.CURRSIZE = 1024
+                             AND D.AUTOEXTEND = 0
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cd_02_new.dbf'
+                             AND D.CURRSIZE = 512
+                             AND D.AUTOEXTEND = 1
+                             AND D.NEXTSIZE = 512
+                             AND D.MAXSIZE = 2048
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CONTROL_CREATE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CD_TS';
+PASS_CONTROL_CREATE 
+----------------------
+1           
+1 row selected.
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_cd_02_new.dbf' THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_AS_DURABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CD_TS';
+PASS_CREATE_AS_DURABLE 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_02_new.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cd_existing.dbf";
+

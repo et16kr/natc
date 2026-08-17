@@ -1,0 +1,119 @@
+###########################################################################
+# TestCase Description = Rename TEMP definitions through both CONTROL SQL forms.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = metadata-only rename, per-file Anchor path, startup binding at new paths.
+# Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+# iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+# Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CR_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_CR_TS
+        TEMPFILE 'sdpte_cr_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_cr_02.dbf' SIZE 4M
+                     AUTOEXTEND ON NEXT 4M MAXSIZE 16M;
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    NODISPLAY OFF;
+
+##################################
+SECTOR; CONTROL METADATA RENAME
+##################################
+    $sPrompt = "$$EOF$$";
+
+    NODISPLAY ON;
+    EXEC SDPTE_CR_CONTROL -t 1800 $gStdIsqlSys;
+    SEND SDPTE_CR_CONTROL "startup control";
+    P_WAIT SDPTE_CR_CONTROL $sPrompt;
+    SEND SDPTE_CR_CONTROL "ALTER TABLESPACE SDPTE_CR_TS RENAME TEMPFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_01.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf';";
+    P_WAIT SDPTE_CR_CONTROL $sPrompt;
+    SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf';";
+    P_WAIT SDPTE_CR_CONTROL $sPrompt;
+    SEND SDPTE_CR_CONTROL "quit";
+    P_WAIT SDPTE_CR_CONTROL;
+
+    # RENAME changes only metadata. Remove the old physical paths before
+    # SERVICE so startup has to bind the renamed, missing targets.
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02.dbf";
+
+    EXEC SDPTE_CR_SERVICE -t 1800 $gStdIsqlSys;
+    SEND SDPTE_CR_SERVICE "ALTER DATABASE MYDB SERVICE;";
+    P_WAIT SDPTE_CR_SERVICE $sPrompt;
+    SEND SDPTE_CR_SERVICE "quit";
+    P_WAIT SDPTE_CR_SERVICE;
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cr_01_new.dbf'
+                             AND D.CURRSIZE = 1024
+                             AND D.AUTOEXTEND = 0
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cr_02_new.dbf'
+                             AND D.CURRSIZE = 512
+                             AND D.AUTOEXTEND = 1
+                             AND D.NEXTSIZE = 512
+                             AND D.MAXSIZE = 2048
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CONTROL_RENAME
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CR_TS';
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.NAME LIKE '%_new.dbf' THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_RENAME_ANCHOR_DURABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CR_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CR_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf";
+}
