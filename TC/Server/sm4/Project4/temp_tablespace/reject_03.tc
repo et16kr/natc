@@ -1,0 +1,27 @@
+###########################################################################
+# TestCase Description = Independent REJECT TEMP case 03.
+# Project ID           = workspace/simple_temp_tablespace
+# Coverage             = One isolated implementation and catalog assertion.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    CONNECT SYS/MANAGER;
+
+SECTOR; TEST_REJECT_03
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_REJ03 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+    CREATE TEMPORARY TABLESPACE SDPTE_REJ03 TEMPFILE 'sdpte_reject_03_01.dbf' SIZE 8M AUTOEXTEND OFF;
+    ALTER TABLESPACE SDPTE_REJ03 ALTER TEMPFILE 'sdpte_reject_03_01.dbf' OFFLINE;
+    SELECT CASE WHEN D.STATE=2 THEN 1 ELSE 0 END AS PASS_REJECT_03 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_REJ03' AND F.ID=0;
+SECTOR; FINALIZATION
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_REJ03 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}
+

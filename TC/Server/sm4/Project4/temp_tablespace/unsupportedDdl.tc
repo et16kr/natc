@@ -1,0 +1,88 @@
+###########################################################################
+# TestCase Description = Preserve TEMP-specific DDL rejection and error ordering at public entries.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = TEMP ONLINE/OFFLINE, file ONLINE/OFFLINE, tablespace AUTOEXTEND,
+#                        DATAFILE/TEMPFILE mismatch, primary tempfile and SYSTEM TEMP guards.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_NEG_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_NEG_TS
+        TEMPFILE 'sdpte_neg_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_neg_02.dbf' SIZE 8M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+##################################
+SECTOR; EXPECTED REJECTIONS
+##################################
+    ALTER TABLESPACE SDPTE_NEG_TS OFFLINE;
+    ALTER TABLESPACE SDPTE_NEG_TS ONLINE;
+
+    ALTER TABLESPACE SDPTE_NEG_TS
+        ALTER TEMPFILE 'sdpte_neg_01.dbf' OFFLINE;
+    ALTER TABLESPACE SDPTE_NEG_TS
+        ALTER TEMPFILE 'sdpte_neg_01.dbf' ONLINE;
+
+    ALTER TABLESPACE SDPTE_NEG_TS
+        ALTER AUTOEXTEND ON NEXT 8M MAXSIZE 32M;
+
+    ALTER TABLESPACE SDPTE_NEG_TS ADD DATAFILE
+        'sdpte_neg_bad.dbf' SIZE 8M AUTOEXTEND OFF;
+
+    ALTER TABLESPACE SDPTE_NEG_TS
+        ALTER DATAFILE 'sdpte_neg_01.dbf' SIZE 16M;
+
+    ALTER TABLESPACE SDPTE_NEG_TS
+        DROP TEMPFILE 'sdpte_neg_01.dbf';
+
+    ALTER TABLESPACE SDPTE_NEG_TS
+        ALTER TEMPFILE 'sdpte_neg_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 4M;
+
+    DROP TABLESPACE SYS_TBS_DISK_TEMP;
+
+##################################
+SECTOR; VERIFY NO MUTATION
+##################################
+    SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.STATE = 2
+                AND T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = 2048
+                AND F.FILE_COUNT = 2
+                AND F.TOTAL_CURRENT = 2048
+                AND F.AUTOEXTEND_ON_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_REJECTIONS_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.AUTOEXTEND = 1 THEN 1 ELSE 0 END)
+                        AS AUTOEXTEND_ON_COUNT
+               FROM V$TABLESPACES T2,
+                    V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_NEG_TS' ) F
+     WHERE T.NAME = 'SDPTE_NEG_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_NEG_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

@@ -1,0 +1,91 @@
+###########################################################################
+# TestCase Description = Keep ordinary DATA tablespace DDL on its established path.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = DATA resize/autoextend/offline/online and TEMP selector isolation.
+# Regression Focus     = TEMP routing and refusal branches must not capture DATA operations.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLE SDPTE_DI_T;
+    DROP TABLESPACE SDPTE_DI_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_DI_TS
+        DATAFILE 'sdpte_di_01.dbf' SIZE 8M AUTOEXTEND OFF;
+
+    CREATE TABLE SDPTE_DI_T
+    (
+        ID INTEGER PRIMARY KEY,
+        C1 VARCHAR(100)
+    ) TABLESPACE SDPTE_DI_TS;
+
+    INSERT INTO SDPTE_DI_T VALUES (1, 'DATA_ROUTE');
+    COMMIT;
+
+##################################
+SECTOR; DATAFILE ALTER
+##################################
+    ALTER TABLESPACE SDPTE_DI_TS
+        ALTER DATAFILE 'sdpte_di_01.dbf' SIZE 16M;
+
+    ALTER TABLESPACE SDPTE_DI_TS
+        ALTER DATAFILE 'sdpte_di_01.dbf'
+            AUTOEXTEND ON NEXT 4M MAXSIZE 32M;
+
+    SELECT CASE
+               WHEN T.TYPE = 4
+                AND T.DATAFILE_COUNT = 1
+                AND D.CURRSIZE = 2048
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 512
+                AND D.MAXSIZE = 4096
+               THEN 1 ELSE 0
+           END AS PASS_DATAFILE_ROUTE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DI_TS';
+
+##################################
+SECTOR; DATA ONLINE OFFLINE
+##################################
+    ALTER TABLESPACE SDPTE_DI_TS OFFLINE;
+
+    SELECT CASE WHEN STATE = 1 THEN 1 ELSE 0 END AS PASS_DATA_OFFLINE
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_DI_TS';
+
+    ALTER TABLESPACE SDPTE_DI_TS ONLINE;
+
+    SELECT CASE WHEN STATE = 2 THEN 1 ELSE 0 END AS PASS_DATA_ONLINE
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_DI_TS';
+
+    SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(C1) = 'DATA_ROUTE'
+               THEN 1 ELSE 0
+           END AS PASS_DATA_CONTENT
+      FROM SDPTE_DI_T;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE SDPTE_DI_T;
+    DROP TABLESPACE SDPTE_DI_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

@@ -1,0 +1,28 @@
+###########################################################################
+# TestCase Description = Independent RESTART TEMP case 05.
+# Project ID           = workspace/simple_temp_tablespace
+# Coverage             = One isolated implementation and catalog assertion.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    CONNECT SYS/MANAGER;
+
+SECTOR; TEST_RESTART_05
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_RST05 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+    CREATE TEMPORARY TABLESPACE SDPTE_RST05 TEMPFILE 'sdpte_restart_05_01.dbf' SIZE 8M AUTOEXTEND OFF;
+    ALTER TABLESPACE SDPTE_RST05 ALTER TEMPFILE 'sdpte_restart_05_01.dbf' SIZE 16M; NODISPLAY ON; CALL stdServerStop(); CALL stdServerStart(); NODISPLAY OFF; CONNECT SYS/MANAGER;
+    SELECT CASE WHEN F.CURRSIZE=2048 THEN 1 ELSE 0 END AS PASS_RESTART_05 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_RST05' AND F.ID=0;
+SECTOR; FINALIZATION
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_RST05 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_restart_05_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_restart_05_02.dbf";
+}

@@ -1,0 +1,26 @@
+###########################################################################
+# TestCase Description = Independent CREATE TEMP case 02.
+# Project ID           = workspace/simple_temp_tablespace
+# Coverage             = One isolated implementation and catalog assertion.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    CONNECT SYS/MANAGER;
+
+SECTOR; TEST_CREATE_02
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CRE02 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+    CREATE TEMPORARY TABLESPACE SDPTE_CRE02 TEMPFILE 'sdpte_create_02_01.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    SELECT CASE WHEN F.CURRSIZE=512 THEN 1 ELSE 0 END AS PASS_CREATE_02 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_CRE02' AND F.ID=0;
+SECTOR; FINALIZATION
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_CRE02 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

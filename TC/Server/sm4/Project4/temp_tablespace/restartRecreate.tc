@@ -1,0 +1,89 @@
+###########################################################################
+# TestCase Description = Recreate a missing committed tempfile during restart and reset allocation state.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = committed D persistence, missing-file binding, post-recovery zero-allocation projection.
+# Regression Focus     = recreate at the committed resized D, never at the original INIT size.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# ATAF Runtime         = stdFunc.i stdServerStop/stdServerStart and exact RM target.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_RS_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_RS_TS
+        TEMPFILE 'sdpte_rs_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_rs_02.dbf' SIZE 4M
+                     AUTOEXTEND ON NEXT 4M MAXSIZE 16M
+        EXTENTSIZE 512K;
+
+    ALTER TABLESPACE SDPTE_RS_TS
+        ALTER TEMPFILE 'sdpte_rs_01.dbf' SIZE 12M;
+
+##################################
+SECTOR; RESTART WITH MISSING TEMPFILE
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    # The removed primary was resized from 8M to committed D=12M.  Removing
+    # this file catches a restart path that incorrectly falls back to INIT.
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_rs_01.dbf";
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(D.CURRSIZE) = 2048
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_rs_01.dbf'
+                             AND D.CURRSIZE = 1536
+                             AND D.AUTOEXTEND = 0
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_rs_02.dbf'
+                             AND D.CURRSIZE = 512
+                             AND D.AUTOEXTEND = 1
+                             AND D.NEXTSIZE = 512
+                             AND D.MAXSIZE = 2048
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_RECREATE_FILES
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RS_TS';
+
+    SELECT CASE
+               WHEN DATAFILE_COUNT = 2
+                AND TOTAL_PAGE_COUNT = 2048
+                AND ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_PROJECTION
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_RS_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_RS_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

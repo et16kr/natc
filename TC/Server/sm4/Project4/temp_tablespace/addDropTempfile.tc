@@ -1,0 +1,163 @@
+###########################################################################
+# TestCase Description = Add and drop multiple TEMP files as one statement.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = ADD/DROP TEMPFILE, multi-file publication, failure atomicity, primary retention.
+# Regression Focus     = a later file failure must not leave an earlier file partially published or dropped.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_AD_PROBE INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_AD_ORPHAN INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_AD_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    # Remove test-owned orphans left by an interrupted earlier run.
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_fail.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_collision.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_03.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_AD_TS
+        TEMPFILE 'sdpte_ad_01.dbf' SIZE 8M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    # Leave a valid retired tempfile on disk but outside the path registry.
+    # It makes the second target fail in the physical binding lane.
+    CREATE TEMPORARY TABLESPACE SDPTE_AD_ORPHAN
+        TEMPFILE 'sdpte_ad_collision.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    DROP TABLESPACE SDPTE_AD_ORPHAN;
+
+##################################
+SECTOR; ADD TEMPFILE
+##################################
+    # The second file exists as a retired orphan.  The first file in the same
+    # statement must not remain partially published or on disk after failure.
+    ALTER TABLESPACE SDPTE_AD_TS ADD TEMPFILE
+        'sdpte_ad_fail.dbf' SIZE 4M AUTOEXTEND OFF,
+        'sdpte_ad_collision.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND T.NEXT_FILE_ID = 1
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND F.FILE_COUNT = 1
+                AND F.FAIL_FILE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_FAILED_ADD_ATOMIC
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_ad_fail.dbf'
+                            THEN 1 ELSE 0
+                        END) AS FAIL_FILE_COUNT
+               FROM V$TABLESPACES T2,
+                    V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_AD_TS' ) F
+     WHERE T.NAME = 'SDPTE_AD_TS';
+
+    # A CREATE without REUSE proves the aborted first ADD target was removed
+    # physically as well as from the published definition.
+    CREATE TEMPORARY TABLESPACE SDPTE_AD_PROBE
+        TEMPFILE 'sdpte_ad_fail.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    DROP TABLESPACE SDPTE_AD_PROBE INCLUDING CONTENTS AND DATAFILES;
+
+    ALTER TABLESPACE SDPTE_AD_TS ADD TEMPFILE
+        'sdpte_ad_02.dbf' SIZE 4M AUTOEXTEND OFF,
+        'sdpte_ad_03.dbf' SIZE 8M AUTOEXTEND ON NEXT 4M MAXSIZE 32M;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.NEXT_FILE_ID = 3
+                AND T.TOTAL_PAGE_COUNT = 2560
+                AND F.FILE_COUNT = 3
+                AND F.MIN_FILE_ID = 0
+                AND F.MAX_FILE_ID = 2
+               THEN 1 ELSE 0
+           END AS PASS_ADD_TEMPFILES
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    MIN(D.ID) AS MIN_FILE_ID,
+                    MAX(D.ID) AS MAX_FILE_ID
+               FROM V$TABLESPACES T2,
+                    V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_AD_TS' ) F
+     WHERE T.NAME = 'SDPTE_AD_TS';
+
+##################################
+SECTOR; DROP TEMPFILE
+##################################
+    # The primary file makes the statement fail.  The secondary file listed
+    # before it must still be present after transaction rollback.
+    ALTER TABLESPACE SDPTE_AD_TS DROP TEMPFILE
+        'sdpte_ad_02.dbf', 'sdpte_ad_01.dbf';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.NEXT_FILE_ID = 3
+                AND T.TOTAL_PAGE_COUNT = 2560
+                AND F.FILE_COUNT = 3
+                AND F.MIN_FILE_ID = 0
+                AND F.MAX_FILE_ID = 2
+               THEN 1 ELSE 0
+           END AS PASS_FAILED_DROP_ATOMIC
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    MIN(D.ID) AS MIN_FILE_ID,
+                    MAX(D.ID) AS MAX_FILE_ID
+               FROM V$TABLESPACES T2,
+                    V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_AD_TS' ) F
+     WHERE T.NAME = 'SDPTE_AD_TS';
+
+    ALTER TABLESPACE SDPTE_AD_TS DROP TEMPFILE
+        'sdpte_ad_02.dbf', 'sdpte_ad_03.dbf';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND T.NEXT_FILE_ID = 3
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND F.FILE_COUNT = 1
+                AND F.MIN_FILE_ID = 0
+                AND F.MAX_FILE_ID = 0
+               THEN 1 ELSE 0
+           END AS PASS_DROP_TEMPFILES
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    MIN(D.ID) AS MIN_FILE_ID,
+                    MAX(D.ID) AS MAX_FILE_ID
+               FROM V$TABLESPACES T2,
+                    V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_AD_TS' ) F
+     WHERE T.NAME = 'SDPTE_AD_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_AD_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    # DROP TEMPFILE preserves physical files by contract.
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_fail.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_collision.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ad_03.dbf";
+}

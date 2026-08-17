@@ -1,0 +1,27 @@
+###########################################################################
+# TestCase Description = Independent RESIZE TEMP case 04.
+# Project ID           = workspace/simple_temp_tablespace
+# Coverage             = One isolated implementation and catalog assertion.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    CONNECT SYS/MANAGER;
+
+SECTOR; TEST_RESIZE_04
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_RES04 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+    CREATE TEMPORARY TABLESPACE SDPTE_RES04 TEMPFILE 'sdpte_resize_04_01.dbf' SIZE 8M AUTOEXTEND OFF;
+    ALTER TABLESPACE SDPTE_RES04 ALTER TEMPFILE 'sdpte_resize_04_01.dbf' SIZE 1M;
+    SELECT CASE WHEN F.CURRSIZE=128 THEN 1 ELSE 0 END AS PASS_RESIZE_04 FROM V$TABLESPACES D, V$DATAFILES F WHERE D.ID=F.SPACEID AND D.NAME='SDPTE_RES04' AND F.ID=0;
+SECTOR; FINALIZATION
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_RES04 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}
+

@@ -1,0 +1,129 @@
+###########################################################################
+# TestCase Description = Change TEMP file size, AUTOEXTEND, and logging attributes.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = grow, same-size, shrink, NEXT/MAX/UNLIMITED normalization, attribute projection.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_AL_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_AL_TS
+        TEMPFILE 'sdpte_al_01.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 32M
+        EXTENTSIZE 512K;
+
+##################################
+SECTOR; ALTER SIZE
+##################################
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' SIZE 16M;
+
+    SELECT CASE WHEN D.CURRSIZE = 2048 THEN 1 ELSE 0 END AS PASS_GROW
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+
+    # Same-size ALTER is a successful no-op on the existing public lane.
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' SIZE 16M;
+
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' SIZE 12M;
+
+    SELECT CASE WHEN D.CURRSIZE = 1536 THEN 1 ELSE 0 END AS PASS_SHRINK
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+
+##################################
+SECTOR; ALTER AUTOEXTEND
+##################################
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf' AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_OFF
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf'
+            AUTOEXTEND ON NEXT 2M MAXSIZE 24M;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 256
+                AND D.MAXSIZE = 3072
+                AND D.CURRSIZE = 1536
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_ON
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+
+    # Same-value ALTER retains the standard equal-image behavior.
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf'
+            AUTOEXTEND ON NEXT 2M MAXSIZE 24M;
+
+    ALTER TABLESPACE SDPTE_AL_TS
+        ALTER TEMPFILE 'sdpte_al_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE UNLIMITED;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE > D.CURRSIZE
+                AND D.CURRSIZE = 1536
+               THEN 1 ELSE 0
+           END AS PASS_UNLIMITED_NORMALIZED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AL_TS';
+
+##################################
+SECTOR; ALTER LOGGING ATTRIBUTE
+##################################
+    ALTER TABLESPACE SDPTE_AL_TS COMPRESSED LOGGING;
+
+    SELECT CASE WHEN ATTR_LOG_COMPRESS = 1 THEN 1 ELSE 0 END AS PASS_COMPRESSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_AL_TS';
+
+    ALTER TABLESPACE SDPTE_AL_TS UNCOMPRESSED LOGGING;
+
+    SELECT CASE WHEN ATTR_LOG_COMPRESS = 0 THEN 1 ELSE 0 END AS PASS_UNCOMPRESSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_AL_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_AL_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

@@ -1,0 +1,27 @@
+###########################################################################
+# TestCase Description = Independent ROUTE TEMP case 04.
+# Project ID           = workspace/simple_temp_tablespace
+# Coverage             = One isolated implementation and catalog assertion.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    CONNECT SYS/MANAGER;
+
+SECTOR; TEST_ROUTE_04
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_ROU04 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+    CREATE DISK TABLESPACE SDPTE_ROU04 DATAFILE 'sdpte_route_04_01.dbf' SIZE 8M AUTOEXTEND OFF;
+    CREATE TABLE SDPTE_ROU04_T (ID INTEGER) TABLESPACE SDPTE_ROU04; INSERT INTO SDPTE_ROU04_T VALUES (1); COMMIT; SELECT COUNT(*) FROM SDPTE_ROU04_T;
+
+    SELECT CASE WHEN T.TYPE=4 THEN 1 ELSE 0 END AS PASS_ROUTE_04 FROM V$TABLESPACES T, V$DATAFILES F WHERE T.ID=F.SPACEID AND T.NAME='SDPTE_ROU04' AND F.ID=0;
+SECTOR; FINALIZATION
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_ROU04 INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}
