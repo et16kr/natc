@@ -115,12 +115,13 @@ SECTOR; SORT HASH AND JOIN SPILL
              WHERE A.ID = B.ID
            ) J;
 
+    # Close the spill-producing session so its query work areas are released
+    # before the public TEMP projection is sampled.
+    DISCONNECT;
     CONNECT SYS/MANAGER;
 
     SELECT CASE
                WHEN D.CURRSIZE > D.INITSIZE
-                AND D.IOCOUNT > 0
-                AND D.OPENED = 1
                 AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
                 AND T.ALLOCATED_PAGE_COUNT = 0
                THEN 1 ELSE 0

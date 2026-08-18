@@ -1,0 +1,154 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Recover an autoextended TEMP runtime after an abrupt server stop.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = concurrent spill attempt, runtime R reuse, reset of transient extent ownership.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # iSQL Manual Fallback = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # ATAF Runtime         = stdFunc.i stdServerKill/stdServerStart.
+$T0> # ATAF Timing Reference= TC/Server/qp4/Project3/PROJ-1438-JobScheduler/DBLink/initialize.tc
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_AR_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_AR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_AR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_AR_DATA
+        DATAFILE 'sdpte_ar_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_AR_TS
+        TEMPFILE 'sdpte_ar_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_AR_U IDENTIFIED BY SDPTE_AR_U
+        DEFAULT TABLESPACE SDPTE_AR_DATA
+        TEMPORARY TABLESPACE SDPTE_AR_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_AR_U/SDPTE_AR_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_AR_SOURCE
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_AR_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_AR_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('R', 1790, 'R')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; GROW RUNTIME BEFORE ABORT
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_PRE_ABORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_AR_SOURCE
+           ) D;
+PASS_PRE_ABORT_SPILL 
+-----------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_PRE_ABORT_RUNTIME
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AR_TS';
+PASS_PRE_ABORT_RUNTIME 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; ABRUPT RESTART
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_ABORT_RECONCILE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AR_TS';
+PASS_ABORT_RECONCILE 
+-----------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_AR_U/SDPTE_AR_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_POST_ABORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_AR_SOURCE
+           ) D;
+PASS_POST_ABORT_SPILL 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_AR_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_AR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_AR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

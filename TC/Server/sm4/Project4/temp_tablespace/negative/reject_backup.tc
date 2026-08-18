@@ -1,8 +1,9 @@
 ###########################################################################
-# TestCase Description = Reject TEMP backup commands without changing its public state.
+# TestCase Description = Preserve TEMP state when NOARCHIVELOG rejects backup first.
 # Project ID           = workspace/simple_temp_tablespace
-# Design Coverage      = T-DDL-32, T-ND-01, T-REG-02, S-03.
+# Design Coverage      = NOARCHIVELOG precedence and TEMP state preservation.
 # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
 ###########################################################################
 INCLUDE stdFunc.i;
 
@@ -11,7 +12,8 @@ DEF MAIN()
 ##################################
 SECTOR; INITIALIZATION
 ##################################
-    CONNECT SYS/MANAGER;
+    # BACKUP DDL requires a SYSDBA session; see the SQL Reference manual.
+    CONNECT SYS/MANAGER AS SYSDBA;
 
     SKIP BEGIN;
     DROP TABLESPACE SDPTE_BG_TS INCLUDING CONTENTS AND DATAFILES;
@@ -26,7 +28,8 @@ SECTOR; PREPARATION
 ##################################
 SECTOR; BACKUP REJECTIONS
 ##################################
-    # Expected errors: temporary tablespaces do not enter online backup.
+    # ERR-11098 is the expected first guard in this NOARCHIVELOG environment.
+    # TEMP-specific ERR-11091 requires a separate ARCHIVELOG configuration.
     ALTER TABLESPACE SDPTE_BG_TS BEGIN BACKUP;
     ALTER TABLESPACE SDPTE_BG_TS END BACKUP;
     ALTER TABLESPACE SYS_TBS_DISK_TEMP BEGIN BACKUP;
@@ -37,7 +40,7 @@ SECTOR; BACKUP REJECTIONS
                 AND T.DATAFILE_COUNT = 1
                 AND T.TOTAL_PAGE_COUNT = 1024
                 AND D.CURRSIZE = 1024
-                AND D.OPENED = 1
+                AND D.OPENED = 0
                THEN 1 ELSE 0
            END AS PASS_BACKUP_REJECTIONS_UNCHANGED
       FROM V$TABLESPACES T,

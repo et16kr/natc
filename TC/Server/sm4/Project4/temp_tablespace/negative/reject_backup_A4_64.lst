@@ -1,0 +1,71 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve TEMP state when NOARCHIVELOG rejects backup first.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = NOARCHIVELOG precedence and TEMP state preservation.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> # BACKUP DDL requires a SYSDBA session; see the SQL Reference manual.
+$T0> CONNECT SYS/MANAGER AS SYSDBA;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_BG_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_BG_TS
+        TEMPFILE 'sdpte_bg_01.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; BACKUP REJECTIONS
+$T0> ##################################
+$T0> # ERR-11098 is the expected first guard in this NOARCHIVELOG environment.
+$T0> # TEMP-specific ERR-11091 requires a separate ARCHIVELOG configuration.
+$T0> ALTER TABLESPACE SDPTE_BG_TS BEGIN BACKUP;
+[ERR-11098 : ALTER TABLESPACE BEGIN BACKUP cannot be executed in no archive log mode]
+$T0> ALTER TABLESPACE SDPTE_BG_TS END BACKUP;
+[ERR-11098 : ALTER TABLESPACE END BACKUP cannot be executed in no archive log mode]
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP BEGIN BACKUP;
+[ERR-11098 : ALTER TABLESPACE BEGIN BACKUP cannot be executed in no archive log mode]
+
+$T0> SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.STATE = 2
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND D.CURRSIZE = 1024
+                AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_BACKUP_REJECTIONS_UNCHANGED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_BG_TS';
+PASS_BACKUP_REJECTIONS_UNCHANGED 
+-----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_BG_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

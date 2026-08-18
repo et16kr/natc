@@ -9,4 +9,5 @@ add_multi.tc
 add_single_off.tc
 add_then_disable_autoextend.tc
 add_then_resize.tc
+reattachAfterSpill.tc
 -------------------------------------------------------------------------------

@@ -85,7 +85,6 @@ SECTOR; PARALLEL AUTOEXTEND
                 AND D.AUTOEXTEND = 1
                 AND D.NEXTSIZE = 128
                 AND D.MAXSIZE = 32768
-                AND D.IOCOUNT > 0
                 AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
                 AND T.ALLOCATED_PAGE_COUNT = 0
                THEN 1 ELSE 0

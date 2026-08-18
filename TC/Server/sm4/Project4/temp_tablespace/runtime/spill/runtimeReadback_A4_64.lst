@@ -1,0 +1,126 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reuse a grown TEMP runtime area for a second spill in the same boot.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = T-RUN-10, T-RUN-14, F-02, F-03.
+$T0> # SQL/iSQL Manual      = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RB_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RB_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RB_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_RB_DATA
+        DATAFILE 'sdpte_rb_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_RB_TS
+        TEMPFILE 'sdpte_rb_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_RB_U IDENTIFIED BY SDPTE_RB_U
+        DEFAULT TABLESPACE SDPTE_RB_DATA
+        TEMPORARY TABLESPACE SDPTE_RB_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_RB_U/SDPTE_RB_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_RB_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_RB_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_RB_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; REPEATED RUNTIME SPILL
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_FIRST_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RB_SOURCE
+           ) D;
+PASS_FIRST_SPILL 
+-------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1000
+                AND MIN(CNT) = 30
+                AND MAX(CNT) = 30
+                AND SUM(CNT) = 30000
+               THEN 1 ELSE 0
+           END AS PASS_SECOND_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK GROUP_HASH */ MOD(ID, 1000) AS GID,
+                   COUNT(*) AS CNT
+              FROM SDPTE_RB_SOURCE
+             GROUP BY MOD(ID, 1000)
+           ) D;
+PASS_SECOND_SPILL 
+--------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.EXTENT_PAGE_COUNT = 64
+                AND D.CURRSIZE > D.INITSIZE
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_REUSE_PROJECTION
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RB_TS';
+PASS_RUNTIME_REUSE_PROJECTION 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RB_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RB_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RB_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

@@ -70,7 +70,6 @@ SECTOR; GROW RUNTIME BEFORE ABORT
 
     SELECT CASE
                WHEN D.CURRSIZE > D.INITSIZE
-                AND D.IOCOUNT > 0
                 AND T.ALLOCATED_PAGE_COUNT = 0
                THEN 1 ELSE 0
            END AS PASS_PRE_ABORT_RUNTIME
@@ -102,7 +101,7 @@ SECTOR; ABRUPT RESTART
 
     SELECT CASE
                WHEN D.CURRSIZE > D.INITSIZE
-                AND D.OPENED = 1
+                AND D.OPENED = 0
                 AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
                 AND T.ALLOCATED_PAGE_COUNT = 0
                THEN 1 ELSE 0

@@ -1,0 +1,146 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Spill across two TEMP files, drop one, and reattach the preserved file with REUSE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = T-RUN-03, T-RUN-05, T-RUN-14, T-DDL-02.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_MF_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_MF_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_MF_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_mf_02.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_MF_DATA
+        DATAFILE 'sdpte_mf_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_MF_TS
+        TEMPFILE 'sdpte_mf_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M,
+                 'sdpte_mf_02.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_MF_U IDENTIFIED BY SDPTE_MF_U
+        DEFAULT TABLESPACE SDPTE_MF_DATA
+        TEMPORARY TABLESPACE SDPTE_MF_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_MF_U/SDPTE_MF_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_MF_SOURCE
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_MF_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_MF_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; MULTI FILE SPILL AND REATTACH
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_MULTI_FILE_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_MF_SOURCE
+           ) D;
+PASS_MULTI_FILE_SPILL 
+------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(D.CURRSIZE) > SUM(D.INITSIZE)
+                AND T.DATAFILE_COUNT = 2
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_FILES_USED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_MF_TS'
+     GROUP BY T.DATAFILE_COUNT, T.ALLOCATED_PAGE_COUNT;
+PASS_BOTH_FILES_USED 
+-----------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTE_MF_TS DROP TEMPFILE 'sdpte_mf_02.dbf';
+Alter success.
+
+$T0> SELECT CASE WHEN DATAFILE_COUNT = 1 THEN 1 ELSE 0 END AS PASS_SECONDARY_DROPPED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_MF_TS';
+PASS_SECONDARY_DROPPED 
+-------------------------
+1           
+1 row selected.
+
+$T0> # Ordinary DROP TEMPFILE preserves the physical file, so REUSE is required.
+$T0> ALTER TABLESPACE SDPTE_MF_TS ADD TEMPFILE
+        'sdpte_mf_02.dbf' SIZE 1M REUSE
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 2
+                AND ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SECONDARY_REATTACHED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_MF_TS';
+PASS_SECONDARY_REATTACHED 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_MF_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_MF_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_MF_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_mf_02.dbf";
+

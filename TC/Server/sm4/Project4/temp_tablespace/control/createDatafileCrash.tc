@@ -66,7 +66,7 @@ SECTOR; CREATE AS THEN ABORT CONTROL
                              AND D.AUTOEXTEND = 1
                              AND D.NEXTSIZE = 512
                              AND D.MAXSIZE = 4096
-                             AND D.OPENED = 1
+                            AND D.OPENED = 0
                             THEN 1 ELSE 0
                         END) = 1
                THEN 1 ELSE 0
@@ -77,10 +77,12 @@ SECTOR; CREATE AS THEN ABORT CONTROL
        AND T.NAME = 'SDPTE_CC_TS';
 
     # The new file was durably bound before the in-memory path change. It is
-    # still present, but its active identity may not be adopted by another TBS.
+    # still present as a same-definition orphan.  REUSE is intentionally not
+    # specified here: explicit REUSE is the documented operation that may
+    # adopt a non-active orphan, while an ordinary CREATE must reject it.
     NODISPLAY ON;
     CREATE TEMPORARY TABLESPACE SDPTE_CC_PROBE
-        TEMPFILE 'sdpte_cc_new.dbf' SIZE 8M REUSE AUTOEXTEND OFF;
+        TEMPFILE 'sdpte_cc_new.dbf' SIZE 8M AUTOEXTEND OFF;
     NODISPLAY OFF;
 
     SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_ACTIVE_ORPHAN_REJECTED

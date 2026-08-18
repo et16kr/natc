@@ -1,0 +1,122 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject DROP TABLESPACE before it can unlink a substituted path.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = T-DDL-04 preflight subset; foreign-path refusal before commit.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # Unit Coverage        = unittestSdpteStandardLane: post-commit path replacement preserves the foreign inode.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE SDPTE_PS_DATA_T;
+$T0> DROP TABLESPACE SDPTE_PS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_PS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ps_02_saved.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_PS_DATA
+        DATAFILE 'sdpte_ps_data.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE TABLE SDPTE_PS_DATA_T
+    (
+        ID INTEGER PRIMARY KEY,
+        C1 VARCHAR(32)
+    ) TABLESPACE SDPTE_PS_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_PS_DATA_T VALUES (1, 'PATH_SOURCE');
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_PS_TS
+        TEMPFILE 'sdpte_ps_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_ps_02.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; DROP TABLESPACE PATH PREFLIGHT
+$T0> ##################################
+$T0> # Replace only the registered pathname. The runtime still owns the
+$T0> # original open inode now parked under the saved name.
+$T0> MV "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ps_02_saved.dbf";
+$T0> CP "${ALTIBASE_HOME}/dbs/sdpte_ps_data.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
+
+$T0> # DROP TABLESPACE INCLUDING CONTENTS AND DATAFILES is the touch-mode
+$T0> # cleanup path.  Its preflight must reject a foreign inode before any
+$T0> # metadata or physical file is removed.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND COUNT(D.ID) = 2
+               THEN 1 ELSE 0
+           END AS PASS_DROP_PREFLIGHT_REFUSED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PS_TS'
+     GROUP BY T.DATAFILE_COUNT;
+PASS_DROP_PREFLIGHT_REFUSED 
+------------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(C1) = 'PATH_SOURCE'
+               THEN 1 ELSE 0
+           END AS PASS_DATA_SOURCE_UNCHANGED
+      FROM SDPTE_PS_DATA_T;
+PASS_DATA_SOURCE_UNCHANGED 
+-----------------------------
+1           
+1 row selected.
+
+$T0> PASS_FOREIGN_PATH_PRESERVED
+
+$T0> # Restore the owned inode and prove the tablespace can then be removed.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
+$T0> MV "${ALTIBASE_HOME}/dbs/sdpte_ps_02_saved.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
+
+$T0> DROP TABLESPACE SDPTE_PS_TS INCLUDING CONTENTS AND DATAFILES;
+Drop success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_DROP_AFTER_RESTORE
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_PS_TS';
+PASS_DROP_AFTER_RESTORE 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE SDPTE_PS_DATA_T;
+$T0> DROP TABLESPACE SDPTE_PS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_PS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ps_02_saved.dbf";
+

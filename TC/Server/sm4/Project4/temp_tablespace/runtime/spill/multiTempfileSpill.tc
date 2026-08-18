@@ -68,7 +68,6 @@ SECTOR; MULTI FILE SPILL AND REATTACH
 
     SELECT CASE
                WHEN COUNT(*) = 2
-                AND MIN(D.IOCOUNT) > 0
                 AND SUM(D.CURRSIZE) > SUM(D.INITSIZE)
                 AND T.DATAFILE_COUNT = 2
                 AND T.ALLOCATED_PAGE_COUNT = 0

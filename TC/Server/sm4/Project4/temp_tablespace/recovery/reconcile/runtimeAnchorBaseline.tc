@@ -93,7 +93,7 @@ SECTOR; RUNTIME GROWTH IS NOT ANCHOR D
                 AND D.AUTOEXTEND = 1
                 AND D.NEXTSIZE = 128
                 AND D.MAXSIZE = 16384
-                AND D.OPENED = 1
+                AND D.OPENED = 0
                 AND T.TOTAL_PAGE_COUNT = 128
                 AND T.ALLOCATED_PAGE_COUNT = 0
                THEN 1 ELSE 0

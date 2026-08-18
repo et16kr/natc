@@ -1,4 +1,4 @@
-TestSuiteDescription  = Simple TEMP Tablespace Regression (Role-based folder suites, 77 cases)
+TestSuiteDescription  = Simple TEMP Tablespace Regression (Role-based folder suites, 82 cases)
 ###############################################################################
 control/control.ts
 ddl/create/ddl_create.ts

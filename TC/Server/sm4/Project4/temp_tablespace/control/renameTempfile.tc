@@ -1,10 +1,10 @@
 ###########################################################################
 # TestCase Description = Rename TEMP definitions through both CONTROL SQL forms.
 # Project ID           = workspace/simple_temp_tablespace
-# Design Coverage      = metadata-only rename, per-file Anchor path, startup binding at new paths.
+# Design Coverage      = atomic registry collision check, metadata rename, Anchor path, startup binding.
 # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
-# iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
-# Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
 # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
 ###########################################################################
 INCLUDE stdFunc.i;
@@ -18,6 +18,8 @@ SECTOR; INITIALIZATION
 
     SKIP BEGIN;
     DROP TABLESPACE SDPTE_CR_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CR_OTHER_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CR_DATA INCLUDING CONTENTS AND DATAFILES;
     SKIP END;
 
     RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf";
@@ -30,6 +32,12 @@ SECTOR; PREPARATION
         TEMPFILE 'sdpte_cr_01.dbf' SIZE 8M AUTOEXTEND OFF,
                  'sdpte_cr_02.dbf' SIZE 4M
                      AUTOEXTEND ON NEXT 4M MAXSIZE 16M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_CR_OTHER_TS
+        TEMPFILE 'sdpte_cr_other.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    CREATE DISK TABLESPACE SDPTE_CR_DATA
+        DATAFILE 'sdpte_cr_data.dbf' SIZE 8M AUTOEXTEND OFF;
 
     NODISPLAY ON;
     CALL stdServerStop();
@@ -48,6 +56,21 @@ SECTOR; CONTROL METADATA RENAME
     P_WAIT SDPTE_CR_CONTROL $sPrompt;
     SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf';";
     P_WAIT SDPTE_CR_CONTROL $sPrompt;
+
+    # Expose the three expected ERR-11099 results so the user error contract
+    # is part of the oracle, not inferred only from the final metadata.
+    NODISPLAY OFF;
+    SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf';";
+    P_WAIT SDPTE_CR_CONTROL $sPrompt;
+    PRINT $Ret_;
+    SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_other.dbf';";
+    P_WAIT SDPTE_CR_CONTROL $sPrompt;
+    PRINT $Ret_;
+    SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_data.dbf';";
+    P_WAIT SDPTE_CR_CONTROL $sPrompt;
+    PRINT $Ret_;
+
+    NODISPLAY ON;
     SEND SDPTE_CR_CONTROL "quit";
     P_WAIT SDPTE_CR_CONTROL;
 
@@ -88,6 +111,38 @@ SECTOR; CONTROL METADATA RENAME
      WHERE T.ID = D.SPACEID
        AND T.NAME = 'SDPTE_CR_TS';
 
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE
+                            WHEN T.NAME = 'SDPTE_CR_OTHER_TS'
+                             AND D.NAME LIKE '%sdpte_cr_other.dbf'
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN T.NAME = 'SDPTE_CR_DATA'
+                             AND D.NAME LIKE '%sdpte_cr_data.dbf'
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CROSS_TBS_COLLISIONS
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_CR_OTHER_TS', 'SDPTE_CR_DATA');
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_cr_01_new.dbf'
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_cr_02_new.dbf'
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_RENAME_DEST_COLLISION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CR_TS';
+
     NODISPLAY ON;
     CALL stdServerStop();
     CALL stdServerStart();
@@ -110,6 +165,8 @@ SECTOR; FINALIZATION
 ##################################
     SKIP BEGIN;
     DROP TABLESPACE SDPTE_CR_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CR_OTHER_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CR_DATA INCLUDING CONTENTS AND DATAFILES;
     SKIP END;
 
     RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01.dbf";

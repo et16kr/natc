@@ -1,0 +1,124 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Discard a USER TEMP tablespace in CONTROL and drop it in SERVICE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = USER-only discard, cache-null projection, no recreate, DROP-only lifecycle.
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_DC_PROBE INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_DC_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DC_TS
+        TEMPFILE 'sdpte_dc_01.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 32M;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; CONTROL DISCARD
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.STATE = 1024
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.CURRSIZE = 1024
+                AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_DISCARDED_PROJECTION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DC_TS';
+PASS_DISCARDED_PROJECTION 
+----------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN STATE <> 1024
+               THEN 1 ELSE 0
+           END AS PASS_SYSTEM_TEMP_NOT_DISCARDED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+PASS_SYSTEM_TEMP_NOT_DISCARDED 
+---------------------------------
+1           
+1 row selected.
+
+$T0> # A discarded tablespace accepts DROP TABLESPACE and nothing else.
+
+$T0> SELECT CASE
+               WHEN T.STATE = 1024
+                AND D.CURRSIZE = 1024
+               THEN 1 ELSE 0
+           END AS PASS_DISCARDED_ALTER_REJECTED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DC_TS';
+PASS_DISCARDED_ALTER_REJECTED 
+--------------------------------
+1           
+1 row selected.
+
+$T0> DROP TABLESPACE SDPTE_DC_TS;
+Drop success.
+
+$T0> # If SERVICE recreated the discarded missing file, this CREATE without
+$T0> # REUSE would fail. It also proves DROP removed the old registry entry.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DC_PROBE
+        TEMPFILE 'sdpte_dc_01.dbf' SIZE 4M AUTOEXTEND OFF;
+Create success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 512
+               AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_DROP_ONLY_LIFECYCLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DC_PROBE';
+PASS_DROP_ONLY_LIFECYCLE 
+---------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_DC_PROBE INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_DC_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_dc_01.dbf";
+

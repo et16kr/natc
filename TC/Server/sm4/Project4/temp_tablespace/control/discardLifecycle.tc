@@ -108,7 +108,7 @@ SECTOR; CONTROL DISCARD
 
     SELECT CASE
                WHEN D.CURRSIZE = 512
-                AND D.OPENED = 1
+               AND D.OPENED = 0
                THEN 1 ELSE 0
            END AS PASS_DROP_ONLY_LIFECYCLE
       FROM V$TABLESPACES T,

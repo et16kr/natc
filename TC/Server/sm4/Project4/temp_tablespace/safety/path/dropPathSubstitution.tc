@@ -1,8 +1,10 @@
 ###########################################################################
-# TestCase Description = Preserve a substituted inode when DROP TEMPFILE revalidates its path.
+# TestCase Description = Reject DROP TABLESPACE before it can unlink a substituted path.
 # Project ID           = workspace/simple_temp_tablespace
-# Design Coverage      = T-DDL-04, T-DDL-27, T-RUN-05, S-01.
+# Design Coverage      = T-DDL-04 preflight subset; foreign-path refusal before commit.
 # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+# Unit Coverage        = unittestSdpteStandardLane: post-commit path replacement preserves the foreign inode.
 ###########################################################################
 INCLUDE stdFunc.i;
 
@@ -41,23 +43,25 @@ SECTOR; PREPARATION
                  'sdpte_ps_02.dbf' SIZE 8M AUTOEXTEND OFF;
 
 ##################################
-SECTOR; PATH SUBSTITUTION REJECTION
+SECTOR; DROP TABLESPACE PATH PREFLIGHT
 ##################################
     # Replace only the registered pathname. The runtime still owns the
     # original open inode now parked under the saved name.
     MV "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ps_02_saved.dbf";
     CP "${ALTIBASE_HOME}/dbs/sdpte_ps_data.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
 
-    # Expected error: pathname revalidation must reject the replacement.
+    # DROP TABLESPACE INCLUDING CONTENTS AND DATAFILES is the touch-mode
+    # cleanup path.  Its preflight must reject a foreign inode before any
+    # metadata or physical file is removed.
     NODISPLAY ON;
-    ALTER TABLESPACE SDPTE_PS_TS DROP TEMPFILE 'sdpte_ps_02.dbf';
+    DROP TABLESPACE SDPTE_PS_TS INCLUDING CONTENTS AND DATAFILES;
     NODISPLAY OFF;
 
     SELECT CASE
                WHEN T.DATAFILE_COUNT = 2
                 AND COUNT(D.ID) = 2
                THEN 1 ELSE 0
-           END AS PASS_DROP_REFUSED
+           END AS PASS_DROP_PREFLIGHT_REFUSED
       FROM V$TABLESPACES T,
            V$DATAFILES D
      WHERE T.ID = D.SPACEID
@@ -71,13 +75,22 @@ SECTOR; PATH SUBSTITUTION REJECTION
            END AS PASS_DATA_SOURCE_UNCHANGED
       FROM SDPTE_PS_DATA_T;
 
-    # Restore the owned inode and prove the ordinary DROP path still works.
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf" )
+    {
+        PRINT "PASS_FOREIGN_PATH_PRESERVED";
+    }
+    ELSE
+    {
+        PRINT "FAIL_FOREIGN_PATH_REMOVED";
+    }
+
+    # Restore the owned inode and prove the tablespace can then be removed.
     RM -f "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
     MV "${ALTIBASE_HOME}/dbs/sdpte_ps_02_saved.dbf" "${ALTIBASE_HOME}/dbs/sdpte_ps_02.dbf";
 
-    ALTER TABLESPACE SDPTE_PS_TS DROP TEMPFILE 'sdpte_ps_02.dbf';
+    DROP TABLESPACE SDPTE_PS_TS INCLUDING CONTENTS AND DATAFILES;
 
-    SELECT CASE WHEN DATAFILE_COUNT = 1 THEN 1 ELSE 0 END AS PASS_DROP_AFTER_RESTORE
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_DROP_AFTER_RESTORE
       FROM V$TABLESPACES
      WHERE NAME = 'SDPTE_PS_TS';
 

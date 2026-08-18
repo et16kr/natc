@@ -1,0 +1,84 @@
+###########################################################################
+# TestCase Description = Isolate a 38-page TEMP extent through runtime spill.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = T-RUN-01, T-RUN-10, T-RUN-14, F-07.
+# SQL/iSQL Manual      = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_E38_U CASCADE;
+    DROP TABLESPACE SDPTE_E38_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_E38_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_E38_DATA
+        DATAFILE 'sdpte_e38_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_E38_TS
+        TEMPFILE 'sdpte_e38_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 304K;
+
+    CREATE USER SDPTE_E38_U IDENTIFIED BY SDPTE_E38_U
+        DEFAULT TABLESPACE SDPTE_E38_DATA
+        TEMPORARY TABLESPACE SDPTE_E38_TS;
+
+    CONNECT SDPTE_E38_U/SDPTE_E38_U;
+
+    CREATE TABLE SDPTE_E38_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_E38_DATA;
+
+    INSERT INTO SDPTE_E38_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; TEST 38 PAGE EXTENT
+##################################
+    SELECT CASE
+               WHEN COUNT(*) = 30000 AND COUNT(DISTINCT K1) = 30000
+               THEN 1 ELSE 0
+           END AS PASS_EXTENT_38_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_E38_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.EXTENT_PAGE_COUNT = 38
+                AND D.CURRSIZE > D.INITSIZE
+                AND D.IOCOUNT > 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_EXTENT_38_RUNTIME
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_E38_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP USER SDPTE_E38_U CASCADE;
+    DROP TABLESPACE SDPTE_E38_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_E38_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

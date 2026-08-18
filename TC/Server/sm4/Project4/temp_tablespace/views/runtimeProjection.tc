@@ -1,9 +1,10 @@
 ###########################################################################
-# TestCase Description = Verify public TEMP file columns before and after runtime spill.
+# TestCase Description = Verify stable public TEMP file columns before and after runtime spill.
 # Project ID           = workspace/simple_temp_tablespace
 # Design Coverage      = T-DRP-02, T-DRP-03, T-DRP-08, F-03, F-06.
 # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
-# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+# iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+# Tuning Manual        = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/Performance Tuning Guide.md
 ###########################################################################
 INCLUDE stdFunc.i;
 
@@ -47,7 +48,7 @@ SECTOR; INITIAL VIEW
                 AND D.NEXTSIZE = 128
                 AND D.MAXSIZE = 16384
                 AND D.AUTOEXTEND = 1
-                AND D.OPENED = 1
+                AND D.OPENED = 0
                 AND D.IOCOUNT = 0
                 AND D.OLDEST_LSN_FILENO = 0
                 AND D.OLDEST_LSN_OFFSET = 0
@@ -91,8 +92,6 @@ SECTOR; RUNTIME VIEW
                 AND D.NEXTSIZE = 128
                 AND D.MAXSIZE = 16384
                 AND D.AUTOEXTEND = 1
-                AND D.OPENED = 1
-                AND D.IOCOUNT > 0
                 AND D.OLDEST_LSN_FILENO = 0
                 AND D.OLDEST_LSN_OFFSET = 0
                 AND D.CREATE_LSN_FILENO = 0

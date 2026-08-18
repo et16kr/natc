@@ -1,0 +1,156 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Recreate a missing TEMP file at committed D, not runtime-grown R.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = runtime-only R, checkpoint durability boundary, missing-file reconcile.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # ATAF Runtime         = stdFunc.i clean stop/start and exact RM target.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_AB_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_AB_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_AB_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_AB_DATA
+        DATAFILE 'sdpte_ab_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_AB_TS
+        TEMPFILE 'sdpte_ab_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_AB_U IDENTIFIED BY SDPTE_AB_U
+        DEFAULT TABLESPACE SDPTE_AB_DATA
+        TEMPORARY TABLESPACE SDPTE_AB_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_AB_U/SDPTE_AB_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_AB_SOURCE
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_AB_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_AB_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('B', 1790, 'B')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; RUNTIME GROWTH IS NOT ANCHOR D
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_AB_SOURCE
+           ) D;
+PASS_RUNTIME_SPILL 
+---------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.INITSIZE = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_R_GT_D
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AB_TS';
+PASS_RUNTIME_R_GT_D 
+----------------------
+1           
+1 row selected.
+
+$T0> # Even an explicit checkpoint must not turn runtime R into committed D.
+$T0> ALTER SYSTEM CHECKPOINT;
+Alter success.
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RECREATE_FROM_ANCHOR_D
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_AB_TS';
+PASS_RECREATE_FROM_ANCHOR_D 
+------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_AB_U/SDPTE_AB_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RECREATED_FILE_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_AB_SOURCE
+           ) D;
+PASS_RECREATED_FILE_SPILL 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_AB_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_AB_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_AB_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

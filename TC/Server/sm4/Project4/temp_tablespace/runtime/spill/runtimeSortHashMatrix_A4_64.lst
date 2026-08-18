@@ -1,0 +1,182 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Spill sort, grouped hash, and hash join work areas into a user TEMP tablespace.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = T-RUN-10, T-RUN-14, T-ND-01, F-02, F-03.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # Tuning Manual        = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+$T0> # Repo Manual Fallback = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_SH_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_SH_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_SH_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_SH_DATA
+        DATAFILE 'sdpte_sh_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_SH_TS
+        TEMPFILE 'sdpte_sh_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 256M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_SH_U IDENTIFIED BY SDPTE_SH_U
+        DEFAULT TABLESPACE SDPTE_SH_DATA
+        TEMPORARY TABLESPACE SDPTE_SH_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET SORT_AREA_SIZE = 524288;
+Alter success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_SH_U/SDPTE_SH_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_SH_A
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_SH_DATA;
+Create success.
+
+$T0> CREATE TABLE SDPTE_SH_B
+    (
+        ID INTEGER,
+        K1 VARCHAR(2000)
+    ) TABLESPACE SDPTE_SH_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_SH_A
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('A', 1790, 'A')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> INSERT INTO SDPTE_SH_B
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('B', 1790, 'B')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; SORT HASH AND JOIN SPILL
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN COUNT(*) = 30000
+                AND MIN(RN) = 1
+                AND MAX(RN) = 30000
+                AND SUM(CASE WHEN RN = 1 AND ID = 30000 THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_SORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */
+                   ID,
+                   ROW_NUMBER() OVER (ORDER BY K1 DESC) AS RN
+              FROM SDPTE_SH_A
+           ) S;
+PASS_SORT_SPILL 
+------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1000
+                AND MIN(CNT) = 30
+                AND MAX(CNT) = 30
+                AND SUM(CNT) = 30000
+               THEN 1 ELSE 0
+           END AS PASS_GROUP_HASH_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK GROUP_HASH */
+                   MOD(ID, 1000) AS GID,
+                   COUNT(*) AS CNT
+              FROM SDPTE_SH_A
+             GROUP BY MOD(ID, 1000)
+           ) G;
+PASS_GROUP_HASH_SPILL 
+------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 30000
+                AND MIN(LENGTH(J.AK) + LENGTH(J.BK)) = 3598
+                AND MAX(LENGTH(J.AK) + LENGTH(J.BK)) = 3598
+               THEN 1 ELSE 0
+           END AS PASS_HASH_JOIN_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK ORDERED USE_HASH(A, B) */
+                   A.K1 AS AK,
+                   B.K1 AS BK
+              FROM SDPTE_SH_A A,
+                   SDPTE_SH_B B
+             WHERE A.ID = B.ID
+           ) J;
+PASS_HASH_JOIN_SPILL 
+-----------------------
+1           
+1 row selected.
+
+$T0> # Close the spill-producing session so its query work areas are released
+$T0> # before the public TEMP projection is sampled.
+$T0> DISCONNECT;
+Disconnect success.
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_IO_PROJECTION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_SH_TS';
+PASS_RUNTIME_IO_PROJECTION 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET SORT_AREA_SIZE = 1048576;
+Alter success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_SH_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_SH_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_SH_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

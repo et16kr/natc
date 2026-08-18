@@ -1,0 +1,103 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Crash before CONTROL CREATE DATAFILE AS reaches a whole-Anchor rewrite.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = AS binding-before-path order, zero immediate Anchor force, orphan preservation.
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # Repo iSQL Fallback   = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CC_PROBE INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CC_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cc_old.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cc_new.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CC_TS
+        TEMPFILE 'sdpte_cc_old.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 32M;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; CREATE AS THEN ABORT CONTROL
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cc_old.dbf'
+                             AND D.CURRSIZE = 1024
+                             AND D.AUTOEXTEND = 1
+                             AND D.NEXTSIZE = 512
+                             AND D.MAXSIZE = 4096
+                            AND D.OPENED = 0
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_OLD_ANCHOR_AUTHORITATIVE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CC_TS';
+PASS_OLD_ANCHOR_AUTHORITATIVE 
+--------------------------------
+1           
+1 row selected.
+
+$T0> # The new file was durably bound before the in-memory path change. It is
+$T0> # still present as a same-definition orphan.  REUSE is intentionally not
+$T0> # specified here: explicit REUSE is the documented operation that may
+$T0> # adopt a non-active orphan, while an ordinary CREATE must reject it.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_ACTIVE_ORPHAN_REJECTED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_CC_PROBE';
+PASS_ACTIVE_ORPHAN_REJECTED 
+------------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN DATAFILE_COUNT = 1 THEN 1 ELSE 0 END AS PASS_ORIGINAL_UNCHANGED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_CC_TS';
+PASS_ORIGINAL_UNCHANGED 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CC_PROBE INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CC_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cc_old.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cc_new.dbf";
+

@@ -1,0 +1,170 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Drop and REUSE a secondary TEMP file between two spills.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = T-RUN-05, T-RUN-14, T-DDL-02, T-DDL-07.
+$T0> # SQL/iSQL Manual      = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RA_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RA_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RA_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ra_02.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_RA_DATA
+        DATAFILE 'sdpte_ra_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> # Each first spill needs more than 8M of fixed TEMP space for this
+$T0> # 30,000-row, 2,000-byte hash workload.  Keep EXTENTSIZE at 512K (64
+$T0> # pages) while providing enough space to reach the DROP/REUSE assertions.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_RA_TS
+        TEMPFILE 'sdpte_ra_01.dbf' SIZE 64M AUTOEXTEND OFF,
+                 'sdpte_ra_02.dbf' SIZE 64M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_RA_U IDENTIFIED BY SDPTE_RA_U
+        DEFAULT TABLESPACE SDPTE_RA_DATA
+        TEMPORARY TABLESPACE SDPTE_RA_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_RA_U/SDPTE_RA_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_RA_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_RA_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_RA_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; SPILL DROP AND REATTACH
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_PRE_DROP_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RA_SOURCE
+           ) D;
+PASS_PRE_DROP_SPILL 
+----------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ALTER TABLESPACE SDPTE_RA_TS DROP TEMPFILE 'sdpte_ra_02.dbf';
+Alter success.
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 1
+                AND TOTAL_PAGE_COUNT = 8192
+                AND ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SECONDARY_DROPPED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_RA_TS';
+PASS_SECONDARY_DROPPED 
+-------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTE_RA_TS ADD TEMPFILE
+        'sdpte_ra_02.dbf' SIZE 64M REUSE AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 2
+                AND TOTAL_PAGE_COUNT = 16384
+                AND ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SECONDARY_REATTACHED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_RA_TS';
+PASS_SECONDARY_REATTACHED 
+----------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_RA_U/SDPTE_RA_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_POST_REATTACH_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_RA_SOURCE
+           ) D;
+PASS_POST_REATTACH_SPILL 
+---------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND COUNT(D.ID) = 2
+                AND SUM(CASE
+                            WHEN D.INITSIZE = 8192
+                             AND D.CURRSIZE = 8192
+                             AND D.AUTOEXTEND = 0
+                            THEN 1 ELSE 0
+                        END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_POST_REATTACH_PROJECTION
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_RA_TS'
+     GROUP BY T.DATAFILE_COUNT, T.ALLOCATED_PAGE_COUNT;
+PASS_POST_REATTACH_PROJECTION 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_RA_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_RA_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_RA_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ra_02.dbf";
+

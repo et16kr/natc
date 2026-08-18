@@ -1,0 +1,177 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Rename TEMP definitions through both CONTROL SQL forms.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = atomic registry collision check, metadata rename, Anchor path, startup binding.
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # iSQL Manual          = /home/et16/work/altidev4_gi/docs/manuals/altibase/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CR_OTHER_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CR_TS
+        TEMPFILE 'sdpte_cr_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_cr_02.dbf' SIZE 4M
+                     AUTOEXTEND ON NEXT 4M MAXSIZE 16M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CR_OTHER_TS
+        TEMPFILE 'sdpte_cr_other.dbf' SIZE 4M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE DISK TABLESPACE SDPTE_CR_DATA
+        DATAFILE 'sdpte_cr_data.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; CONTROL METADATA RENAME
+$T0> ##################################
+
+$T0> SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf';";
+$T0> P_WAIT SDPTE_CR_CONTROL $sPrompt;
+$T0> [ERR-11099 : The file name [/home/et16/work/altidev4/altibase_home/dbs/sdpte_cr_01_new.dbf] is in use by another tablespace.]
+
+$$EOF$$
+
+$T0> SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_other.dbf';";
+$T0> P_WAIT SDPTE_CR_CONTROL $sPrompt;
+$T0> [ERR-11099 : The file name [/home/et16/work/altidev4/altibase_home/dbs/sdpte_cr_other.dbf] is in use by another tablespace.]
+
+$$EOF$$
+
+$T0> SEND SDPTE_CR_CONTROL "ALTER DATABASE RENAME DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf' TO '${ALTIBASE_HOME}/dbs/sdpte_cr_data.dbf';";
+$T0> P_WAIT SDPTE_CR_CONTROL $sPrompt;
+$T0> [ERR-11099 : The file name [/home/et16/work/altidev4/altibase_home/dbs/sdpte_cr_data.dbf] is in use by another tablespace.]
+
+$$EOF$$
+
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cr_01_new.dbf'
+                             AND D.CURRSIZE = 1024
+                             AND D.AUTOEXTEND = 0
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN D.NAME LIKE '%sdpte_cr_02_new.dbf'
+                             AND D.CURRSIZE = 512
+                             AND D.AUTOEXTEND = 1
+                             AND D.NEXTSIZE = 512
+                             AND D.MAXSIZE = 2048
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CONTROL_RENAME
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CR_TS';
+PASS_CONTROL_RENAME 
+----------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE
+                            WHEN T.NAME = 'SDPTE_CR_OTHER_TS'
+                             AND D.NAME LIKE '%sdpte_cr_other.dbf'
+                            THEN 1 ELSE 0
+                        END) = 1
+                AND SUM(CASE
+                            WHEN T.NAME = 'SDPTE_CR_DATA'
+                             AND D.NAME LIKE '%sdpte_cr_data.dbf'
+                            THEN 1 ELSE 0
+                        END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CROSS_TBS_COLLISIONS
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_CR_OTHER_TS', 'SDPTE_CR_DATA');
+PASS_CROSS_TBS_COLLISIONS 
+----------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_cr_01_new.dbf'
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_cr_02_new.dbf'
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_RENAME_DEST_COLLISION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CR_TS';
+PASS_RENAME_DEST_COLLISION 
+-----------------------------
+1           
+1 row selected.
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.NAME LIKE '%_new.dbf' THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_RENAME_ANCHOR_DURABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CR_TS';
+PASS_RENAME_ANCHOR_DURABLE 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_CR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CR_OTHER_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_01_new.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_cr_02_new.dbf";
+

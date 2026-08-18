@@ -1,0 +1,88 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject a foreign TEMP header repeatedly without mutating the definition.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = startup identify rejection, fail-closed reconcile, retry idempotence.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # iSQL Manual Fallback = /home/et16/work/altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # ATAF Runtime         = stdFunc.i clean stop/start/kill and exact CP/MV/RM targets.
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE SDPTE_FH_UNEXPECTED;
+$T0> DROP TABLESPACE SDPTE_FH_A INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_FH_B INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a_saved.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_FH_A
+        TEMPFILE 'sdpte_fh_a.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_FH_B
+        TEMPFILE 'sdpte_fh_b.dbf' SIZE 8M AUTOEXTEND OFF;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; TWO FAIL_CLOSED STARTUP ATTEMPTS
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_BOTH_STARTUPS_REJECTED
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE TABLE_NAME = 'SDPTE_FH_UNEXPECTED';
+PASS_BOTH_STARTUPS_REJECTED 
+------------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.OPENED = 0 THEN 1 ELSE 0 END) = 2
+                AND SUM(CASE WHEN D.CURRSIZE = 1024 THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_DEFINITIONS_UNCHANGED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_FH_A', 'SDPTE_FH_B');
+PASS_DEFINITIONS_UNCHANGED 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE SDPTE_FH_UNEXPECTED;
+$T0> DROP TABLESPACE SDPTE_FH_A INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_FH_B INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_a_saved.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_fh_b.dbf";
+
