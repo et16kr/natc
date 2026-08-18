@@ -1,0 +1,80 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/tool/aexport/initialize.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../../include/globalIndexEnv.i;
+
+###########################################################################
+# Check Constraint Test
+###########################################################################
+
+##########################################################################
+# PORT EDIT: stdFunc.i goes with the three calls below
+#
+# Original line 5 was "INCLUDE stdFunc.i;". The only thing this case used it
+# for is stdServerKill/stdClean/stdServerStart, and the next PORT EDIT
+# removes those three -- see it for the reason. Nothing else in this file
+# calls a std* DEF, so the include goes too rather than sitting here as a
+# fragment that binds $gStdIsqlSys to this workflow's isolated instance.
+##########################################################################
+##########################################################################
+# PORT EDIT END
+##########################################################################
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; CLEAN
+##################################
+
+NODISPLAY ON;
+##########################################################################
+# PORT EDIT: do not recreate the database this workflow runs on
+#
+# Original lines 14-16 were:
+#
+#   CALL stdServerKill();
+#   CALL stdClean();
+#   CALL stdServerStart();
+#
+# stdClean() is destroydb + createdb: it drops "mydb" and creates it again
+# with the character set KO16KSC5601. In the official harness that is how a
+# case gets a known database. Here it is not available:
+#
+#   * this runner points ALTIBASE_HOME at the workflow's isolated instance
+#     (scripts/global-index/testdb.sh, port 20399), and that instance is
+#     UTF8. Every golden file, every baseline tsv and every other .lst in
+#     this port was recorded on a UTF8 database. Recreating it as
+#     KO16KSC5601 from inside one case would move all of them.
+#   * the freshness stdClean() exists to provide is already provided, and
+#     provided earlier: this suite carries NEEDS_FRESH_INSTANCE, so
+#     natc-check.sh destroys and rebuilds the instance before the suite
+#     starts (v4-natc-port.md 6.4).
+#   * stdServerKill()/stdServerStart() go with it: they are how stdClean()
+#     is bracketed, and on their own they would only bounce an instance
+#     that natc-check.sh just started.
+#
+# What stays is the part these four cases exist for -- installing the
+# DBMS_METADATA package, without which aexport stops at
+# [ERR-91144 : DBMS_METADATA package does not exist.] and the three cases
+# after this one measure nothing (v2-regression-net.md 4 recorded exactly
+# that error for these four and left it there).
+##########################################################################
+##########################################################################
+# PORT EDIT END
+##########################################################################
+EXEC P1 "is -f ${ALTIBASE_HOME}/packages/dbms_metadata.sql";
+P_WAIT P1;
+EXEC P1 "is -f ${ALTIBASE_HOME}/packages/dbms_metadata.plb";
+P_WAIT P1;
+NODISPLAY OFF;
+
+}

@@ -12,6 +12,17 @@ TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/atomic_insert.o
 TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/make.log
 TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/process.out
 
+# tool/aexport 의 실행 산출물. 케이스가 aexport 를 그 자리에서 돌려 스크립트
+# 열일곱 개를 쓰고 다시 읽어들인다. FINALIZE 의 RM 이 정상 종료에서는 전부
+# 지우지만, 중간에 죽으면 남는다.
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/ALL_*
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/USER1_*
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/user1_*
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/run_*
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/live-altibase.txt
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/Altibase.log
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/aexport/process.out
+
 # ATAF 가 매 실행마다 work/ 에 다시 쓰는 것들 (인스턴스 설정 복사본과 로그).
 work/*.ts
 work/altibase.info

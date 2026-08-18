@@ -1,0 +1,770 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###########################################################################
+--# ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/indexThrMovement.sql
+--#
+--# Body below is byte-identical to the original. The one line this port
+--# adds is the premise: the original measures these statements on the
+--# $GIT_ hidden-table implementation, this file measures the same
+--# statements on the native global index (F07 -- see include/pinNative.sql).
+--###########################################################################
+# ==> [../include/pinNative.sql] BEGIN <=
+--###########################################################################
+--# NativeGlobalIndexPort1624 - the premise of every ported .sql case.
+--#
+--# A .sql case cannot CALL a DEF the way a .tc case calls PIN_DISK_NATIVE(),
+--# so the same two statements are pulled in per case with ATC's own include
+--# directive:
+--#
+--#     --+LOAD_SQL <relative path>/include/pinNative.sql;
+--#
+--# ATC inlines this file into the case transcript between BEGIN/END markers,
+--# which is exactly what F07 asks for: the case states its own premise at the
+--# head of its own transcript instead of inheriting whatever the instance
+--# happens to be configured with.
+--#
+--#     DISK_GLOBAL_INDEX_ENABLE = 1  -> native  (this suite)
+--#     DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_   (the original suite)
+--#
+--# The readout below is not decoration. It is the tooth: if the property is
+--# ever 0 when a case runs, this one line differs and the case is red before
+--# it has measured anything, instead of quietly measuring the other
+--# implementation (disk-natc.md 6 records nine assertions that drifted that
+--# way).
+--#
+--# ASCII only, on purpose: 87 of the ported case bodies are EUC-KR and their
+--# bytes must stay untouched, so nothing this port adds may introduce a
+--# second encoding into a transcript.
+--###########################################################################
+
+$P0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$P0> SELECT CAST(VALUE1 AS VARCHAR(10)) DISK_GLOBAL_INDEX_ENABLE
+     FROM V$PROPERTY WHERE NAME = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+# ==> [../include/pinNative.sql] END <=
+
+--##########################################################################
+--# Parallel Index Rebuilding by Index Direction
+--##########################################################################
+
+--############################################################################
+--# INDEX THREAD MOVEMENT RESTART PARALLEL
+--############################################################################
+
+--######################################
+--+SECTOR 1; PREPARATION
+--######################################
+
+--+SYSTEM server kill;
+--+SET_ENV ALTIBASE_PARALLEL_LOAD_FACTOR = 2;
+--+SET_ENV ALTIBASE_INDEX_BUILD_THREAD_COUNT = 4;
+--+SET_ENV ALTIBASE_INDEX_BUILD_MIN_RECORD_COUNT = 100;
+--+SYSTEM server start;
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE klein;
+$P0> DROP TABLE gross;
+$P0> DROP TABLE gross2;
+$P0> DROP TABLE gross3;
+$P0> DROP TABLE gross4;
+--+SKIP END; 
+
+$P0> create table klein (k integer)
+     partition by range(k)
+     (
+     	partition p1 values less than('3'),
+     	partition p2 values less than('7'),
+     	partition p3 values default
+     ) tablespace sys_tbs_disk_data;
+Create success.
+
+$P0> create table gross (i1 bigint, i2 blob, i3 char(10), i4 date, i5 decimal(10,2),
+                         i6 double, i7 float, i8 byte(10), i9 nibble(10),
+                         ia integer, ib number(10), ic real, id smallint, ie varchar(10)
+     )
+     partition by range(ia)
+     (
+     	partition p1 values less than('1000'),
+     	partition p2 values less than('3000'),
+     	partition p3 values less than('5000'),
+     	partition p4 values less than('7000'),
+     	partition p5 values less than('9000'),
+     	partition p6 values default
+     ) tablespace sys_tbs_disk_data;
+Create success.
+
+$P0> create table gross2 (i1 bigint, i2 blob, i3 char(10), i4 date, i5 decimal(10,2),
+                         i6 double, i7 float, i8 byte(10), i9 nibble(10),
+                         ia integer, ib number(10), ic real, id smallint, ie varchar(10)
+     )
+     partition by range(ia)
+     (
+     	partition p1 values less than('1000'),
+     	partition p2 values less than('3000'),
+     	partition p3 values less than('5000'),
+     	partition p4 values less than('7000'),
+     	partition p5 values less than('9000'),
+     	partition p6 values default
+     ) tablespace sys_tbs_disk_data;
+Create success.
+
+$P0> create table gross3 (i1 bigint, i2 blob, i3 char(10), i4 date, i5 decimal(10,2),
+                         i6 double, i7 float, i8 byte(10), i9 nibble(10),
+                         ia integer, ib number(10), ic real, id smallint, ie varchar(10)
+     )
+     partition by range(ia)
+     (
+     	partition p1 values less than('1000'),
+     	partition p2 values less than('3000'),
+     	partition p3 values less than('5000'),
+     	partition p4 values less than('7000'),
+     	partition p5 values less than('9000'),
+     	partition p6 values default
+     ) tablespace sys_tbs_disk_data;
+Create success.
+
+$P0> create table gross4 (i1 bigint, i2 blob, i3 char(10), i4 date, i5 decimal(10,2),
+                         i6 double, i7 float, i8 byte(10), i9 nibble(10),
+                         ia integer, ib number(10), ic real, id smallint, ie varchar(10)
+     )
+     partition by range(ia)
+     (
+     	partition p1 values less than('1000'),
+     	partition p2 values less than('3000'),
+     	partition p3 values less than('5000'),
+     	partition p4 values less than('7000'),
+     	partition p5 values less than('9000'),
+     	partition p6 values default
+     ) tablespace sys_tbs_disk_data;
+Create success.
+
+-- create 10 records 0..9
+$P0> insert into klein(k) values(0);
+1 row inserted.
+$P0> insert into klein(k) values(1);
+1 row inserted.
+$P0> insert into klein(k) values(2);
+1 row inserted.
+$P0> insert into klein(k) values(3);
+1 row inserted.
+$P0> insert into klein(k) values(4);
+1 row inserted.
+$P0> insert into klein(k) values(5);
+1 row inserted.
+$P0> insert into klein(k) values(6);
+1 row inserted.
+$P0> insert into klein(k) values(7);
+1 row inserted.
+$P0> insert into klein(k) values(8);
+1 row inserted.
+$P0> insert into klein(k) values(9);
+1 row inserted.
+-- create 10000 records 0..9999
+$P0> create index i_klein on klein(k);
+Create success.
+
+$P0> insert into gross(ia,ib,id)
+     select
+     k1.k*1000+k2.k*100+k3.k*10+k4.k,
+     k1.k*1000+k2.k*100+k3.k*10+k4.k,
+     k1.k*1000+k2.k*100+k3.k*10+k4.k
+     from klein k1,
+     klein k2,
+     klein k3,
+     klein k4;
+10000 rows inserted.
+
+$P0> update gross set i3 = ia||'A', i4 = SYSDATE, ie = ia||'B';
+10000 rows updated.
+
+$P0> insert into gross2 select * from gross;
+10000 rows inserted.
+$P0> insert into gross3 select * from gross;
+10000 rows inserted.
+$P0> insert into gross4 select * from gross;
+10000 rows inserted.
+
+--######################################
+--+SECTOR 2; VALIDATION BEFORE
+--######################################
+
+$P0> select count(*) from gross;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross2;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross2 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross2 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross3;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross3 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross3 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross4;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross4 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross4 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+--######################################
+--+SECTOR 3; INDEX CREATION
+--######################################
+
+$P0> --+PWAIT ;
+
+--######################################
+--+SECTOR 4; VALIDATION
+--######################################
+
+$P0> select count(*) from gross;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross2;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross2 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross2 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross3;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross3 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross3 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross4;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross4 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross4 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+--######################################
+--+SECTOR 5; VALIDATION AFTER SERVER RESTART
+--######################################
+
+--+SYSTEM server kill;
+--+SYSTEM server start;
+
+$P0> select count(*) from gross;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross2;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross2 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross2 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross2 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross3;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross3 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross3 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross3 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+$P0> select count(*) from gross4;
+COUNT                
+-----------------------
+10000                
+1 row selected.
+$P0> select count(*) from gross4 where ia > 9000;
+COUNT                
+-----------------------
+999                  
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where ia = 8999;
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select count(*) from gross4 where i3 > '9000A';
+COUNT                
+-----------------------
+1110                 
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where i3 = '8999A';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+$P0> select i1,i3,i5,i6,i7,ia,ib,ic,id,ie from gross4 where i3 like '8999%';
+I1                   I3          I5          I6                     
+-------------------------------------------------------------------------
+I7          IA          IB          IC            ID          IE          
+---------------------------------------------------------------------------------
+                     8999A                                          
+            8999        8999                      8999        8999B       
+1 row selected.
+
+--######################################
+--+SECTOR 6; FINALIZATION
+--######################################
+
+$P0> DROP TABLE gross;
+Drop success.
+$P0> DROP TABLE gross2;
+Drop success.
+$P0> DROP TABLE gross3;
+Drop success.
+$P0> DROP TABLE gross4;
+Drop success.
+$P0> drop table klein;
+Drop success.
+
+$P1> alter table gross add primary key (ia);
+Alter success.
+$P1> create index i_gross_34 on gross( i3 asc, i4 desc) indextype is btree;
+Create success.
+$P1> create index i_gross_b on gross( ib desc ) indextype is ttree;
+[ERR-31001 : SQL syntax error 
+0001 : create index I_GROSS_B on GROSS( IB desc ) INDEXTYPE is TTREE
+                                                 ^        ^
+]
+$P1> create index i_gross_d on gross( id desc ) indextype is btree;
+Create success.
+$P1> create unique index i_gross_e on gross( ie );
+Create success.
+
+
+$P2> alter table gross2 add primary key (ia);
+Alter success.
+$P2> create index i_gross2_34 on gross2( i3 asc, i4 desc) indextype is btree;
+Create success.
+$P2> create index i_gross2_b on gross2( ib desc ) indextype is ttree;
+[ERR-31001 : SQL syntax error 
+0001 : create index I_GROSS2_B on GROSS2( IB desc ) INDEXTYPE is TTREE
+                                                   ^        ^
+]
+$P2> create index i_gross2_d on gross2( id desc ) indextype is btree;
+Create success.
+$P2> create unique index i_gross2_e on gross2( ie );
+Create success.
+
+
+$P3> alter table gross3 add primary key (ia);
+Alter success.
+$P3> create index i_gross3_34 on gross3( i3 asc, i4 desc) indextype is btree;
+Create success.
+$P3> create index i_gross3_b on gross3( ib desc ) indextype is ttree;
+[ERR-31001 : SQL syntax error 
+0001 : create index I_GROSS3_B on GROSS3( IB desc ) INDEXTYPE is TTREE
+                                                   ^        ^
+]
+$P3> create index i_gross3_d on gross3( id desc ) indextype is btree;
+Create success.
+$P3> create unique index i_gross3_e on gross3( ie );
+Create success.
+
+
+$P4> alter table gross4 add primary key (ia);
+Alter success.
+$P4> create index i_gross4_34 on gross4( i3 asc, i4 desc) indextype is btree;
+Create success.
+$P4> create index i_gross4_b on gross4( ib desc ) indextype is ttree;
+[ERR-31001 : SQL syntax error 
+0001 : create index I_GROSS4_B on GROSS4( IB desc ) INDEXTYPE is TTREE
+                                                   ^        ^
+]
+$P4> create index i_gross4_d on gross4( id desc ) indextype is btree;
+Create success.
+$P4> create unique index i_gross4_e on gross4( ie );
+Create success.
+

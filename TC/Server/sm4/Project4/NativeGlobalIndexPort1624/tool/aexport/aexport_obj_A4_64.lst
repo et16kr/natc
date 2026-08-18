@@ -1,0 +1,1686 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - DESC_INDEX 의 네이티브 재정의 (배치 5)
+$T0> #
+$T0> # 원본 DDL/desc_global_index.i 를 대신한다. 원본과 **같은 이름, 같은 인자**
+$T0> # 의 DEF DESC_INDEX( @aName ) 하나만 정의하므로, 이 배치 22 개 케이스의
+$T0> # CALL DESC_INDEX( ... ) 자리는 원본과 바이트 동일하게 남는다.
+$T0> # (checkFunctionIndex.i 가 배치 4 에서 쓴 것과 같은 수법이다.)
+$T0> #
+$T0> # ---------------------------------------------------------------------
+$T0> # ★ 원본이 무엇을 하고 있었나
+$T0> # ---------------------------------------------------------------------
+$T0> #   desc "$GIT_@{aName}";                    -- 숨김 테이블의 모양
+$T0> #   create table "$_TEMP" as select * from "$GIT_@{aName}";
+$T0> #   update "$_TEMP" set "$GIT_OID"=0, "$GIT_RID"=0;
+$T0> #   select * from "$_TEMP";                  -- 숨김 테이블의 내용
+$T0> #
+$T0> # 즉 "인덱스를 담은 테이블을 서술하고 그 안을 들여다본다" 이다. 네이티브
+$T0> # 에는 그 테이블이 없다. 없는 것을 "에러가 난다" 로 굳히면 이유가 달라져도
+$T0> # 초록이 되므로(v3-natc-port.md 6.1), 없음을 **값 0** 으로 적고 인덱스
+$T0> # 자신의 서술은 네이티브 카탈로그와 런타임 헤더에서 가져온다.
+$T0> #
+$T0> # ---------------------------------------------------------------------
+$T0> # ★ 네 겹
+$T0> # ---------------------------------------------------------------------
+$T0> #   겹 0  숨김 테이블이 없다. 이 이름의 것(THIS_GIT_TABLE)과 이 사용자의
+$T0> #         어느 것이든(ANY_GIT_TABLE) 둘 다 센다. 0 만 적으면 조회가 깨져도
+$T0> #         0 이므로, 프로퍼티 0 에서 1 이 되는 자리를 이빨로 남긴다.
+$T0> #   겹 1  인덱스의 정체 -- 판별자(SYS_PART_INDICES_.PARTITION_TYPE = 101),
+$T0> #         유니크, 인덱스 테이블스페이스. 인덱스가 없으면 No rows selected 다
+$T0> #         (원본의 ERR-91014 자리). 인덱스 테이블스페이스는 원본이
+$T0> #         desc "$GIT_X" 의 [ TABLESPACE : ... ] 줄로 재던 것과 같은 것을
+$T0> #         재며, using index tablespace 절이 있는 섹터가 그것을 쓴다.
+$T0> #   겹 2  글로벌의 구조 -- 인덱스 파티션 수(글로벌이면 0), 런타임 헤더
+$T0> #         X$DISK_BTREE_HEADER 의 IS_GLOBAL / MEMBER_COUNT /
+$T0> #         ACTIVE_MEMBER_COUNT. 카탈로그가 아니라 **도는 서버의 헤더**이므로
+$T0> #         파티션 DDL 직후 카탈로그와 어긋나면 여기가 운다. DROP PARTITION 이
+$T0> #         지나가면 MEMBER_COUNT 와 ACTIVE_MEMBER_COUNT 가 갈라진다.
+$T0> #   겹 3  키 컬럼과 정렬 순서 -- 원본 desc 의 [ INDEX ] 절이 재던 것.
+$T0> #
+$T0> # ★ 페이지 ID·인덱스 ID·OID 는 한 줄도 내지 않는다. 인스턴스가 여태
+$T0> #   만든 객체 수의 함수라 실행마다 달라진다(NEEDS_FRESH_INSTANCE).
+$T0> #   같은 이유로 런타임 헤더는 INDEX_NAME 으로만 걸러 세고, 로컬 인덱스의
+$T0> #   파티션 헤더 이름(__SYS_PART_IDX_ID_<n>)은 쳐다보지 않는다.
+$T0> #
+$T0> # ---------------------------------------------------------------------
+$T0> # ★ 원본에 있고 여기 없는 것 -- 엔트리 목록
+$T0> # ---------------------------------------------------------------------
+$T0> # 원본의 넷째 줄(select * from "$_TEMP")은 인덱스가 담은 키를 줄 단위로
+$T0> # 찍었다. 네이티브 b-tree 의 내용은 SQL 로 볼 수 없고, 내용을 재는 유일한
+$T0> # 건전한 방법은 **힌트로 그 인덱스를 태운 스캔과 풀스캔의 차집합 + 플랜
+$T0> # 증거**다(include/checkGlobalIndex.i 의 세 겹). 그것은 테이블 이름과
+$T0> # 술어를 알아야 하는데 DESC_INDEX 는 인덱스 이름 하나만 받는다.
+$T0> # 그래서 내용 검사는 원본이 그것을 두었던 자리에 그대로 둔다 --
+$T0> # 이 배치의 파티션 DDL 여섯 케이스가 INCLUDE 하는 check_global_index.i 다
+$T0> # (원본의 그 검사는 _PROWID 때문에 한 번도 돈 적이 없다. 이식본은 돈다).
+$T0> # 수와 판정은 v4-natc-port-3.md 3.4.
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/tool/aexport/aexport_obj.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Set Null Test
+$T0> ###########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; INITIALIZE
+$T0> ##################################
+
+
+$T0> MV -f "${ALTIBASE_HOME}/conf/aexport.properties" "${ALTIBASE_HOME}/conf/aexport.properties.org";
+$T0> CP "aexport.properties" "${ALTIBASE_HOME}/conf/aexport.properties";
+
+$T0> SKIP BEGIN;
+$T0> connect sys/manager;
+$T0> drop user user1 cascade;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> SKIP END;
+
+
+$T0> connect sys/manager;
+Connect success.
+
+$T0> create user user1 identified by user1 default tablespace sys_tbs_disk_data;
+Create success.
+$T0> connect user1/user1;
+Connect success.
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t1 add constraint t1_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t1_idx1 on t1(i2);
+Create success.
+$T0> create index t1_idx2 on t1(i2, i3 desc, i4);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i2 desc);
+Create success.
+
+$T0> create index t1_idx4 on t1(i4 desc, i3) local;
+Create success.
+$T0> create index t1_idx5 on t1(i4) local;
+Create success.
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition pd
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t2 add constraint t2_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t2 add constraint t2_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t2_idx1 on t2(i2);
+Create success.
+$T0> create index t2_idx2 on t2(i2, i3 desc, i4);
+Create success.
+$T0> create index t2_idx3 on t2(i3, i2 desc);
+Create success.
+
+$T0> create index t2_idx4 on t2(i4 desc, i3) local;
+Create success.
+$T0> create index t2_idx5 on t2(i4) local;
+Create success.
+
+$T0> create table t3
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+  partition p2 values (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+  partition p3 values (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+  partition p4 values (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t3 add constraint t3_pk primary key (i2, i1);
+Alter success.
+$T0> alter table t3 add constraint t3_uk unique (i3, i2, i1);
+Alter success.
+
+$T0> create index t3_idx1 on t3(i2);
+Create success.
+$T0> create index t3_idx2 on t3(i2, i3 desc, i4);
+Create success.
+$T0> create index t3_idx3 on t3(i3, i2 desc);
+Create success.
+
+$T0> create index t3_idx4 on t3(i4 desc, i3) local;
+Create success.
+$T0> create index t3_idx5 on t3(i4) local;
+Create success.
+
+
+$T0> ##################################
+$T0> # SECTOR; EXPORT
+$T0> ##################################
+
+$T0> EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager -object user1.t1";
+$T0> P_WAIT PROC1;
+
+$T0> CAT "USER1_T1_CRT.sql";
+
+--############################
+--  "USER1"."T1"  
+--############################
+CREATE TABLE "T1"
+(
+ "I1" INTEGER FIXED,
+ "I2" INTEGER FIXED,
+ "I3" INTEGER FIXED,
+ "I4" INTEGER FIXED
+)
+PARTITION BY RANGE("I1")
+(
+ PARTITION "P1" VALUES LESS THAN (20),
+ PARTITION "P2" VALUES LESS THAN (40),
+ PARTITION "P3" VALUES LESS THAN (60),
+ PARTITION "P4" VALUES LESS THAN (80),
+ PARTITION "PD" VALUES DEFAULT
+)
+TABLESPACE "SYS_TBS_DISK_DATA"
+PCTFREE 10 PCTUSED 40 INITRANS 2 MAXTRANS 120
+STORAGE(INITEXTENTS 1 NEXTEXTENTS 1 MINEXTENTS 1 MAXEXTENTS 4294967295)
+COMPRESSED LOGGING;
+
+ALTER TABLE "T1" ADD CONSTRAINT "T1_PK" PRIMARY KEY ("I2", "I1")
+ USING INDEX LOCAL;
+
+ALTER TABLE "T1" ADD CONSTRAINT "T1_UK" UNIQUE ("I3", "I2", "I1")
+ USING INDEX LOCAL;
+
+CREATE INDEX "T1_IDX1" ON "T1" ("I2")
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T1_IDX2" ON "T1" ("I2", "I3" DESC, "I4")
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T1_IDX3" ON "T1" ("I3", "I2" DESC)
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T1_IDX4" ON "T1" ("I4" DESC, "I3") LOCAL
+INDEXTYPE IS BTREE;
+
+CREATE INDEX "T1_IDX5" ON "T1" ("I4") LOCAL
+INDEXTYPE IS BTREE;
+
+
+
+$T0> EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager -object user1.t2";
+$T0> P_WAIT PROC1;
+
+$T0> CAT "USER1_T2_CRT.sql";
+
+--############################
+--  "USER1"."T2"  
+--############################
+CREATE TABLE "T2"
+(
+ "I1" INTEGER FIXED,
+ "I2" INTEGER FIXED,
+ "I3" INTEGER FIXED,
+ "I4" INTEGER FIXED
+)
+PARTITION BY HASH("I1")
+(
+ PARTITION "P1",
+ PARTITION "P2",
+ PARTITION "P3",
+ PARTITION "P4",
+ PARTITION "PD"
+)
+TABLESPACE "SYS_TBS_DISK_DATA"
+PCTFREE 10 PCTUSED 40 INITRANS 2 MAXTRANS 120
+STORAGE(INITEXTENTS 1 NEXTEXTENTS 1 MINEXTENTS 1 MAXEXTENTS 4294967295)
+COMPRESSED LOGGING;
+
+ALTER TABLE "T2" ADD CONSTRAINT "T2_PK" PRIMARY KEY ("I2", "I1")
+ USING INDEX LOCAL;
+
+ALTER TABLE "T2" ADD CONSTRAINT "T2_UK" UNIQUE ("I3", "I2", "I1")
+ USING INDEX LOCAL;
+
+CREATE INDEX "T2_IDX1" ON "T2" ("I2")
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T2_IDX2" ON "T2" ("I2", "I3" DESC, "I4")
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T2_IDX3" ON "T2" ("I3", "I2" DESC)
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T2_IDX4" ON "T2" ("I4" DESC, "I3") LOCAL
+INDEXTYPE IS BTREE;
+
+CREATE INDEX "T2_IDX5" ON "T2" ("I4") LOCAL
+INDEXTYPE IS BTREE;
+
+
+
+$T0> EXEC PROC1 "aexport -s 127.0.0.1 -u sys -p manager -object user1.t3";
+$T0> P_WAIT PROC1;
+
+$T0> CAT "USER1_T3_CRT.sql";
+
+--############################
+--  "USER1"."T3"  
+--############################
+CREATE TABLE "T3"
+(
+ "I1" INTEGER FIXED,
+ "I2" INTEGER FIXED,
+ "I3" INTEGER FIXED,
+ "I4" INTEGER FIXED
+)
+PARTITION BY LIST("I1")
+(
+ PARTITION "P1" VALUES (1,6,11,16,21,26,31,36,41,46,51,56,61,66,71,76,81,86,91,96),
+ PARTITION "P2" VALUES (2,7,12,17,22,27,32,37,42,47,52,57,62,67,72,77,82,87,92,97),
+ PARTITION "P3" VALUES (3,8,13,18,23,28,33,38,43,48,53,58,63,68,73,78,83,88,93,98),
+ PARTITION "P4" VALUES (4,9,14,19,24,29,34,39,44,49,54,59,64,69,74,79,84,89,94,99),
+ PARTITION "PD" VALUES DEFAULT
+)
+TABLESPACE "SYS_TBS_DISK_DATA"
+PCTFREE 10 PCTUSED 40 INITRANS 2 MAXTRANS 120
+STORAGE(INITEXTENTS 1 NEXTEXTENTS 1 MINEXTENTS 1 MAXEXTENTS 4294967295)
+COMPRESSED LOGGING;
+
+ALTER TABLE "T3" ADD CONSTRAINT "T3_PK" PRIMARY KEY ("I2", "I1")
+ USING INDEX LOCAL;
+
+ALTER TABLE "T3" ADD CONSTRAINT "T3_UK" UNIQUE ("I3", "I2", "I1")
+ USING INDEX LOCAL;
+
+CREATE INDEX "T3_IDX1" ON "T3" ("I2")
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T3_IDX2" ON "T3" ("I2", "I3" DESC, "I4")
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T3_IDX3" ON "T3" ("I3", "I2" DESC)
+INDEXTYPE IS BTREE
+TABLESPACE "SYS_TBS_DISK_DATA";
+
+CREATE INDEX "T3_IDX4" ON "T3" ("I4" DESC, "I3") LOCAL
+INDEXTYPE IS BTREE;
+
+CREATE INDEX "T3_IDX5" ON "T3" ("I4") LOCAL
+INDEXTYPE IS BTREE;
+
+
+
+$T0> ##################################
+$T0> # SECTOR; IMPORT
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> connect sys/manager;
+$T0> drop user user1 cascade;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> SKIP END;
+
+$T0> connect sys/manager;
+Connect success.
+
+$T0> EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f USER1_T1_CRT.sql";
+$T0> P_WAIT PROC1;
+
+$T0> EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f USER1_T2_CRT.sql";
+$T0> P_WAIT PROC1;
+
+$T0> EXEC PROC1 "isql -s 127.0.0.1 -u sys -p manager -f USER1_T3_CRT.sql";
+$T0> P_WAIT PROC1;
+
+
+$T0> ##########################################################################
+$T0> # PORT EDIT: describe the indexes the export rebuilt, not the tables the
+$T0> #            $GIT_ implementation kept them in
+$T0> #
+$T0> # The original asked, after the round trip:
+$T0> #
+$T0> #   desc t1;                  desc t2;                  desc t3;
+$T0> #   desc "$GIT_T1_PK";        desc "$GIT_T2_PK";        desc "$GIT_T3_PK";
+$T0> #   desc "$GIT_T1_UK";        ...                       ...
+$T0> #   desc "$GIT_T1_IDX1..3";
+$T0> #
+$T0> # -- fifteen hidden tables. The native path builds none of them, and
+$T0> # "[ERR-91014] does not exist" fifteen times is the shape of expectation
+$T0> # this port refuses to record: it goes green for any reason at all, and
+$T0> # six of the fifteen were ALREADY green for the wrong reason in the
+$T0> # original (aexport_all_A4_64.lst has six ERR-91014, not fifteen).
+$T0> #
+$T0> # Those six are T1/T2/T3 _PK and _UK. Both carry the partition key I1, so
+$T0> # they are LOCAL under BOTH implementations and the $GIT_ table never
+$T0> # existed for them either -- the same mistake the original made in
+$T0> # check_global_index.i (v3-natc-port.md 3.2) and in BUG-35460
+$T0> # (v4-natc-port-2.md 5.1).
+$T0> #
+$T0> # So the port asks what this case is actually about: after export and
+$T0> # re-import, is each index back, and is it back as the SAME KIND it was?
+$T0> # DESC_INDEX (include/descIndex.i, the four-layer definition batch 5 built)
+$T0> # prints the discriminator, so this block distinguishes
+$T0> #
+$T0> #   T1_PK / T1_UK        LOCAL          (partition key in the key)
+$T0> #   T1_IDX1 / 2 / 3      NATIVE-GLOBAL  (no partition key -- the point)
+$T0> #
+$T0> # and it is that split, not an error message, that says the export did not
+$T0> # quietly turn a global index into a local one. aexport writes LOCAL only
+$T0> # for the local ones; measured in v4-natc-port-4.md 6.
+$T0> #
+$T0> # TEETH: with DISK_GLOBAL_INDEX_ENABLE = 0 the re-import builds T*_IDX1..3
+$T0> # as hidden tables, KIND reads GIT-HIDDEN-TABLE for nine indexes and
+$T0> # THIS_GIT_TABLE reads 1 instead of 0.
+$T0> ##########################################################################
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T1_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T1_IDX1                                  BTREE                  I2 ASC
+T1_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 DESC
+T1_IDX4                                  BTREE                  I4 DESC,
+                                                                I3 ASC
+T1_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T1_PK' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T1_PK'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T1_PK                                      T1          LOCAL             T  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T1_PK'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+5           1           F  0           0           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T1_PK'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1           I1                    A  
+2 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T1_UK' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T1_UK'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T1_UK                                      T1          LOCAL             T  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T1_UK'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+5           1           F  0           0           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T1_UK'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I3                    A  
+1           I2                    A  
+2           I1                    A  
+3 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T1_IDX1' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T1_IDX1'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T1_IDX1                                    T1          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T1_IDX1'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T1_IDX1'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1 row selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T1_IDX2' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T1_IDX2'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T1_IDX2                                    T1          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T1_IDX2'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T1_IDX2'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1           I3                    D  
+2           I4                    A  
+3 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T1_IDX3' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T1_IDX3'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T1_IDX3                                    T1          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T1_IDX3'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T1_IDX3'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I3                    A  
+1           I2                    D  
+2 rows selected.
+
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T2_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T2_IDX1                                  BTREE                  I2 ASC
+T2_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+T2_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 DESC
+T2_IDX4                                  BTREE                  I4 DESC,
+                                                                I3 ASC
+T2_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T2_PK' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T2_PK'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T2_PK                                      T2          LOCAL             T  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T2_PK'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+5           1           F  0           0           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T2_PK'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1           I1                    A  
+2 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T2_UK' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T2_UK'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T2_UK                                      T2          LOCAL             T  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T2_UK'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+5           1           F  0           0           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T2_UK'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I3                    A  
+1           I2                    A  
+2           I1                    A  
+3 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T2_IDX1' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T2_IDX1'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T2_IDX1                                    T2          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T2_IDX1'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T2_IDX1'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1 row selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T2_IDX2' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T2_IDX2'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T2_IDX2                                    T2          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T2_IDX2'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T2_IDX2'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1           I3                    D  
+2           I4                    A  
+3 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T2_IDX3' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T2_IDX3'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T2_IDX3                                    T2          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T2_IDX3'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T2_IDX3'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I3                    A  
+1           I2                    D  
+2 rows selected.
+
+$T0> desc t3;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     NOT NULL
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T3_PK                                    BTREE    UNIQUE        I2 ASC,
+                                                                I1 ASC
+T3_UK                                    BTREE    UNIQUE        I3 ASC,
+                                                                I2 ASC,
+                                                                I1 ASC
+T3_IDX1                                  BTREE                  I2 ASC
+T3_IDX2                                  BTREE                  I2 ASC,
+                                                                I3 DESC,
+                                                                I4 ASC
+T3_IDX3                                  BTREE                  I3 ASC,
+                                                                I2 DESC
+T3_IDX4                                  BTREE                  I4 DESC,
+                                                                I3 ASC
+T3_IDX5                                  BTREE                  I4 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I2, I1
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T3_PK' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T3_PK'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T3_PK                                      T3          LOCAL             T  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T3_PK'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+5           1           F  0           0           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T3_PK'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1           I1                    A  
+2 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T3_UK' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T3_UK'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T3_UK                                      T3          LOCAL             T  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T3_UK'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+5           1           F  0           0           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T3_UK'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I3                    A  
+1           I2                    A  
+2           I1                    A  
+3 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T3_IDX1' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T3_IDX1'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T3_IDX1                                    T3          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T3_IDX1'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T3_IDX1'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1 row selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T3_IDX2' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T3_IDX2'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T3_IDX2                                    T3          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T3_IDX2'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T3_IDX2'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I2                    A  
+1           I3                    D  
+2           I4                    A  
+3 rows selected.
+$T0> # 겹 0 -- 숨김 테이블 없음
+$T0> select count(case when table_name = '$GIT_T3_IDX3' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+THIS_GIT_TABLE       ANY_GIT_TABLE        
+---------------------------------------------
+0                    0                    
+1 row selected.
+
+$T0> # 겹 1 -- 인덱스의 정체
+$T0> select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = 'T3_IDX3'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+INDEX_NAME                                 TABLE_NAME  KIND              UQ  INDEX_TBS             
+---------------------------------------------------------------------------------------------------------
+T3_IDX3                                    T3          NATIVE-GLOBAL     F  SYS_TBS_DISK_DATA     
+1 row selected.
+
+$T0> # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+$T0> select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = 'T3_IDX3'
+    and i.user_id = user_id();
+INDEX_PARTITIONS HDR_ROWS    HDR_GLOBAL  MEMBER_CNT  ACTIVE_MEMBER_CNT 
+-----------------------------------------------------------------------------
+0           1           T  5           5           
+1 row selected.
+
+$T0> # 겹 3 -- 키 컬럼
+$T0> select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = 'T3_IDX3'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+ORD         COLUMN_NAME           SORT_ORDER  
+--------------------------------------------------
+0           I3                    A  
+1           I2                    D  
+2 rows selected.
+$T0> ##########################################################################
+$T0> # PORT EDIT END
+$T0> ##########################################################################
+
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> connect sys/manager;
+$T0> drop user user1 cascade;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+$T0> SKIP END;
+
+$T0> RM "ALL_*" "USER1_*" "user1_*" "run_*";
+$T0> RM "${ALTIBASE_HOME}/conf/aexport.properties";
+$T0> MV -f "${ALTIBASE_HOME}/conf/aexport.properties.org" "${ALTIBASE_HOME}/conf/aexport.properties";
+

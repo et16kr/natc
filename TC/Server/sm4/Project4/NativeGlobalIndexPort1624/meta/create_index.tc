@@ -1,0 +1,203 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/meta/create_index.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE select_meta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop user user1 cascade;
+drop tablespace data1 including contents and datafiles;
+drop tablespace data2 including contents and datafiles;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+
+set linesize 200;
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+drop table t1;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+create user user1 identified by user1;
+
+grant all privileges to user1;
+
+##################################
+# SECTOR; CREATE INDEX
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer constraint t1_nn not null,
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i1) tablespace sys_tbs_disk_data;
+create index idx2 on t1(i1, i2) tablespace data1;
+create index idx3 on t1(i1 desc, i2 desc, i3 asc) tablespace data1;
+
+create index idx4 on t1(i2 desc) tablespace data2;
+create index idx5 on t1(i2, i3) tablespace data2;
+
+connect user1/user1;
+
+create index idx6 on sys.t1(i3);
+create index idx7 on sys.t1(i3 desc, i1 asc);
+create index idx8 on sys.t1(i3, i2 desc, i1);
+
+connect sys/manager;
+
+CALL SELECT_META();
+
+select u.user_name, t.table_name, t.table_type, t.hidden, b.name tbs_name 
+from system_.sys_tables_ t, system_.sys_users_ u, v$tablespaces b
+where t.table_name = 'T1' and t.user_id = u.user_id and t.tbs_id = b.id
+order by t.table_id;
+
+##########################################################################
+# PORT EDIT: ask what i.is_global was meant to ask
+#
+# Original lines 95-98 were this, unchanged since the project landed:
+#
+#   select u.user_name, i.index_name, i.index_type, i.is_unique,
+#          b.name tbs_name, i.is_partitioned, i.is_global
+#   from system_.sys_tables_ t, system_.sys_indices_ i,
+#        system_.sys_users_ u, v$tablespaces b
+#   where t.table_name = 'T1' and t.table_id = i.table_id
+#     and i.user_id = u.user_id and i.tbs_id = b.id
+#   order by i.index_id;
+#
+# SYS_INDICES_ has no IS_GLOBAL column and never had one -- 15 columns,
+# USER_ID .. LAST_DDL_TIME. So the statement dies with ERR-31058 and the
+# original's own expectation records the error, column caret and all
+# (meta/create_index_A4_64.lst:295). It is the one place in this case that
+# asks "is this index global?", and it has never once answered.
+#
+# Porting it unchanged would carry the dead statement onto the native path
+# and freeze the same ERR-31058 as an expectation. An error frozen as an
+# expectation goes green when the reason changes (v3-natc-port.md 6.1), and
+# this one would go green the day someone adds the column -- which is
+# exactly the day it would start mattering.
+#
+# So the port asks the question the column was meant to answer, out of the
+# catalog that actually holds it: SYS_PART_INDICES_.PARTITION_TYPE = 101 is
+# the native discriminator (globalIndexEnv.i's SHOW_INDEX_MEDIA uses the
+# same three-way split). Everything else about the statement is kept --
+# same join, same columns, same table -- and the order by moves from
+# i.index_id to the name, because this case prints no ids (they are a
+# function of how many objects the instance has ever created).
+#
+# TEETH: with DISK_GLOBAL_INDEX_ENABLE = 0 the eight indexes below are
+# built as hidden tables, so INDEX_TABLE_ID is non-zero and KIND reads
+# GIT-HIDDEN-TABLE for every one of them instead of NATIVE-GLOBAL.
+##########################################################################
+
+select cast(u.user_name as varchar(8)) user_name,
+       cast(i.index_name as varchar(8)) index_name,
+       i.index_type, cast(i.is_unique as varchar(2)) is_unique,
+       cast(b.name as varchar(18)) tbs_name,
+       cast(i.is_partitioned as varchar(2)) is_part,
+       cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                  when i.is_partitioned = 'T'         then 'LOCAL'
+                  when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                  else 'UNKNOWN' end as varchar(16) ) kind
+from system_.sys_tables_ t, system_.sys_indices_ i, system_.sys_users_ u, v$tablespaces b,
+     ( select index_id, max(partition_type) partition_type
+       from system_.sys_part_indices_ group by index_id ) p
+where t.table_name = 'T1' and t.table_id = i.table_id and i.user_id = u.user_id and i.tbs_id = b.id
+  and i.index_id = p.index_id(+)
+order by 1, 2;
+##########################################################################
+# PORT EDIT END
+##########################################################################
+
+##################################
+# SECTOR; CREATE INDEX
+##################################
+
+connect user1/user1;
+
+create table t2
+( 
+  i1 integer, 
+  i2 integer,
+  i3 integer constraint t2_nn not null,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t2(i1) tablespace sys_tbs_disk_data;
+create index idx2 on t2(i1, i2) tablespace data1;
+create index idx3 on t2(i1, i2 desc, i3) tablespace data1;
+
+create index idx4 on t2(i2) tablespace data2;
+create index idx5 on t2(i2, i3 desc) tablespace data2;
+
+connect sys/manager;
+
+CALL SELECT_META();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}
