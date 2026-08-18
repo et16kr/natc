@@ -1,8 +1,8 @@
 # Simple TEMP tablespace NATC suite
 
 This directory contains the NATC replacement surface for the Simple TEMP
-tablespace feature. The root suite registers one `.ts` per test folder; those
-folder suites contain 79 executable test cases in total.
+tablespace feature. The root suite registers one `.ts` per top-level role; the
+nested role suites contain 79 executable test cases in total.
 
 ## Directory roles
 
@@ -23,8 +23,9 @@ folder suites contain 79 executable test cases in total.
 - `regression/data`: guard that ordinary DATA tablespace routing is unchanged
 
 Each role folder has a same-folder suite (`control/control.ts`,
-`ddl/create/ddl_create.ts`, and so on). The root [temp_tablespace.ts](temp_tablespace.ts)
-registers only those folder suites.
+`ddl/create/create.ts`, and so on). Intermediate suites such as `ddl/ddl.ts`
+register their child role suites, while the root
+[temp_tablespace.ts](temp_tablespace.ts) registers only top-level role suites.
 
 ## Oracle status
 

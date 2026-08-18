@@ -1,0 +1,163 @@
+###########################################################################
+# TestCase Description = Keep multi-file DROP DATAFILE on a DATA tablespace on its historical path.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 16.3: the DATA/UNDO lane is not allowed to change. `executeDropFile`
+#                        was rewritten to hand SM one statement-sized target set, and for a DATA
+#                        tablespace that set must still be applied as the previous per-file loop.
+# Product Reference    = src/qp/qdt/qdtAlter.cpp qdtAlter::executeDropFile
+#                        src/sm/smi/smiTableSpace.cpp smiTableSpace::removeDataFiles
+#                        src/sm/sdp/sdpTableSpace.cpp removeDataFiles non-TEMP branch
+# Oracle Note          = The FEXIST markers are neutral observations of the existing DATA touch-mode
+#                        behavior; they pin it rather than assert a new rule.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLE SDPTEC_MD_T1;
+    DROP TABLESPACE SDPTEC_MD_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_03.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_04.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_MD_DATA
+        DATAFILE 'sdptec_md_01.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_md_02.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_md_03.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_md_04.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN T.TYPE = 4
+                AND T.DATAFILE_COUNT = 4
+                AND T.NEXT_FILE_ID = 4
+                AND F.TOTAL_CURRENT = 2048
+               THEN 1 ELSE 0
+           END AS PASS_DATA_CREATE_BASELINE
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_MD_DATA' ) F
+     WHERE T.NAME = 'SDPTEC_MD_DATA';
+
+##################################
+SECTOR; A REFUSED MULTI TARGET SET CHANGES NOTHING
+##################################
+    ALTER TABLESPACE SDPTEC_MD_DATA
+        DROP DATAFILE 'sdptec_md_03.dbf', 'sdptec_md_absent.dbf';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 4
+                AND F.FILE_COUNT = 4
+                AND F.TOTAL_CURRENT = 2048
+               THEN 1 ELSE 0
+           END AS PASS_DATA_REFUSED_SET_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_MD_DATA' ) F
+     WHERE T.NAME = 'SDPTEC_MD_DATA';
+
+##################################
+SECTOR; MULTI FILE DROP DATAFILE
+##################################
+    ALTER TABLESPACE SDPTEC_MD_DATA
+        DROP DATAFILE 'sdptec_md_03.dbf', 'sdptec_md_04.dbf';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.NEXT_FILE_ID = 4
+                AND F.FILE_COUNT = 2
+                AND F.TOTAL_CURRENT = 1024
+                AND F.MAX_ID = 1
+               THEN 1 ELSE 0
+           END AS PASS_DATA_MULTI_DROP
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    MAX(D.ID) AS MAX_ID
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_MD_DATA' ) F
+     WHERE T.NAME = 'SDPTEC_MD_DATA';
+
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdptec_md_03.dbf" )
+    {
+        PRINT "DATA_FILE_03_PRESENT_AFTER_DROP";
+    }
+    ELSE
+    {
+        PRINT "DATA_FILE_03_ABSENT_AFTER_DROP";
+    }
+
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdptec_md_04.dbf" )
+    {
+        PRINT "DATA_FILE_04_PRESENT_AFTER_DROP";
+    }
+    ELSE
+    {
+        PRINT "DATA_FILE_04_ABSENT_AFTER_DROP";
+    }
+
+##################################
+SECTOR; THE SURVIVING DATA TABLESPACE STILL STORES ROWS
+##################################
+    CREATE TABLE SDPTEC_MD_T1 ( I1 INTEGER, C1 VARCHAR(100) )
+        TABLESPACE SDPTEC_MD_DATA;
+
+    INSERT INTO SDPTEC_MD_T1
+    SELECT LEVEL, 'ROW' || TO_CHAR(LEVEL) FROM DUAL CONNECT BY LEVEL <= 2000;
+    COMMIT;
+
+    SELECT COUNT(*) AS DATA_ROWS FROM SDPTEC_MD_T1;
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT COUNT(*) AS DATA_ROWS_AFTER_RESTART FROM SDPTEC_MD_T1;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.NEXT_FILE_ID = 4
+                AND F.TOTAL_CURRENT = 1024
+               THEN 1 ELSE 0
+           END AS PASS_DATA_RESTART_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_MD_DATA' ) F
+     WHERE T.NAME = 'SDPTEC_MD_DATA';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE SDPTEC_MD_T1;
+    DROP TABLESPACE SDPTEC_MD_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_03.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_md_04.dbf";
+}

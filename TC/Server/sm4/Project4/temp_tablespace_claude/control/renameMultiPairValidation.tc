@@ -1,0 +1,162 @@
+###########################################################################
+# TestCase Description = Validate multi-pair CONTROL RENAME TEMPFILE before any path is changed.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.10: RENAME is metadata-only with no file action, every destination
+#                        is precheck-validated against the registry, and the next startup binds the
+#                        renamed targets, recreating a missing one.
+# Product Reference    = src/qp/qcp/qcply.y alter_tablespace_dcl_statement RENAME pair lists
+#                        src/qp/qdt/qdtAlter.cpp validateRenameOrDropFile / executeRenameFile
+#                        src/sm/sdp/sdpte/sdpteHandler.cpp alterFileName
+# Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+# ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/control/renameTempfile.tc
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTEC_MR_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_03.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_02_new.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTEC_MR_TS
+        TEMPFILE 'sdptec_mr_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdptec_mr_02.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_mr_03.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    NODISPLAY ON;
+    CALL stdServerStop();
+    NODISPLAY OFF;
+
+##################################
+SECTOR; CONTROL RENAME VALIDATION
+##################################
+    $sPrompt = "$$EOF$$";
+
+    NODISPLAY ON;
+    EXEC SDPTEC_MR_CONTROL -t 1800 $gStdIsqlSys;
+    SEND SDPTEC_MR_CONTROL "startup control";
+    P_WAIT SDPTEC_MR_CONTROL $sPrompt;
+    NODISPLAY OFF;
+
+    # Refused: the second destination is a path already in the registry, so the
+    # precheck must reject the statement before the first pair is applied.
+    SEND SDPTEC_MR_CONTROL "ALTER TABLESPACE SDPTEC_MR_TS RENAME TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_mr_01.dbf', '${ALTIBASE_HOME}/dbs/sdptec_mr_02.dbf' TO '${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf', '${ALTIBASE_HOME}/dbs/sdptec_mr_03.dbf';";
+    P_WAIT SDPTEC_MR_CONTROL $sPrompt;
+
+    # Refused: the old path is not registered in this tablespace.
+    SEND SDPTEC_MR_CONTROL "ALTER TABLESPACE SDPTEC_MR_TS RENAME TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_mr_absent.dbf' TO '${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf';";
+    P_WAIT SDPTEC_MR_CONTROL $sPrompt;
+
+    # Refused: the old and new lists have different lengths.
+    SEND SDPTEC_MR_CONTROL "ALTER TABLESPACE SDPTEC_MR_TS RENAME TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_mr_01.dbf', '${ALTIBASE_HOME}/dbs/sdptec_mr_02.dbf' TO '${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf';";
+    P_WAIT SDPTEC_MR_CONTROL $sPrompt;
+
+    # Accepted: two distinct unregistered destinations in one statement.
+    SEND SDPTEC_MR_CONTROL "ALTER TABLESPACE SDPTEC_MR_TS RENAME TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_mr_01.dbf', '${ALTIBASE_HOME}/dbs/sdptec_mr_02.dbf' TO '${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf', '${ALTIBASE_HOME}/dbs/sdptec_mr_02_new.dbf';";
+    P_WAIT SDPTEC_MR_CONTROL $sPrompt;
+
+    NODISPLAY ON;
+    SEND SDPTEC_MR_CONTROL "quit";
+    P_WAIT SDPTEC_MR_CONTROL;
+    NODISPLAY OFF;
+
+##################################
+SECTOR; STARTUP BINDS THE RENAMED TARGETS
+##################################
+    # RENAME moved no bytes. The first renamed target is supplied by hand and
+    # the second is left missing so startup has to recreate it at its `D`.
+    MV "${ALTIBASE_HOME}/dbs/sdptec_mr_01.dbf" "${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_02.dbf";
+
+    NODISPLAY ON;
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 3
+                AND SUM(CASE WHEN D.NAME LIKE '%sdptec_mr_01_new.dbf'
+                              AND D.CURRSIZE = 1024 AND D.OPENED = 0
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.NAME LIKE '%sdptec_mr_02_new.dbf'
+                              AND D.CURRSIZE = 512 AND D.OPENED = 0
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.NAME LIKE '%sdptec_mr_03.dbf'
+                              AND D.CURRSIZE = 256 AND D.OPENED = 0
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_RENAMED_SET_BOUND
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_MR_TS';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = 1792
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 27
+               THEN 1 ELSE 0
+           END AS PASS_RENAMED_PROJECTION
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_MR_TS';
+
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdptec_mr_02_new.dbf" )
+    {
+        PRINT "PASS_MISSING_RENAMED_TARGET_RECREATED";
+    }
+    ELSE
+    {
+        PRINT "FAIL_MISSING_RENAMED_TARGET_RECREATED";
+    }
+
+##################################
+SECTOR; THE RENAMED PATHS ARE DURABLE
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 3
+                AND SUM(CASE WHEN D.NAME LIKE '%_new.dbf' THEN 1 ELSE 0 END) = 2
+                AND SUM(D.OPENED) = 0
+               THEN 1 ELSE 0
+           END AS PASS_RENAME_DURABLE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_MR_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTEC_MR_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_03.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_01_new.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_mr_02_new.dbf";
+}

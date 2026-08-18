@@ -1,0 +1,179 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep TEMP path commands in CONTROL and TEMP file DDL in SERVICE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 9.10 and 9.11 place RENAME TEMPFILE, CREATE DATAFILE and DISCARD in
+$T0> #                        the CONTROL phase, while ADD/DROP/ALTER TEMPFILE are transactional SERVICE
+$T0> #                        DDL; the new manager must not make either side succeed in the other phase.
+$T0> # Product Reference    = src/qp/qdt/qdtAlter.cpp phase-gated execute entries
+$T0> #                        src/sm/sdp/sdpte/sdpteControlLane.cpp, src/sm/sdp/sdpte/sdpteOperation.cpp
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/control/discardLifecycle.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_PB_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_pb_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_pb_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_pb_new.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_PB_TS
+        TEMPFILE 'sdptec_pb_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdptec_pb_02.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; CONTROL COMMANDS ARE REFUSED IN SERVICE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_PB_TS
+        RENAME TEMPFILE '/home/et16/work/altidev4/altibase_home/dbs/sdptec_pb_02.dbf'
+                     TO '/home/et16/work/altidev4/altibase_home/dbs/sdptec_pb_new.dbf';
+[ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$T0> ALTER TABLESPACE SDPTEC_PB_TS DISCARD;
+[ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$T0> CONNECT SYS/MANAGER AS SYSDBA;
+Connect success.
+
+$T0> ALTER DATABASE CREATE DATAFILE '/home/et16/work/altidev4/altibase_home/dbs/sdptec_pb_02.dbf';
+[ERR-1103E : ALTER DATABASE CRAEATE DATAFILE is only allowed during the control phase.]
+
+$T0> # Release the local SYSDBA/admin connection before stdServerStop() opens
+$T0> # its own admin iSQL process.
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.STATE = 2
+                AND T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = 1536
+                AND F.NEW_PATH_COUNT = 0
+                AND F.OPENED_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_CONTROL_COMMANDS_REFUSED_IN_SERVICE
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(CASE WHEN D.NAME LIKE '%sdptec_pb_new.dbf' THEN 1 ELSE 0 END)
+                        AS NEW_PATH_COUNT,
+                    SUM(CASE WHEN D.OPENED = 1 THEN 1 ELSE 0 END) AS OPENED_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_PB_TS' ) F
+     WHERE T.NAME = 'SDPTEC_PB_TS';
+PASS_CONTROL_COMMANDS_REFUSED_IN_SERVICE 
+-------------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; SERVICE DDL IS REFUSED IN CONTROL
+$T0> ##################################
+
+
+
+$T0> SEND SDPTEC_PB_CONTROL "ALTER TABLESPACE SDPTEC_PB_TS ADD TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_pb_new.dbf' SIZE 4M AUTOEXTEND OFF;";
+$T0> P_WAIT SDPTEC_PB_CONTROL $sPrompt;
+$T0> [ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$$EOF$$
+
+
+$T0> SEND SDPTEC_PB_CONTROL "ALTER TABLESPACE SDPTEC_PB_TS DROP TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_pb_02.dbf';";
+$T0> P_WAIT SDPTEC_PB_CONTROL $sPrompt;
+$T0> [ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$$EOF$$
+
+
+$T0> SEND SDPTEC_PB_CONTROL "ALTER TABLESPACE SDPTEC_PB_TS ALTER TEMPFILE '${ALTIBASE_HOME}/dbs/sdptec_pb_01.dbf' SIZE 16M;";
+$T0> P_WAIT SDPTEC_PB_CONTROL $sPrompt;
+$T0> [ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$$EOF$$
+
+
+$T0> SEND SDPTEC_PB_CONTROL "DROP TABLESPACE SDPTEC_PB_TS INCLUDING CONTENTS AND DATAFILES;";
+$T0> P_WAIT SDPTEC_PB_CONTROL $sPrompt;
+$T0> [ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$$EOF$$
+
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.STATE = 2
+                AND T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = 1536
+                AND T.NEXT_FILE_ID = 2
+                AND F.TOTAL_CURRENT = 1536
+                AND F.OPENED_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SERVICE_DDL_REFUSED_IN_CONTROL
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.OPENED = 1 THEN 1 ELSE 0 END) AS OPENED_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_PB_TS' ) F
+     WHERE T.NAME = 'SDPTEC_PB_TS';
+PASS_SERVICE_DDL_REFUSED_IN_CONTROL 
+--------------------------------------
+1           
+1 row selected.
+
+$T0> PASS_CONTROL_ADD_CREATED_NO_FILE
+
+$T0> ##################################
+$T0> SECTOR 4; SERVICE DDL STILL WORKS AFTERWARDS
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_PB_TS ADD TEMPFILE
+        'sdptec_pb_new.dbf' SIZE 4M AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = 2048
+                AND T.NEXT_FILE_ID = 3
+               THEN 1 ELSE 0
+           END AS PASS_SERVICE_DDL_ACCEPTED
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_PB_TS';
+PASS_SERVICE_DDL_ACCEPTED 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_PB_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_pb_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_pb_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_pb_new.dbf";
+

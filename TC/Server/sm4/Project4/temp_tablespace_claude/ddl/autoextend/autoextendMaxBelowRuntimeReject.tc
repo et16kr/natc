@@ -1,0 +1,138 @@
+###########################################################################
+# TestCase Description = Validate ALTER TEMPFILE AUTOEXTEND MAXSIZE against the runtime current.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.7: the current-size position of the existing ON/MAX validation is
+#                        the runtime `R`, never the committed baseline `D` a generic handler reads.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterAutoExtend.cpp
+#                        src/sm/sdp/sdpte/sdpteAttributeLane.cpp
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_MB_U CASCADE;
+    DROP TABLE SDPTEC_MB_SNAP;
+    DROP TABLESPACE SDPTEC_MB_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_MB_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_MB_DATA
+        DATAFILE 'sdptec_mb_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_MB_TS
+        TEMPFILE 'sdptec_mb_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_MB_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_MB_DATA;
+
+    CREATE USER SDPTEC_MB_U IDENTIFIED BY SDPTEC_MB_U
+        DEFAULT TABLESPACE SDPTEC_MB_DATA
+        TEMPORARY TABLESPACE SDPTEC_MB_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_MB_U/SDPTEC_MB_U;
+
+    CREATE TABLE SDPTEC_MB_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_MB_DATA;
+
+    INSERT INTO SDPTEC_MB_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('B', 1790, 'B')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH ABOVE THE COMMITTED BASELINE
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_MB_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_MB_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_MB_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_MB_SNAP WHERE TAG = 'R_AFTER_SPILL' ) > 256
+               THEN 1 ELSE 0
+           END AS PASS_R_ABOVE_REJECT_TARGET
+      FROM DUAL;
+
+##################################
+SECTOR; MAXSIZE BELOW R IS REFUSED
+##################################
+    # 2M is above the committed baseline D = 1M but below the runtime current.
+    # A handler that validated against D would accept this statement.
+    ALTER TABLESPACE SDPTEC_MB_TS
+        ALTER TEMPFILE 'sdptec_mb_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 2M;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND D.INITSIZE = 128
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_MB_SNAP
+                                    WHERE TAG = 'R_AFTER_SPILL' )
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_MAX_BELOW_R_REJECTED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_MB_TS';
+
+##################################
+SECTOR; MAXSIZE ABOVE R IS ACCEPTED
+##################################
+    ALTER TABLESPACE SDPTEC_MB_TS
+        ALTER TEMPFILE 'sdptec_mb_01.dbf'
+            AUTOEXTEND ON NEXT 2M MAXSIZE 256M;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 256
+                AND D.MAXSIZE = 32768
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_MB_SNAP
+                                    WHERE TAG = 'R_AFTER_SPILL' )
+               THEN 1 ELSE 0
+           END AS PASS_MAX_ABOVE_R_ACCEPTED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_MB_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_MB_U CASCADE;
+    DROP TABLE SDPTEC_MB_SNAP;
+    DROP TABLESPACE SDPTEC_MB_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_MB_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

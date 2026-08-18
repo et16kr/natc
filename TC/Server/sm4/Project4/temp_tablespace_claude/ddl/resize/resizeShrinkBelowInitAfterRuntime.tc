@@ -1,0 +1,136 @@
+###########################################################################
+# TestCase Description = Shrink a runtime-grown TEMP file below its INITSIZE.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.6 row `T < B`: SHRINK record carries after INIT = min(INIT,T)
+#                        together with after current T, and 8.3 keeps INITSIZE a public field only.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp
+#                        src/sm/sdd/sddUpdate.cpp redo/undo_SCT_UPDATE_DRDB_SHRINK_DBF TEMP wrapper
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_SB_U CASCADE;
+    DROP TABLE SDPTEC_SB_SNAP;
+    DROP TABLESPACE SDPTEC_SB_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_SB_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_SB_DATA
+        DATAFILE 'sdptec_sb_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_SB_TS
+        TEMPFILE 'sdptec_sb_01.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_SB_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_SB_DATA;
+
+    CREATE USER SDPTEC_SB_U IDENTIFIED BY SDPTEC_SB_U
+        DEFAULT TABLESPACE SDPTEC_SB_DATA
+        TEMPORARY TABLESPACE SDPTEC_SB_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_SB_U/SDPTEC_SB_U;
+
+    CREATE TABLE SDPTEC_SB_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_SB_DATA;
+
+    INSERT INTO SDPTEC_SB_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('S', 1790, 'S')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_SB_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_SB_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SB_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_SB_SNAP WHERE TAG = 'R_AFTER_SPILL' ) > 512
+               THEN 1 ELSE 0
+           END AS PASS_R_ABOVE_INIT
+      FROM DUAL;
+
+##################################
+SECTOR; SHRINK BELOW INITSIZE
+##################################
+    ALTER TABLESPACE SDPTEC_SB_TS
+        ALTER TEMPFILE 'sdptec_sb_01.dbf' SIZE 1M;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_INIT_FOLLOWS_TARGET
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SB_TS';
+
+##################################
+SECTOR; RESTART KEEPS THE REDUCED INIT AND D
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 128
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_KEEPS_REDUCED_INIT
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SB_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_SB_U CASCADE;
+    DROP TABLE SDPTEC_SB_SNAP;
+    DROP TABLESPACE SDPTEC_SB_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_SB_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

@@ -1,0 +1,144 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Produce one TEMP catalog from both CREATE TEMPORARY TABLESPACE spellings.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 2.3 keeps the whole existing CREATE surface, and design 4.1 routes
+$T0> #                        both parser branches to the same single owner, so the two forms must be
+$T0> #                        indistinguishable in the catalog and in the runtime projection.
+$T0> # Product Reference    = src/qp/qcp/qcply.y create_temp_tablespace_statement (both branches)
+$T0> #                        src/sm/sdp/sdpTableSpace.cpp createTBS TEMP dispatch
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_FM_PLAIN INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_FM_DISK INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_fm_plain.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_fm_disk.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_FM_PLAIN
+        TEMPFILE 'sdptec_fm_plain.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 32M
+        EXTENTSIZE 512K
+        SEGMENT MANAGEMENT MANUAL;
+Create success.
+
+$T0> CREATE DISK TEMPORARY TABLESPACE SDPTEC_FM_DISK
+        TEMPFILE 'sdptec_fm_disk.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 32M
+        EXTENTSIZE 512K
+        SEGMENT MANAGEMENT MANUAL;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; THE TWO CATALOG ROWS MUST MATCH
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND COUNT(DISTINCT TYPE) = 1
+                AND COUNT(DISTINCT STATE) = 1
+                AND COUNT(DISTINCT EXTENT_MANAGEMENT) = 1
+                AND COUNT(DISTINCT SEGMENT_MANAGEMENT) = 1
+                AND COUNT(DISTINCT EXTENT_PAGE_COUNT) = 1
+                AND COUNT(DISTINCT PAGE_SIZE) = 1
+                AND COUNT(DISTINCT TOTAL_PAGE_COUNT) = 1
+                AND COUNT(DISTINCT ALLOCATED_PAGE_COUNT) = 1
+                AND COUNT(DISTINCT NEXT_FILE_ID) = 1
+                AND COUNT(DISTINCT ATTR_LOG_COMPRESS) = 1
+                AND MIN(TYPE) = 6
+                AND MIN(SEGMENT_MANAGEMENT) = 'MANUAL'
+                AND MIN(TOTAL_PAGE_COUNT) = 512
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_FORMS_SAME_CATALOG
+      FROM V$TABLESPACES
+     WHERE NAME IN ( 'SDPTEC_FM_PLAIN', 'SDPTEC_FM_DISK' );
+PASS_BOTH_FORMS_SAME_CATALOG 
+-------------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND COUNT(DISTINCT X.CACHED_FREE_EXTENT_COUNT) = 1
+                AND MIN(X.CACHED_FREE_EXTENT_COUNT) = 7
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_FORMS_SAME_RUNTIME
+      FROM V$TABLESPACES T, X$TABLESPACES X
+     WHERE T.ID = X.ID
+       AND T.NAME IN ( 'SDPTEC_FM_PLAIN', 'SDPTEC_FM_DISK' );
+PASS_BOTH_FORMS_SAME_RUNTIME 
+-------------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND COUNT(DISTINCT D.INITSIZE) = 1
+                AND COUNT(DISTINCT D.CURRSIZE) = 1
+                AND COUNT(DISTINCT D.NEXTSIZE) = 1
+                AND COUNT(DISTINCT D.MAXSIZE) = 1
+                AND COUNT(DISTINCT D.AUTOEXTEND) = 1
+                AND COUNT(DISTINCT D.OPENED) = 1
+                AND MIN(D.CURRSIZE) = 512
+                AND MIN(D.NEXTSIZE) = 128
+                AND MIN(D.MAXSIZE) = 4096
+                AND MIN(D.AUTOEXTEND) = 1
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_FORMS_SAME_FILE_ROW
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ( 'SDPTEC_FM_PLAIN', 'SDPTEC_FM_DISK' );
+PASS_BOTH_FORMS_SAME_FILE_ROW 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; BOTH SURVIVE A RESTART IDENTICALLY
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND COUNT(DISTINCT TOTAL_PAGE_COUNT) = 1
+                AND SUM(ALLOCATED_PAGE_COUNT) = 0
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_FORMS_AFTER_RESTART
+      FROM V$TABLESPACES
+     WHERE NAME IN ( 'SDPTEC_FM_PLAIN', 'SDPTEC_FM_DISK' );
+PASS_BOTH_FORMS_AFTER_RESTART 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_FM_PLAIN INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_FM_DISK INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_fm_plain.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_fm_disk.dbf";
+

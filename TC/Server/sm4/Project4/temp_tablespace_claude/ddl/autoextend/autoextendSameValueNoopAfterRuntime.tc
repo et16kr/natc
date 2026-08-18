@@ -1,0 +1,174 @@
+###########################################################################
+# TestCase Description = Accept an identical AUTOEXTEND statement as a no-op after runtime growth.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.7 no-op result, and the F-07 correction requiring the standard
+#                        node, the immutable definition and the runtime owner to agree before a
+#                        same-value AUTOEXTEND is treated as a no-op.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterAutoExtend.cpp (commit 41d5f4b3)
+#                        src/sm/sdp/sdpte/sdpteAttributeLane.cpp
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_SV_U CASCADE;
+    DROP TABLE SDPTEC_SV_SNAP;
+    DROP TABLESPACE SDPTEC_SV_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_SV_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_SV_DATA
+        DATAFILE 'sdptec_sv_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_SV_TS
+        TEMPFILE 'sdptec_sv_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M,
+                 'sdptec_sv_02.dbf' SIZE 1M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_SV_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_SV_DATA;
+
+    CREATE USER SDPTEC_SV_U IDENTIFIED BY SDPTEC_SV_U
+        DEFAULT TABLESPACE SDPTEC_SV_DATA
+        TEMPORARY TABLESPACE SDPTEC_SV_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_SV_U/SDPTEC_SV_U;
+
+    CREATE TABLE SDPTEC_SV_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_SV_DATA;
+
+    INSERT INTO SDPTEC_SV_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('V', 1790, 'V')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_SV_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_SV_SNAP
+    SELECT 'R_TOTAL', T.TOTAL_PAGE_COUNT
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_SV_TS';
+
+    INSERT INTO SDPTEC_SV_SNAP
+    SELECT 'R_FILE0', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SV_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_SV_SNAP WHERE TAG = 'R_FILE0' ) > 128
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_GREW
+      FROM DUAL;
+
+##################################
+SECTOR; IDENTICAL AUTOEXTEND STATEMENTS
+##################################
+    ALTER TABLESPACE SDPTEC_SV_TS
+        ALTER TEMPFILE 'sdptec_sv_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M;
+
+    ALTER TABLESPACE SDPTEC_SV_TS
+        ALTER TEMPFILE 'sdptec_sv_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND D.INITSIZE = 128
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_SV_SNAP
+                                    WHERE TAG = 'R_FILE0' )
+               THEN 1 ELSE 0
+           END AS PASS_SAME_VALUE_KEEPS_RUNTIME
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SV_TS'
+       AND D.ID = 0;
+
+    # The no-op may not disturb the sibling file or the published total.
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_SV_SNAP
+                                            WHERE TAG = 'R_TOTAL' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.SIBLING_CURRENT = 128
+                AND F.SIBLING_AUTOEXTEND = 0
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+               THEN 1 ELSE 0
+           END AS PASS_SAME_VALUE_KEEPS_FILE_SET
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.ID = 1 THEN D.CURRSIZE ELSE 0 END)
+                        AS SIBLING_CURRENT,
+                    SUM(CASE WHEN D.ID = 1 THEN D.AUTOEXTEND ELSE 0 END)
+                        AS SIBLING_AUTOEXTEND
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_SV_TS' ) F
+     WHERE T.NAME = 'SDPTEC_SV_TS';
+
+##################################
+SECTOR; NO-OP LEAVES NOTHING TO REPLAY
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND D.INITSIZE = 128
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_SV_SNAP
+                                    WHERE TAG = 'R_FILE0' )
+                AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_NOOP_RESTART_STABLE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SV_TS'
+       AND D.ID = 0;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_SV_U CASCADE;
+    DROP TABLE SDPTEC_SV_SNAP;
+    DROP TABLESPACE SDPTEC_SV_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_SV_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

@@ -1,0 +1,141 @@
+###########################################################################
+# TestCase Description = Grow the TEMP definition and shrink the file in one ALTER TEMPFILE SIZE.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.6 `B < T < R`: EXTEND record for the definition and a physical
+#                        shrink lane in the same statement; WAL diff is never a physical write count.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, src/sm/sdp/sdpte/sdpteResizeOutcome.cpp
+#                        src/sm/sdd/sddUpdate.cpp redo/undo_SCT_UPDATE_DRDB_EXTEND_DBF TEMP wrapper
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_ES_U CASCADE;
+    DROP TABLE SDPTEC_ES_SNAP;
+    DROP TABLESPACE SDPTEC_ES_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_ES_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_ES_DATA
+        DATAFILE 'sdptec_es_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_ES_TS
+        TEMPFILE 'sdptec_es_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_ES_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_ES_DATA;
+
+    CREATE USER SDPTEC_ES_U IDENTIFIED BY SDPTEC_ES_U
+        DEFAULT TABLESPACE SDPTEC_ES_DATA
+        TEMPORARY TABLESPACE SDPTEC_ES_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_ES_U/SDPTEC_ES_U;
+
+    CREATE TABLE SDPTEC_ES_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_ES_DATA;
+
+    INSERT INTO SDPTEC_ES_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('E', 1790, 'E')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH ABOVE THE TARGET
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_ES_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_ES_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ES_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    # The target chosen below must sit strictly between B (128) and R.
+    SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_ES_SNAP WHERE TAG = 'R_AFTER_SPILL' ) > 256
+               THEN 1 ELSE 0
+           END AS PASS_R_ABOVE_TARGET
+      FROM DUAL;
+
+##################################
+SECTOR; DEFINITION GROW AND PHYSICAL SHRINK
+##################################
+    # T = 256 pages: above the committed baseline B = 128, below the runtime
+    # current R. The definition takes an EXTEND record while the file itself
+    # is truncated down to the target.
+    ALTER TABLESPACE SDPTEC_ES_TS
+        ALTER TEMPFILE 'sdptec_es_01.dbf' SIZE 2M;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 256
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND T.TOTAL_PAGE_COUNT = 256
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_EXTEND_WITH_SHRINK
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ES_TS';
+
+##################################
+SECTOR; RESTART REBUILDS D = R = P = T
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 256
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 256
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_AT_TARGET
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ES_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_ES_U CASCADE;
+    DROP TABLE SDPTEC_ES_SNAP;
+    DROP TABLESPACE SDPTEC_ES_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_ES_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

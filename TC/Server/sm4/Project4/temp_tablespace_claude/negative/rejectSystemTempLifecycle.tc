@@ -1,0 +1,112 @@
+###########################################################################
+# TestCase Description = Preserve every SYSTEM TEMP lifecycle rejection with an unchanged catalog.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 2.3 refused surface, design 9.5 SYSTEM TEMP drop guard,
+#                        design 9.11 USER-only DISCARD; the new manager must not widen any of them
+#                        into a successful no-op.
+# Product Reference    = src/sm/sdp/sdpte/sdpteReject.cpp sdpteReject::operation
+#                        src/qp/qdt/qdtAlter.cpp validateTBSOnlineOrOffline / validateBackupTBS
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+# iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TABLE SDPTEC_SL_SNAP ( TAG VARCHAR(32), V BIGINT );
+
+    INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'TOTAL', TOTAL_PAGE_COUNT FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+
+    INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'FILES', DATAFILE_COUNT FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+
+    INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'STATE', STATE FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+
+    INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'NEXTID', NEXT_FILE_ID FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+    COMMIT;
+
+    CONNECT SYS/MANAGER AS SYSDBA;
+
+##################################
+SECTOR; EXPECTED SYSTEM TEMP REJECTIONS
+##################################
+    DROP TABLESPACE SYS_TBS_DISK_TEMP;
+
+    DROP TABLESPACE SYS_TBS_DISK_TEMP INCLUDING CONTENTS AND DATAFILES;
+
+    ALTER TABLESPACE SYS_TBS_DISK_TEMP OFFLINE;
+
+    ALTER TABLESPACE SYS_TBS_DISK_TEMP ONLINE;
+
+    ALTER TABLESPACE SYS_TBS_DISK_TEMP BEGIN BACKUP;
+
+    ALTER TABLESPACE SYS_TBS_DISK_TEMP END BACKUP;
+
+    ALTER TABLESPACE SYS_TBS_DISK_TEMP DISCARD;
+
+    ALTER TABLESPACE SYS_TBS_DISK_TEMP
+        ALTER AUTOEXTEND ON NEXT 8M MAXSIZE 128M;
+
+##################################
+SECTOR; VERIFY NO MUTATION
+##################################
+    SELECT CASE
+               WHEN T.TYPE = 5
+                AND T.STATE = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'STATE' )
+                AND T.DATAFILE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'FILES' )
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'TOTAL' )
+                AND T.NEXT_FILE_ID = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'NEXTID' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SYSTEM_TEMP_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SYS_TBS_DISK_TEMP' ) F
+     WHERE T.NAME = 'SYS_TBS_DISK_TEMP';
+
+##################################
+SECTOR; SYSTEM TEMP SURVIVES A RESTART UNCHANGED
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.TYPE = 5
+                AND T.STATE = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'STATE' )
+                AND T.DATAFILE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'FILES' )
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'TOTAL' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SYSTEM_TEMP_UNCHANGED_AFTER_RESTART
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SYS_TBS_DISK_TEMP';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE SDPTEC_SL_SNAP;
+    SKIP END;
+}

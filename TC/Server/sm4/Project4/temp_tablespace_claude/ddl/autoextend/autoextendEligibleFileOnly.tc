@@ -1,0 +1,152 @@
+###########################################################################
+# TestCase Description = Grow only the AUTOEXTEND-eligible tempfile of a mixed TEMP file set.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 8.2 step 2 eligible-file selection, design 5.3 per-file `R`,
+#                        design 15.1 total is `sum(R)` over the whole file set.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAutoExtend.cpp eligible file selection
+#                        src/sm/sdp/sdpte/sdpteExtent.cpp allocation across files
+#                        src/sm/sct/sctFT.cpp sctFT::getDiskTBSInfo TEMP total projection
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_EF_U CASCADE;
+    DROP TABLESPACE SDPTEC_EF_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_EF_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_EF_DATA
+        DATAFILE 'sdptec_ef_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    # Only the third tempfile may grow at runtime.
+    CREATE TEMPORARY TABLESPACE SDPTEC_EF_TS
+        TEMPFILE 'sdptec_ef_01.dbf' SIZE 1M AUTOEXTEND OFF,
+                 'sdptec_ef_02.dbf' SIZE 1M AUTOEXTEND OFF,
+                 'sdptec_ef_03.dbf' SIZE 1M
+                     AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTEC_EF_U IDENTIFIED BY SDPTEC_EF_U
+        DEFAULT TABLESPACE SDPTEC_EF_DATA
+        TEMPORARY TABLESPACE SDPTEC_EF_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_EF_U/SDPTEC_EF_U;
+
+    CREATE TABLE SDPTEC_EF_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_EF_DATA;
+
+    INSERT INTO SDPTEC_EF_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('F', 1790, 'F')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; SPILL THROUGH THE WHOLE FILE SET
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_MIXED_SET_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_EF_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 3
+                AND SUM(CASE WHEN D.ID = 0
+                              AND D.CURRSIZE = 128 AND D.AUTOEXTEND = 0
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 1
+                              AND D.CURRSIZE = 128 AND D.AUTOEXTEND = 0
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 2
+                              AND D.CURRSIZE > 128 AND D.AUTOEXTEND = 1
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_ONLY_ELIGIBLE_FILE_GREW
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_EF_TS';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.TOTAL_PAGE_COUNT > 384
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_TOTAL_IS_SUM_OF_RUNTIME
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_EF_TS' ) F
+     WHERE T.NAME = 'SDPTEC_EF_TS';
+
+##################################
+SECTOR; MOVING ELIGIBILITY MOVES THE GROWTH
+##################################
+    ALTER TABLESPACE SDPTEC_EF_TS
+        ALTER TEMPFILE 'sdptec_ef_03.dbf' AUTOEXTEND OFF;
+
+    # Return the old eligible file to its baseline so the second spill cannot
+    # reuse capacity left by the first statement.
+    ALTER TABLESPACE SDPTEC_EF_TS
+        ALTER TEMPFILE 'sdptec_ef_03.dbf' SIZE 1M;
+
+    ALTER TABLESPACE SDPTEC_EF_TS
+        ALTER TEMPFILE 'sdptec_ef_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M;
+
+    CONNECT SDPTEC_EF_U/SDPTEC_EF_U;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SECOND_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_EF_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN SUM(CASE WHEN D.ID = 0
+                              AND D.CURRSIZE > 128 AND D.AUTOEXTEND = 1
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 1
+                              AND D.CURRSIZE = 128 AND D.AUTOEXTEND = 0
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 2
+                              AND D.AUTOEXTEND = 0
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_NEW_ELIGIBLE_FILE_GREW
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_EF_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_EF_U CASCADE;
+    DROP TABLESPACE SDPTEC_EF_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_EF_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

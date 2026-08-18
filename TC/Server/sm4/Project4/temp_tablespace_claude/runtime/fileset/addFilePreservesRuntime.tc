@@ -1,0 +1,161 @@
+###########################################################################
+# TestCase Description = Preserve the runtime-grown current of a retained tempfile across ADD TEMPFILE.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.3 ADD keeps the old projection usable; F-03 retained-file state is
+#                        carried into the new generation; F-04 recomputes the standard TEMP total.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAddTempFile.cpp (commits 15059300, 51c9238e)
+#                        src/sm/sdp/sdpte/sdpteModule.cpp definition/runtime publication
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_AP_U CASCADE;
+    DROP TABLE SDPTEC_AP_SNAP;
+    DROP TABLESPACE SDPTEC_AP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_AP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_ap_02.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_AP_DATA
+        DATAFILE 'sdptec_ap_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_AP_TS
+        TEMPFILE 'sdptec_ap_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_AP_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_AP_DATA;
+
+    CREATE USER SDPTEC_AP_U IDENTIFIED BY SDPTEC_AP_U
+        DEFAULT TABLESPACE SDPTEC_AP_DATA
+        TEMPORARY TABLESPACE SDPTEC_AP_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_AP_U/SDPTEC_AP_U;
+
+    CREATE TABLE SDPTEC_AP_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_AP_DATA;
+
+    INSERT INTO SDPTEC_AP_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('A', 1790, 'A')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH BEFORE THE FILE DDL
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_BEFORE_ADD
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_AP_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_AP_SNAP
+    SELECT 'R_FILE0', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AP_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_AP_SNAP WHERE TAG = 'R_FILE0' ) > 128
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_GREW
+      FROM DUAL;
+
+##################################
+SECTOR; ADD KEEPS THE RETAINED FILE AT ITS RUNTIME CURRENT
+##################################
+    ALTER TABLESPACE SDPTEC_AP_TS ADD TEMPFILE
+        'sdptec_ap_02.dbf' SIZE 2M AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN D.CURRSIZE = ( SELECT V FROM SDPTEC_AP_SNAP
+                                    WHERE TAG = 'R_FILE0' )
+                AND D.INITSIZE = 128
+                AND D.AUTOEXTEND = 1
+               THEN 1 ELSE 0
+           END AS PASS_RETAINED_FILE_KEEPS_R
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AP_TS'
+       AND D.ID = 0;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_AP_SNAP
+                                            WHERE TAG = 'R_FILE0' ) + 256
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.NEW_FILE_CURRENT = 256
+               THEN 1 ELSE 0
+           END AS PASS_TOTAL_RECOMPUTED_AFTER_ADD
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.ID = 1 THEN D.CURRSIZE ELSE 0 END)
+                        AS NEW_FILE_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_AP_TS' ) F
+     WHERE T.NAME = 'SDPTEC_AP_TS';
+
+##################################
+SECTOR; THE NEW GENERATION STILL SERVES SPILLS
+##################################
+    CONNECT SDPTEC_AP_U/SDPTEC_AP_U;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_ADD
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_AP_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_TOTAL_TRACKS_FILE_SET
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_AP_TS' ) F
+     WHERE T.NAME = 'SDPTEC_AP_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_AP_U CASCADE;
+    DROP TABLE SDPTEC_AP_SNAP;
+    DROP TABLESPACE SDPTEC_AP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_AP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_ap_02.dbf";
+}

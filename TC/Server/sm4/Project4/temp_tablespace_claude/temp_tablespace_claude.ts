@@ -1,4 +1,4 @@
-TestSuiteDescription  = Simple TEMP Tablespace Regression (Role-based folder suites, 79 executable cases)
+TestSuiteDescription  = Simple TEMP Tablespace gap suite (role-based folder suites, 36 cases)
 ###############################################################################
 control/control.ts
 ddl/ddl.ts
@@ -6,6 +6,5 @@ negative/negative.ts
 recovery/recovery.ts
 regression/regression.ts
 runtime/runtime.ts
-safety/safety.ts
 views/views.ts
 -------------------------------------------------------------------------------

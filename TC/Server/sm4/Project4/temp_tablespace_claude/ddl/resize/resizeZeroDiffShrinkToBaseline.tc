@@ -1,0 +1,147 @@
+###########################################################################
+# TestCase Description = Shrink a runtime-grown TEMP file back to its unchanged definition baseline.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.6 row `T == B < R`: zero-diff SHRINK record, definition unchanged,
+#                        physical completion truncates R down to B and survives restart.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, src/sm/sdp/sdpte/sdpteAlterSizeLane.cpp
+#                        src/sm/sdp/sdpte/sdpteResizeOutcome.cpp
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_ZS_U CASCADE;
+    DROP TABLE SDPTEC_ZS_SNAP;
+    DROP TABLESPACE SDPTEC_ZS_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_ZS_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_ZS_DATA
+        DATAFILE 'sdptec_zs_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_ZS_TS
+        TEMPFILE 'sdptec_zs_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_ZS_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_ZS_DATA;
+
+    CREATE USER SDPTEC_ZS_U IDENTIFIED BY SDPTEC_ZS_U
+        DEFAULT TABLESPACE SDPTEC_ZS_DATA
+        TEMPORARY TABLESPACE SDPTEC_ZS_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_ZS_U/SDPTEC_ZS_U;
+
+    CREATE TABLE SDPTEC_ZS_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_ZS_DATA;
+
+    INSERT INTO SDPTEC_ZS_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('Z', 1790, 'Z')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH ABOVE THE BASELINE
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_ZS_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_ZS_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.INITSIZE = 128
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_R_ABOVE_B
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS';
+
+##################################
+SECTOR; ZERO DIFF SHRINK BACK TO B
+##################################
+    # T equals the committed definition baseline B and is below the runtime
+    # current R. The definition does not change, but the physical target does.
+    ALTER TABLESPACE SDPTEC_ZS_TS
+        ALTER TEMPFILE 'sdptec_zs_01.dbf' SIZE 1M;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT V FROM SDPTEC_ZS_SNAP WHERE TAG = 'R_AFTER_SPILL' ) > 128
+               THEN 1 ELSE 0
+           END AS PASS_ZERO_DIFF_SHRINK
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS';
+
+##################################
+SECTOR; PHYSICAL COMPLETION IS DURABLE
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    # Startup publishes R = P. The pre-shrink physical length must not return.
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SHRINK_SURVIVES_RESTART
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_ZS_U CASCADE;
+    DROP TABLE SDPTEC_ZS_SNAP;
+    DROP TABLESPACE SDPTEC_ZS_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_ZS_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

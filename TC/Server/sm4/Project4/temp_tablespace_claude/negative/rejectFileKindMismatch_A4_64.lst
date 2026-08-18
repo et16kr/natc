@@ -1,0 +1,163 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep the DATAFILE/TEMPFILE keyword guard on every ALTER TABLESPACE form.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 2.3 and A-20: the existing QP validator decides the keyword/type
+$T0> #                        match, and the statement-sized TEMP DROP path must not bypass it.
+$T0> # Product Reference    = src/qp/qdt/qdtAlter.cpp isDiskTBSType, validateRenameOrDropFile,
+$T0> #                        validateAddFile, validateModifyFile, executeDropFile
+$T0> #                        src/sm/sdp/sdpTableSpace.cpp sdpTableSpace::removeDataFiles
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_KM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_KM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_03.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_new.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_bad.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_KM_DATA
+        DATAFILE 'sdptec_km_data_01.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_km_data_02.dbf' SIZE 4M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_KM_TS
+        TEMPFILE 'sdptec_km_01.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_km_02.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_km_03.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; DATAFILE FORMS AGAINST A TEMP TABLESPACE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_KM_TS ADD DATAFILE
+        'sdptec_km_bad.dbf' SIZE 4M AUTOEXTEND OFF;
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_TS
+        DROP DATAFILE 'sdptec_km_02.dbf';
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_TS
+        DROP DATAFILE 'sdptec_km_02.dbf', 'sdptec_km_03.dbf';
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_TS
+        ALTER DATAFILE 'sdptec_km_01.dbf' SIZE 8M;
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_TS
+        ALTER DATAFILE 'sdptec_km_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 32M;
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_TS
+        RENAME DATAFILE 'sdptec_km_02.dbf' TO 'sdptec_km_new.dbf';
+[ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$T0> ##################################
+$T0> SECTOR 3; TEMPFILE FORMS AGAINST A DATA TABLESPACE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_KM_DATA ADD TEMPFILE
+        'sdptec_km_bad.dbf' SIZE 4M AUTOEXTEND OFF;
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_DATA
+        DROP TEMPFILE 'sdptec_km_data_02.dbf';
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_DATA
+        ALTER TEMPFILE 'sdptec_km_data_01.dbf' SIZE 8M;
+[ERR-311DA : Mismatched tablespace type. The type of the tablespace and the type of the file are different.]
+
+$T0> ALTER TABLESPACE SDPTEC_KM_DATA
+        RENAME TEMPFILE 'sdptec_km_data_02.dbf' TO 'sdptec_km_new.dbf';
+[ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$T0> ##################################
+$T0> SECTOR 4; VERIFY NO MUTATION ON EITHER SIDE
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = 1536
+                AND T.NEXT_FILE_ID = 3
+                AND F.FILE_COUNT = 3
+                AND F.TOTAL_CURRENT = 1536
+                AND F.AUTOEXTEND_ON_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_TEMP_SIDE_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.AUTOEXTEND = 1 THEN 1 ELSE 0 END)
+                        AS AUTOEXTEND_ON_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_KM_TS' ) F
+     WHERE T.NAME = 'SDPTEC_KM_TS';
+PASS_TEMP_SIDE_UNCHANGED 
+---------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN T.TYPE = 4
+                AND T.DATAFILE_COUNT = 2
+                AND F.FILE_COUNT = 2
+                AND F.TOTAL_CURRENT = 1024
+                AND F.AUTOEXTEND_ON_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_DATA_SIDE_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.AUTOEXTEND = 1 THEN 1 ELSE 0 END)
+                        AS AUTOEXTEND_ON_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_KM_DATA' ) F
+     WHERE T.NAME = 'SDPTEC_KM_DATA';
+PASS_DATA_SIDE_UNCHANGED 
+---------------------------
+1           
+1 row selected.
+
+$T0> PASS_REJECTED_FILE_NOT_CREATED
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_KM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_KM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_03.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_new.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_km_bad.dbf";
+

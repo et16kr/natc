@@ -1,0 +1,152 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Issue an ALTER TEMPFILE SIZE shrink while a session is spilling.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 9.6 step 3 gate close and drain before a shrink target is accepted,
+$T0> #                        design 13 fixed lock order and re-check after wakeup.
+$T0> # Regression Focus     = the shrink lane must not hold a file/resize mutex across a drain wait, and
+$T0> #                        the spilling session must not deadlock against it (commit a0e0ad84).
+$T0> # Oracle Note          = The shrink is allowed to be refused while extents inside the target-to-
+$T0> #                        runtime interval are still live. Only the invariants after both sides
+$T0> #                        finish are asserted, so the case has one stable expected output either way.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAlterSizeLane.cpp, src/sm/sdp/sdpte/sdpteExtent.cpp
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_CS_U CASCADE;
+$T0> DROP TABLESPACE SDPTEC_CS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_CS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_CS_DATA
+        DATAFILE 'sdptec_cs_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_CS_TS
+        TEMPFILE 'sdptec_cs_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 256M,
+                 'sdptec_cs_02.dbf' SIZE 8M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTEC_CS_U IDENTIFIED BY SDPTEC_CS_U
+        DEFAULT TABLESPACE SDPTEC_CS_DATA
+        TEMPORARY TABLESPACE SDPTEC_CS_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTEC_CS_U/SDPTEC_CS_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_CS_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_CS_DATA;
+Create success.
+
+$T0> CREATE TABLE SDPTEC_CS_RESULT ( WORKER_ID INTEGER, PASS_VALUE INTEGER )
+        TABLESPACE SDPTEC_CS_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_CS_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('S', 1790, 'S')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; SHRINK ATTEMPT UNDER A LIVE SPILL
+$T0> ##################################
+
+$T0> CONNECT SDPTEC_CS_U/SDPTEC_CS_U;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND SUM(PASS_VALUE) = 1
+               THEN 1 ELSE 0
+           END AS PASS_SPILL_COMPLETED_UNDER_SHRINK
+      FROM SDPTEC_CS_RESULT;
+PASS_SPILL_COMPLETED_UNDER_SHRINK 
+------------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Whether the shrink was accepted or refused, the published projection must
+$T0> # stay internally consistent and free of leaked allocation.
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.OPENED_COUNT = 2
+                AND F.SIBLING_CURRENT IN ( 256, 1024 )
+               THEN 1 ELSE 0
+           END AS PASS_PROJECTION_CONSISTENT
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.OPENED = 1 THEN 1 ELSE 0 END) AS OPENED_COUNT,
+                    SUM(CASE WHEN D.ID = 1 THEN D.CURRSIZE ELSE 0 END)
+                        AS SIBLING_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_CS_TS' ) F
+     WHERE T.NAME = 'SDPTEC_CS_TS';
+PASS_PROJECTION_CONSISTENT 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; THE SPACE STILL WORKS AFTERWARDS
+$T0> ##################################
+$T0> CONNECT SDPTEC_CS_U/SDPTEC_CS_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_SHRINK
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_CS_SOURCE
+           ) D;
+PASS_SPILL_AFTER_SHRINK 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_CS_U CASCADE;
+$T0> DROP TABLESPACE SDPTEC_CS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_CS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

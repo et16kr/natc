@@ -1,0 +1,216 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep configured AUTOEXTEND ON after the runtime current reaches MAXSIZE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 8.1: runtime AT_MAX is derived state and must never be materialized
+$T0> #                        as configured OFF, not by a later unrelated DDL and not by a restart.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteView.cpp public projection uses the configured triple
+$T0> #                        src/sm/sdd/sddDiskFT.cpp buildFT4DATAFILES TEMP branch
+$T0> #                        src/sm/sdp/sdpte/sdpteAutoExtend.cpp runtime extension
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_AM_U CASCADE;
+$T0> DROP TABLESPACE SDPTEC_AM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_AM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_AM_DATA
+        DATAFILE 'sdptec_am_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_AM_TS
+        TEMPFILE 'sdptec_am_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 4M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTEC_AM_U IDENTIFIED BY SDPTEC_AM_U
+        DEFAULT TABLESPACE SDPTEC_AM_DATA
+        TEMPORARY TABLESPACE SDPTEC_AM_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTEC_AM_U/SDPTEC_AM_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_AM_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_AM_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_AM_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('M', 1790, 'M')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; DRIVE THE RUNTIME TO THE CONFIGURED MAX
+$T0> ##################################
+$T0> # The 4M cap cannot hold this spill. The statement outcome is not the
+$T0> # subject of this case; the configured metadata it leaves behind is.
+$T0> SKIP BEGIN;
+$T0> SELECT COUNT(*) AS SPILL_ROWS
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_AM_SOURCE
+           ) D;
+$T0> SKIP END;
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 512
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 512
+                AND T.TOTAL_PAGE_COUNT = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_AT_MAX_KEEPS_CONFIGURED_ON
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AM_TS';
+PASS_AT_MAX_KEEPS_CONFIGURED_ON 
+----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; UNRELATED DDL MUST NOT MATERIALIZE AT_MAX
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_AM_TS UNCOMPRESSED LOGGING;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.ATTR_LOG_COMPRESS = 0
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 512
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_LOGGING_DDL_KEEPS_CONFIGURED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AM_TS';
+PASS_LOGGING_DDL_KEEPS_CONFIGURED 
+------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; RESTART RECOMPUTES EFFECTIVE STATE FROM R
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 512
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 512
+                AND D.OPENED = 0
+                AND T.ATTR_LOG_COMPRESS = 0
+                AND T.TOTAL_PAGE_COUNT = 512
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_KEEPS_CONFIGURED_ON
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AM_TS';
+PASS_RESTART_KEEPS_CONFIGURED_ON 
+-----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; GROWTH RESUMES ONCE MAXSIZE IS RAISED
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_AM_TS
+        ALTER TEMPFILE 'sdptec_am_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.MAXSIZE = 16384
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_RAISED_MAX_KEEPS_R
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AM_TS';
+PASS_RAISED_MAX_KEEPS_R 
+--------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTEC_AM_U/SDPTEC_AM_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_RAISED_MAX
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_AM_SOURCE
+           ) D;
+PASS_SPILL_AFTER_RAISED_MAX 
+------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > 512
+                AND D.AUTOEXTEND = 1
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_RESUMED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_AM_TS';
+PASS_RUNTIME_RESUMED 
+-----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_AM_U CASCADE;
+$T0> DROP TABLESPACE SDPTEC_AM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_AM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

@@ -1,0 +1,195 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep the recovery and version columns of a TEMP file at their zero sentinel.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 15.1 and A-16: `sdpte` never synthesizes an LSN it does not own and
+$T0> #                        never borrows a DATA/UNDO value, so a TEMP row keeps the zero sentinel the
+$T0> #                        standard node was initialized with, before and after runtime I/O.
+$T0> # Product Reference    = src/sm/sdd/sddDiskFT.cpp buildFT4DATAFILES TEMP branch
+$T0> #                        src/sm/sdd/sddDataFile.cpp sddDataFile::initialize
+$T0> #                        src/sm/sdd/sddDiskMgr.cpp doActIdentifyAllDBFiles TEMP identify skip
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_SC_U CASCADE;
+$T0> DROP TABLESPACE SDPTEC_SC_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_SC_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_SC_DATA
+        DATAFILE 'sdptec_sc_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_SC_TS
+        TEMPFILE 'sdptec_sc_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M,
+                 'sdptec_sc_02.dbf' SIZE 1M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTEC_SC_U IDENTIFIED BY SDPTEC_SC_U
+        DEFAULT TABLESPACE SDPTEC_SC_DATA
+        TEMPORARY TABLESPACE SDPTEC_SC_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 2; SENTINELS BEFORE ANY RUNTIME I/O
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(D.OLDEST_LSN_FILENO) = 0
+                AND SUM(D.OLDEST_LSN_OFFSET) = 0
+                AND SUM(D.CREATE_LSN_FILENO) = 0
+                AND SUM(D.CREATE_LSN_OFFSET) = 0
+                AND SUM(D.SM_VERSION) = 0
+                AND SUM(D.OPENED) = 0
+               THEN 1 ELSE 0
+           END AS PASS_TEMP_ZERO_SENTINELS
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SC_TS';
+PASS_TEMP_ZERO_SENTINELS 
+---------------------------
+1           
+1 row selected.
+
+$T0> # The same columns of an ordinary DATA file are not zero, so the assertion
+$T0> # above is about the TEMP branch and not about an empty view.
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(D.SM_VERSION) > 0
+               THEN 1 ELSE 0
+           END AS PASS_DATA_VERSION_NOT_SENTINEL
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SC_DATA';
+PASS_DATA_VERSION_NOT_SENTINEL 
+---------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; SENTINELS AFTER RUNTIME I/O
+$T0> ##################################
+$T0> CONNECT SDPTEC_SC_U/SDPTEC_SC_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_SC_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_SC_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_SC_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('C', 1790, 'C')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SENTINEL_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_SC_SOURCE
+           ) D;
+PASS_SENTINEL_SPILL 
+----------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(D.OLDEST_LSN_FILENO) = 0
+                AND SUM(D.OLDEST_LSN_OFFSET) = 0
+                AND SUM(D.CREATE_LSN_FILENO) = 0
+                AND SUM(D.CREATE_LSN_OFFSET) = 0
+                AND SUM(D.SM_VERSION) = 0
+               THEN 1 ELSE 0
+           END AS PASS_SENTINELS_AFTER_SPILL
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SC_TS';
+PASS_SENTINELS_AFTER_SPILL 
+-----------------------------
+1           
+1 row selected.
+
+$T0> # A checkpoint must not promote a TEMP body page or a TEMP header LSN.
+$T0> ALTER SYSTEM CHECKPOINT;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN SUM(D.OLDEST_LSN_FILENO) = 0
+                AND SUM(D.OLDEST_LSN_OFFSET) = 0
+                AND SUM(D.SM_VERSION) = 0
+               THEN 1 ELSE 0
+           END AS PASS_SENTINELS_AFTER_CHECKPOINT
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SC_TS';
+PASS_SENTINELS_AFTER_CHECKPOINT 
+----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; SENTINELS AFTER RESTART
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(D.OLDEST_LSN_FILENO) = 0
+                AND SUM(D.OLDEST_LSN_OFFSET) = 0
+                AND SUM(D.CREATE_LSN_FILENO) = 0
+                AND SUM(D.CREATE_LSN_OFFSET) = 0
+                AND SUM(D.SM_VERSION) = 0
+                AND SUM(D.OPENED) = 0
+               THEN 1 ELSE 0
+           END AS PASS_SENTINELS_AFTER_RESTART
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SC_TS';
+PASS_SENTINELS_AFTER_RESTART 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_SC_U CASCADE;
+$T0> DROP TABLESPACE SDPTEC_SC_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_SC_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

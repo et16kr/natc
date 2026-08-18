@@ -1,0 +1,195 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Grow a TEMP file above its runtime current with AUTOEXTEND disabled.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 9.6 row `T > R`: no-sync grow before commit, `fstat(P >= T)`,
+$T0> #                        and design 8.3 startup reconcile publishing `R = P = D`.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, src/sm/sdp/sdpte/sdpteFile.cpp
+$T0> #                        src/sm/sdp/sdpte/sdpteStartup.cpp
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_GA_U CASCADE;
+$T0> DROP TABLE SDPTEC_GA_SNAP;
+$T0> DROP TABLESPACE SDPTEC_GA_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_GA_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_GA_DATA
+        DATAFILE 'sdptec_ga_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> # MAXSIZE bounds the runtime current at 1024 pages, so the explicit target
+$T0> # of 2048 pages below is above R whatever the spill needed.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_GA_TS
+        TEMPFILE 'sdptec_ga_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 8M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE TABLE SDPTEC_GA_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_GA_DATA;
+Create success.
+
+$T0> CREATE USER SDPTEC_GA_U IDENTIFIED BY SDPTEC_GA_U
+        DEFAULT TABLESPACE SDPTEC_GA_DATA
+        TEMPORARY TABLESPACE SDPTEC_GA_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTEC_GA_U/SDPTEC_GA_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_GA_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_GA_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_GA_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('G', 1790, 'G')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; RUNTIME GROWTH UP TO THE CONFIGURED MAX
+$T0> ##################################
+$T0> # The bounded TEMP area may not hold this spill. Either outcome leaves the
+$T0> # runtime current between 128 and 1024 pages, which is what this case needs.
+$T0> SKIP BEGIN;
+$T0> SELECT COUNT(*) AS SPILL_ROWS
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_GA_SOURCE
+           ) D;
+$T0> SKIP END;
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> INSERT INTO SDPTEC_GA_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS'
+       AND D.ID = 0;
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > 128
+                AND D.CURRSIZE <= 1024
+                AND D.AUTOEXTEND = 1
+                AND D.MAXSIZE = 1024
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_BOUNDED_BY_MAX
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+PASS_RUNTIME_BOUNDED_BY_MAX 
+------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; EXPLICIT GROW ABOVE R
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_GA_TS
+        ALTER TEMPFILE 'sdptec_ga_01.dbf' AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 0
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_GA_SNAP
+                                    WHERE TAG = 'R_AFTER_SPILL' )
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_OFF_KEEPS_R
+      FROM V$DATAFILES D, V$TABLESPACES T
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+PASS_AUTOEXTEND_OFF_KEEPS_R 
+------------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTEC_GA_TS
+        ALTER TEMPFILE 'sdptec_ga_01.dbf' SIZE 16M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 2048
+                AND D.AUTOEXTEND = 0
+                AND T.TOTAL_PAGE_COUNT = 2048
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_GROW_ABOVE_RUNTIME
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+PASS_GROW_ABOVE_RUNTIME 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; RESTART PUBLISHES R = P = D
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 2048
+                AND D.AUTOEXTEND = 0
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 2048
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_KEEPS_GROWN_D
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+PASS_RESTART_KEEPS_GROWN_D 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_GA_U CASCADE;
+$T0> DROP TABLE SDPTEC_GA_SNAP;
+$T0> DROP TABLESPACE SDPTEC_GA_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_GA_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

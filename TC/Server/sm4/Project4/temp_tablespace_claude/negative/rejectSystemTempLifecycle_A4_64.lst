@@ -1,0 +1,138 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve every SYSTEM TEMP lifecycle rejection with an unchanged catalog.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 2.3 refused surface, design 9.5 SYSTEM TEMP drop guard,
+$T0> #                        design 9.11 USER-only DISCARD; the new manager must not widen any of them
+$T0> #                        into a successful no-op.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteReject.cpp sdpteReject::operation
+$T0> #                        src/qp/qdt/qdtAlter.cpp validateTBSOnlineOrOffline / validateBackupTBS
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TABLE SDPTEC_SL_SNAP ( TAG VARCHAR(32), V BIGINT );
+Create success.
+
+$T0> INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'TOTAL', TOTAL_PAGE_COUNT FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+1 row inserted.
+
+$T0> INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'FILES', DATAFILE_COUNT FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+1 row inserted.
+
+$T0> INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'STATE', STATE FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+1 row inserted.
+
+$T0> INSERT INTO SDPTEC_SL_SNAP
+    SELECT 'NEXTID', NEXT_FILE_ID FROM V$TABLESPACES
+     WHERE NAME = 'SYS_TBS_DISK_TEMP';
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CONNECT SYS/MANAGER AS SYSDBA;
+Connect success.
+
+$T0> ##################################
+$T0> SECTOR 2; EXPECTED SYSTEM TEMP REJECTIONS
+$T0> ##################################
+$T0> DROP TABLESPACE SYS_TBS_DISK_TEMP;
+[ERR-311DB : Unable to drop the SYSTEM tablespace.]
+
+$T0> DROP TABLESPACE SYS_TBS_DISK_TEMP INCLUDING CONTENTS AND DATAFILES;
+[ERR-311DB : Unable to drop the SYSTEM tablespace.]
+
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP OFFLINE;
+[ERR-311E7 : Unable to bring the specified tablespace online or offline.]
+
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP ONLINE;
+[ERR-311E7 : Unable to bring the specified tablespace online or offline.]
+
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP BEGIN BACKUP;
+[ERR-11098 : ALTER TABLESPACE BEGIN BACKUP cannot be executed in no archive log mode]
+
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP END BACKUP;
+[ERR-11098 : ALTER TABLESPACE END BACKUP cannot be executed in no archive log mode]
+
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP DISCARD;
+[ERR-41088 : Unable to execute the query in the current start-up phase]
+
+$T0> ALTER TABLESPACE SYS_TBS_DISK_TEMP
+        ALTER AUTOEXTEND ON NEXT 8M MAXSIZE 128M;
+[ERR-31256 : Unable to alter the system tablespace.]
+
+$T0> ##################################
+$T0> SECTOR 3; VERIFY NO MUTATION
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN T.TYPE = 5
+                AND T.STATE = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'STATE' )
+                AND T.DATAFILE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'FILES' )
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'TOTAL' )
+                AND T.NEXT_FILE_ID = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'NEXTID' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SYSTEM_TEMP_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SYS_TBS_DISK_TEMP' ) F
+     WHERE T.NAME = 'SYS_TBS_DISK_TEMP';
+PASS_SYSTEM_TEMP_UNCHANGED 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; SYSTEM TEMP SURVIVES A RESTART UNCHANGED
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.TYPE = 5
+                AND T.STATE = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'STATE' )
+                AND T.DATAFILE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'FILES' )
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_SL_SNAP WHERE TAG = 'TOTAL' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SYSTEM_TEMP_UNCHANGED_AFTER_RESTART
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SYS_TBS_DISK_TEMP';
+PASS_SYSTEM_TEMP_UNCHANGED_AFTER_RESTART 
+-------------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE SDPTEC_SL_SNAP;
+$T0> SKIP END;
+

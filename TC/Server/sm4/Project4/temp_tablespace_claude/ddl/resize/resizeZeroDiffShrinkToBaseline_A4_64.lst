@@ -1,0 +1,180 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Shrink a runtime-grown TEMP file back to its unchanged definition baseline.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 9.6 row `T == B < R`: zero-diff SHRINK record, definition unchanged,
+$T0> #                        physical completion truncates R down to B and survives restart.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, src/sm/sdp/sdpte/sdpteAlterSizeLane.cpp
+$T0> #                        src/sm/sdp/sdpte/sdpteResizeOutcome.cpp
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_ZS_U CASCADE;
+$T0> DROP TABLE SDPTEC_ZS_SNAP;
+$T0> DROP TABLESPACE SDPTEC_ZS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_ZS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_ZS_DATA
+        DATAFILE 'sdptec_zs_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_ZS_TS
+        TEMPFILE 'sdptec_zs_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE TABLE SDPTEC_ZS_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_ZS_DATA;
+Create success.
+
+$T0> CREATE USER SDPTEC_ZS_U IDENTIFIED BY SDPTEC_ZS_U
+        DEFAULT TABLESPACE SDPTEC_ZS_DATA
+        TEMPORARY TABLESPACE SDPTEC_ZS_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTEC_ZS_U/SDPTEC_ZS_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_ZS_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_ZS_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_ZS_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('Z', 1790, 'Z')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; RUNTIME GROWTH ABOVE THE BASELINE
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_ZS_SOURCE
+           ) D;
+PASS_RUNTIME_SPILL 
+---------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> INSERT INTO SDPTEC_ZS_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS'
+       AND D.ID = 0;
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE > D.INITSIZE
+                AND D.INITSIZE = 128
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_R_ABOVE_B
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS';
+PASS_R_ABOVE_B 
+-----------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; ZERO DIFF SHRINK BACK TO B
+$T0> ##################################
+$T0> # T equals the committed definition baseline B and is below the runtime
+$T0> # current R. The definition does not change, but the physical target does.
+$T0> ALTER TABLESPACE SDPTEC_ZS_TS
+        ALTER TEMPFILE 'sdptec_zs_01.dbf' SIZE 1M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT V FROM SDPTEC_ZS_SNAP WHERE TAG = 'R_AFTER_SPILL' ) > 128
+               THEN 1 ELSE 0
+           END AS PASS_ZERO_DIFF_SHRINK
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS';
+PASS_ZERO_DIFF_SHRINK 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; PHYSICAL COMPLETION IS DURABLE
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Startup publishes R = P. The pre-shrink physical length must not return.
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 128
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 128
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SHRINK_SURVIVES_RESTART
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ZS_TS';
+PASS_SHRINK_SURVIVES_RESTART 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_ZS_U CASCADE;
+$T0> DROP TABLE SDPTEC_ZS_SNAP;
+$T0> DROP TABLESPACE SDPTEC_ZS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_ZS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

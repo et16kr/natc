@@ -1,0 +1,161 @@
+###########################################################################
+# TestCase Description = Grow a TEMP file above its runtime current with AUTOEXTEND disabled.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.6 row `T > R`: no-sync grow before commit, `fstat(P >= T)`,
+#                        and design 8.3 startup reconcile publishing `R = P = D`.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, src/sm/sdp/sdpte/sdpteFile.cpp
+#                        src/sm/sdp/sdpte/sdpteStartup.cpp
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_GA_U CASCADE;
+    DROP TABLE SDPTEC_GA_SNAP;
+    DROP TABLESPACE SDPTEC_GA_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_GA_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_GA_DATA
+        DATAFILE 'sdptec_ga_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    # MAXSIZE bounds the runtime current at 1024 pages, so the explicit target
+    # of 2048 pages below is above R whatever the spill needed.
+    CREATE TEMPORARY TABLESPACE SDPTEC_GA_TS
+        TEMPFILE 'sdptec_ga_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 8M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_GA_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_GA_DATA;
+
+    CREATE USER SDPTEC_GA_U IDENTIFIED BY SDPTEC_GA_U
+        DEFAULT TABLESPACE SDPTEC_GA_DATA
+        TEMPORARY TABLESPACE SDPTEC_GA_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_GA_U/SDPTEC_GA_U;
+
+    CREATE TABLE SDPTEC_GA_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_GA_DATA;
+
+    INSERT INTO SDPTEC_GA_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('G', 1790, 'G')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH UP TO THE CONFIGURED MAX
+##################################
+    # The bounded TEMP area may not hold this spill. Either outcome leaves the
+    # runtime current between 128 and 1024 pages, which is what this case needs.
+    SKIP BEGIN;
+    SELECT COUNT(*) AS SPILL_ROWS
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_GA_SOURCE
+           ) D;
+    SKIP END;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_GA_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN D.CURRSIZE > 128
+                AND D.CURRSIZE <= 1024
+                AND D.AUTOEXTEND = 1
+                AND D.MAXSIZE = 1024
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_BOUNDED_BY_MAX
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+
+##################################
+SECTOR; EXPLICIT GROW ABOVE R
+##################################
+    ALTER TABLESPACE SDPTEC_GA_TS
+        ALTER TEMPFILE 'sdptec_ga_01.dbf' AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 0
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_GA_SNAP
+                                    WHERE TAG = 'R_AFTER_SPILL' )
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_OFF_KEEPS_R
+      FROM V$DATAFILES D, V$TABLESPACES T
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+
+    ALTER TABLESPACE SDPTEC_GA_TS
+        ALTER TEMPFILE 'sdptec_ga_01.dbf' SIZE 16M;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 2048
+                AND D.AUTOEXTEND = 0
+                AND T.TOTAL_PAGE_COUNT = 2048
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_GROW_ABOVE_RUNTIME
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+
+##################################
+SECTOR; RESTART PUBLISHES R = P = D
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 2048
+                AND D.AUTOEXTEND = 0
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 2048
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_KEEPS_GROWN_D
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_GA_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_GA_U CASCADE;
+    DROP TABLE SDPTEC_GA_SNAP;
+    DROP TABLESPACE SDPTEC_GA_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_GA_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

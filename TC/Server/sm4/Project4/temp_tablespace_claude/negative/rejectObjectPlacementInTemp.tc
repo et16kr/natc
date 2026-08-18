@@ -1,0 +1,139 @@
+###########################################################################
+# TestCase Description = Keep user segments out of a TEMP tablespace and leave the TEMP state intact.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 2.2/2.3: the new manager owns TEMP work-area extents only, so the
+#                        existing "no user object in a TEMP tablespace" validation must be unchanged
+#                        and every refusal must leave the TEMP definition and runtime untouched.
+# Product Reference    = src/qp/qdb/qdbCommon.cpp ERR_NO_CREATE_IN_SYSTEM_TBS
+#                        src/sm/sdp/sdpte/sdpteExtent.cpp work-area extent ownership
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_OP_U CASCADE;
+    DROP TABLE SDPTEC_OP_HOST;
+    DROP TABLESPACE SDPTEC_OP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_OP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_OP_DATA
+        DATAFILE 'sdptec_op_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_OP_TS
+        TEMPFILE 'sdptec_op_01.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_OP_HOST ( I1 INTEGER, C1 VARCHAR(100) )
+        TABLESPACE SDPTEC_OP_DATA;
+
+##################################
+SECTOR; EXPECTED PLACEMENT REJECTIONS
+##################################
+    CREATE TABLE SDPTEC_OP_BAD ( I1 INTEGER )
+        TABLESPACE SDPTEC_OP_TS;
+
+    CREATE INDEX SDPTEC_OP_BAD_IDX ON SDPTEC_OP_HOST ( I1 )
+        TABLESPACE SDPTEC_OP_TS;
+
+    ALTER TABLE SDPTEC_OP_HOST ALTER TABLESPACE SDPTEC_OP_TS;
+
+    CREATE USER SDPTEC_OP_U IDENTIFIED BY SDPTEC_OP_U
+        DEFAULT TABLESPACE SDPTEC_OP_TS;
+
+##################################
+SECTOR; VERIFY NO MUTATION
+##################################
+    SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.STATE = 2
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 7
+               THEN 1 ELSE 0
+           END AS PASS_TEMP_UNCHANGED_BY_PLACEMENT
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_OP_TS';
+
+    SELECT CASE
+               WHEN COUNT(*) = 0
+               THEN 1 ELSE 0
+           END AS PASS_NO_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE TABLE_NAME = 'SDPTEC_OP_BAD';
+
+    SELECT CASE
+               WHEN COUNT(*) = 0
+               THEN 1 ELSE 0
+           END AS PASS_NO_INDEX_CREATED
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE INDEX_NAME = 'SDPTEC_OP_BAD_IDX';
+
+##################################
+SECTOR; THE TEMP TABLESPACE STILL SERVES WORK AREAS
+##################################
+    CREATE USER SDPTEC_OP_U IDENTIFIED BY SDPTEC_OP_U
+        DEFAULT TABLESPACE SDPTEC_OP_DATA
+        TEMPORARY TABLESPACE SDPTEC_OP_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_OP_U/SDPTEC_OP_U;
+
+    CREATE TABLE SDPTEC_OP_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_OP_DATA;
+
+    INSERT INTO SDPTEC_OP_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('O', 1790, 'O')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_TEMP_STILL_USABLE
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_OP_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+               THEN 1 ELSE 0
+           END AS PASS_WORK_AREA_PROJECTION
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_OP_TS' ) F
+     WHERE T.NAME = 'SDPTEC_OP_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_OP_U CASCADE;
+    DROP TABLE SDPTEC_OP_HOST;
+    DROP TABLESPACE SDPTEC_OP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_OP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

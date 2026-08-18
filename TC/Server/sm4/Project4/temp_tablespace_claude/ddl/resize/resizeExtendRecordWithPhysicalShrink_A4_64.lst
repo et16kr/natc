@@ -1,0 +1,174 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Grow the TEMP definition and shrink the file in one ALTER TEMPFILE SIZE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 9.6 `B < T < R`: EXTEND record for the definition and a physical
+$T0> #                        shrink lane in the same statement; WAL diff is never a physical write count.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, src/sm/sdp/sdpte/sdpteResizeOutcome.cpp
+$T0> #                        src/sm/sdd/sddUpdate.cpp redo/undo_SCT_UPDATE_DRDB_EXTEND_DBF TEMP wrapper
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_ES_U CASCADE;
+$T0> DROP TABLE SDPTEC_ES_SNAP;
+$T0> DROP TABLESPACE SDPTEC_ES_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_ES_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_ES_DATA
+        DATAFILE 'sdptec_es_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_ES_TS
+        TEMPFILE 'sdptec_es_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE TABLE SDPTEC_ES_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_ES_DATA;
+Create success.
+
+$T0> CREATE USER SDPTEC_ES_U IDENTIFIED BY SDPTEC_ES_U
+        DEFAULT TABLESPACE SDPTEC_ES_DATA
+        TEMPORARY TABLESPACE SDPTEC_ES_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTEC_ES_U/SDPTEC_ES_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_ES_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_ES_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_ES_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('E', 1790, 'E')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; RUNTIME GROWTH ABOVE THE TARGET
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_ES_SOURCE
+           ) D;
+PASS_RUNTIME_SPILL 
+---------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> INSERT INTO SDPTEC_ES_SNAP
+    SELECT 'R_AFTER_SPILL', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ES_TS'
+       AND D.ID = 0;
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> # The target chosen below must sit strictly between B (128) and R.
+$T0> SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_ES_SNAP WHERE TAG = 'R_AFTER_SPILL' ) > 256
+               THEN 1 ELSE 0
+           END AS PASS_R_ABOVE_TARGET
+      FROM DUAL;
+PASS_R_ABOVE_TARGET 
+----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; DEFINITION GROW AND PHYSICAL SHRINK
+$T0> ##################################
+$T0> # T = 256 pages: above the committed baseline B = 128, below the runtime
+$T0> # current R. The definition takes an EXTEND record while the file itself
+$T0> # is truncated down to the target.
+$T0> ALTER TABLESPACE SDPTEC_ES_TS
+        ALTER TEMPFILE 'sdptec_es_01.dbf' SIZE 2M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 256
+                AND D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 16384
+                AND T.TOTAL_PAGE_COUNT = 256
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_EXTEND_WITH_SHRINK
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ES_TS';
+PASS_EXTEND_WITH_SHRINK 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; RESTART REBUILDS D = R = P = T
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 256
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 256
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESTART_AT_TARGET
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_ES_TS';
+PASS_RESTART_AT_TARGET 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_ES_U CASCADE;
+$T0> DROP TABLE SDPTEC_ES_SNAP;
+$T0> DROP TABLESPACE SDPTEC_ES_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_ES_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

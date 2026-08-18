@@ -1,0 +1,155 @@
+###########################################################################
+# TestCase Description = Resize one tempfile without disturbing the runtime current of its siblings.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 9.6 step 9 publishes one file's `R` change only; design 15.1 keeps
+#                        the tablespace total equal to `sum(R)` of the whole file set.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterSizeLane.cpp, src/sm/sdp/sdpte/sdpteModule.cpp
+#                        src/sm/sct/sctFT.cpp sctFT::getDiskTBSInfo TEMP total projection
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_RP_U CASCADE;
+    DROP TABLE SDPTEC_RP_SNAP;
+    DROP TABLESPACE SDPTEC_RP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_RP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_RP_DATA
+        DATAFILE 'sdptec_rp_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_RP_TS
+        TEMPFILE 'sdptec_rp_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M,
+                 'sdptec_rp_02.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    CREATE TABLE SDPTEC_RP_SNAP ( TAG VARCHAR(32), V INTEGER )
+        TABLESPACE SDPTEC_RP_DATA;
+
+    CREATE USER SDPTEC_RP_U IDENTIFIED BY SDPTEC_RP_U
+        DEFAULT TABLESPACE SDPTEC_RP_DATA
+        TEMPORARY TABLESPACE SDPTEC_RP_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTEC_RP_U/SDPTEC_RP_U;
+
+    CREATE TABLE SDPTEC_RP_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_RP_DATA;
+
+    INSERT INTO SDPTEC_RP_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('R', 1790, 'R')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+##################################
+SECTOR; RUNTIME GROWTH ON THE FIRST FILE
+##################################
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_BEFORE_RESIZE
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_RP_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    INSERT INTO SDPTEC_RP_SNAP
+    SELECT 'R_FILE0', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_RP_TS'
+       AND D.ID = 0;
+    COMMIT;
+
+    SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_RP_SNAP WHERE TAG = 'R_FILE0' ) > 128
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_GREW
+      FROM DUAL;
+
+##################################
+SECTOR; RESIZE THE SIBLING ONLY
+##################################
+    ALTER TABLESPACE SDPTEC_RP_TS
+        ALTER TEMPFILE 'sdptec_rp_02.dbf' SIZE 8M;
+
+    SELECT CASE
+               WHEN SUM(CASE WHEN D.ID = 0
+                              AND D.CURRSIZE = ( SELECT V FROM SDPTEC_RP_SNAP
+                                                  WHERE TAG = 'R_FILE0' )
+                              AND D.INITSIZE = 128
+                              AND D.AUTOEXTEND = 1
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 1
+                              AND D.CURRSIZE = 1024
+                              AND D.INITSIZE = 512
+                              AND D.AUTOEXTEND = 0
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_SIBLING_RESIZE_ISOLATED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_RP_TS';
+
+    SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_RP_SNAP
+                                            WHERE TAG = 'R_FILE0' ) + 1024
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_TOTAL_AFTER_SIBLING_RESIZE
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_RP_TS' ) F
+     WHERE T.NAME = 'SDPTEC_RP_TS';
+
+##################################
+SECTOR; SHRINK THE SIBLING BACK
+##################################
+    ALTER TABLESPACE SDPTEC_RP_TS
+        ALTER TEMPFILE 'sdptec_rp_02.dbf' SIZE 2M;
+
+    SELECT CASE
+               WHEN SUM(CASE WHEN D.ID = 0
+                              AND D.CURRSIZE = ( SELECT V FROM SDPTEC_RP_SNAP
+                                                  WHERE TAG = 'R_FILE0' )
+                             THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 1
+                              AND D.CURRSIZE = 256
+                              AND D.INITSIZE = 256
+                             THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_SIBLING_SHRINK_ISOLATED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_RP_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTEC_RP_U CASCADE;
+    DROP TABLE SDPTEC_RP_SNAP;
+    DROP TABLESPACE SDPTEC_RP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_RP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

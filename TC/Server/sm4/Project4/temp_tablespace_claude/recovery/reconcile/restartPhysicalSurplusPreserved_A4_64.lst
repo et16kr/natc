@@ -1,0 +1,206 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Republish a runtime-grown TEMP file at its physical length after restart.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 8.3: `P > D` is valid capacity, startup never truncates it, and the
+$T0> #                        published `R = P >= D` comes back as an all-FREE allocation map.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteStartup.cpp, src/sm/sdp/sdpte/sdpteReconcile.cpp
+$T0> #                        src/sm/smi/smiMain.cpp sdpteBoot::reconcileAfterRecovery
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_PS_U CASCADE;
+$T0> DROP TABLE SDPTEC_PS_SNAP;
+$T0> DROP TABLESPACE SDPTEC_PS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_PS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTEC_PS_DATA
+        DATAFILE 'sdptec_ps_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_PS_TS
+        TEMPFILE 'sdptec_ps_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M,
+                 'sdptec_ps_02.dbf' SIZE 1M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE TABLE SDPTEC_PS_SNAP ( TAG VARCHAR(32), V BIGINT )
+        TABLESPACE SDPTEC_PS_DATA;
+Create success.
+
+$T0> CREATE USER SDPTEC_PS_U IDENTIFIED BY SDPTEC_PS_U
+        DEFAULT TABLESPACE SDPTEC_PS_DATA
+        TEMPORARY TABLESPACE SDPTEC_PS_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTEC_PS_U/SDPTEC_PS_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTEC_PS_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTEC_PS_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTEC_PS_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('P', 1790, 'P')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; RUNTIME GROWTH
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_RUNTIME_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_PS_SOURCE
+           ) D;
+PASS_RUNTIME_SPILL 
+---------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> INSERT INTO SDPTEC_PS_SNAP
+    SELECT 'R_FILE0', D.CURRSIZE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_PS_TS'
+       AND D.ID = 0;
+1 row inserted.
+
+$T0> INSERT INTO SDPTEC_PS_SNAP
+    SELECT 'R_TOTAL', T.TOTAL_PAGE_COUNT
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_PS_TS';
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT CASE
+               WHEN ( SELECT V FROM SDPTEC_PS_SNAP WHERE TAG = 'R_FILE0' ) > 128
+                AND ( SELECT V FROM SDPTEC_PS_SNAP WHERE TAG = 'R_TOTAL' ) > 256
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_GREW
+      FROM DUAL;
+PASS_RUNTIME_GREW 
+--------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; CLEAN RESTART KEEPS THE PHYSICAL SURPLUS
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # `D` is still 128 pages for file 0, so a startup that fell back to the
+$T0> # committed baseline instead of the physical length would show 128 here.
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = ( SELECT V FROM SDPTEC_PS_SNAP WHERE TAG = 'R_FILE0' )
+                AND D.AUTOEXTEND = 1
+                AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_SURPLUS_REPUBLISHED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_PS_TS'
+       AND D.ID = 0;
+PASS_SURPLUS_REPUBLISHED 
+---------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_PS_SNAP WHERE TAG = 'R_TOTAL' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                          FROM X$TABLESPACES X
+                         WHERE X.ID = T.ID ) + 1 )
+                    * T.EXTENT_PAGE_COUNT = T.TOTAL_PAGE_COUNT
+               THEN 1 ELSE 0
+           END AS PASS_ALL_FREE_AFTER_RESTART
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_PS_TS';
+PASS_ALL_FREE_AFTER_RESTART 
+------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; A SECOND RESTART IS STABLE
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = ( SELECT V FROM SDPTEC_PS_SNAP WHERE TAG = 'R_TOTAL' )
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SECOND_RESTART_STABLE
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_PS_TS';
+PASS_SECOND_RESTART_STABLE 
+-----------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTEC_PS_U/SDPTEC_PS_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_ON_REBUILT_CAPACITY
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTEC_PS_SOURCE
+           ) D;
+PASS_SPILL_ON_REBUILT_CAPACITY 
+---------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTEC_PS_U CASCADE;
+$T0> DROP TABLE SDPTEC_PS_SNAP;
+$T0> DROP TABLESPACE SDPTEC_PS_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_PS_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
