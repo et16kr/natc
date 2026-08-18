@@ -1,0 +1,100 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/DDL/index_column_name.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; SECURITY COLUMN
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1         varchar(5), 
+  i2         varchar(5),
+  "$GIT_OID" varchar(5),
+  "$GIT_RID" varchar(5)
+)
+partition by range(i1)
+(
+  partition p1 values less than ('b'),
+  partition p2 values less than ('e'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values ('a', 'a', 'abc', 'bcd');
+insert into t1 values ('d', 'b', 'abcd', 'bcde');
+insert into t1 values ('g', 'c', 'abcde', 'bcdef');
+
+create index idx1 on t1(i2, "$GIT_OID");
+create index idx2 on t1("$GIT_RID" desc, i2);
+create unique index idx3 on t1("$GIT_OID" desc, i2, "$GIT_RID" asc);
+
+desc t1;
+CALL DESC_INDEX( "IDX1" );
+CALL DESC_INDEX( "IDX2" );
+CALL DESC_INDEX( "IDX3" );
+
+alter session set explain plan = on;
+
+select * from t1;
+select /*+index(t1, idx1)*/ * from t1;
+select /*+index(t1, idx2)*/ * from t1;
+select /*+index(t1, idx3)*/ * from t1;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

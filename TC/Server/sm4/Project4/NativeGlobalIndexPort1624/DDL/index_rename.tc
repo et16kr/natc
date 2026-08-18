@@ -1,0 +1,164 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/DDL/index_rename.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop tablespace data1 including contents and datafiles;
+drop tablespace data2 including contents and datafiles;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create tablespace data1 datafile 'data1.dbf' size 10M autoextend on;
+create tablespace data2 datafile 'data2.dbf' size 10M autoextend on;
+}
+
+DEF CREATE_TABLE( @aPartType, @aColType1, @aColType2 )
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+if ( @aPartType == 'range' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by range(i1)
+(
+  partition p1 values less than ('100'),
+  partition p2 values less than ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+}
+elsif ( @aPartType == 'hash' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+
+}
+elsif ( @aPartType == 'list' )
+{
+
+create table t1( i1 @{aColType1}, i2 @{aColType2}, i3 @{aColType2} )
+partition by list(i1)
+(
+  partition p1 values ('100'),
+  partition p2 values ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+}
+else
+{
+  print "error";
+}
+
+create index idx1 on t1(i1);
+create index idx2 on t1(i1, i2);
+create index idx3 on t1(i1, i2, i3);
+
+create index idx4 on t1(i2) tablespace data1;
+create index idx5 on t1(i2, i3) tablespace data1;
+
+create index idx6 on t1(i3) tablespace data2;
+create index idx7 on t1(i3, i1) tablespace data2;
+create index idx8 on t1(i3, i2, i1) tablespace data2;
+
+insert into t1 values ( '1', '1', '1' );
+insert into t1 values ( '2', '2', '2' );
+insert into t1 values ( '100', '100', '100' );
+insert into t1 values ( '101', '101', '101' );
+insert into t1 values ( '200', '200', '200' );
+insert into t1 values ( '202', '202', '202' );
+
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; INDEX RENAME
+##################################
+
+for $sPartType in "range" "hash" "list"
+{
+  CALL CREATE_TABLE( $sPartType, "integer", "integer" );
+
+  # 34 byte
+  alter index idx1 rename to i234567890123456789012345678901234;
+  # 36 byte
+  alter index idx2 rename to i23456789012345678901234567890123456;
+  # 37 byte
+  alter index idx3 rename to i234567890123456789012345678901234567;
+  # 38 byte
+  alter index idx4 rename to i2345678901234567890123456789012345678;
+  # 39 byte
+  alter index idx5 rename to i23456789012345678901234567890123456789;
+  # 40 byte
+  alter index idx6 rename to i234567890123456789012345678901234567890;
+  # 41 byte
+  alter index idx7 rename to i2345678901234567890123456789012345678901;
+
+  desc t1;
+  CALL DESC_INDEX( "IDX1" );
+  CALL DESC_INDEX( "IDX2" );
+  CALL DESC_INDEX( "IDX3" );
+  CALL DESC_INDEX( "IDX4" );
+  CALL DESC_INDEX( "IDX5" );
+  CALL DESC_INDEX( "IDX6" );
+  CALL DESC_INDEX( "IDX7" );
+
+  CALL DESC_INDEX( "I234567890123456789012345678901234" );
+  CALL DESC_INDEX( "I23456789012345678901234567890123456" );
+  CALL DESC_INDEX( "I234567890123456789012345678901234567" );
+  CALL DESC_INDEX( "I2345678901234567890123456789012345678" );
+  CALL DESC_INDEX( "I23456789012345678901234567890123456789" );
+  CALL DESC_INDEX( "I234567890123456789012345678901234567890" );
+  CALL DESC_INDEX( "I2345678901234567890123456789012345678901" );
+}
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

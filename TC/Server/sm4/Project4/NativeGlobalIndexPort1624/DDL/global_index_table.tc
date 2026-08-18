@@ -1,0 +1,129 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/DDL/global_index_table.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF DROP_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+CALL DROP_TABLE();
+
+create table t1
+( 
+  i1 integer, 
+  i2 integer, 
+  i3 integer, 
+  i4 integer, 
+  constraint t1_pk primary key (i3),
+  constraint t1_uk unique (i4)
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+create index idx1 on t1(i2);
+
+desc t1;
+CALL DESC_INDEX( "T1_PK" );
+CALL DESC_INDEX( "T1_UK" );
+CALL DESC_INDEX( "IDX1" );
+
+##################################
+# SECTOR; DDL
+##################################
+
+for $sTable in "$GIT_T1_PK" "$GIT_T1_UK" "GIT_IDX1"
+{
+  alter table "${sTable}" add column ( i100 integer );
+  alter table "${sTable}" drop column ( "$GIT_RID" );
+  alter table "${sTable}" rename column "$GIT_RID" to "$GIT_RID_NEW";
+
+  alter table "${sTable}" add constraint tt_nn ( "$GIT_RID" is not null );
+  alter table "${sTable}" drop constraint tt_nn;
+
+  create unique index idx100 on "${sTable}"( "$GIT_RID" );
+  drop index idx100;
+
+  truncate table "${sTable}";
+
+  drop table "${sTable}";
+}
+
+for $sIndex in "$GIK_T1_PK" "$GIK_T1_UK" "GIK_IDX1"
+{
+  drop index "${sIndex}";
+}
+
+for $sIndex in "$GIR_T1_PK" "$GIR_T1_UK" "GIR_IDX1"
+{
+  drop index "${sIndex}";
+}
+
+##################################
+# SECTOR; DML
+##################################
+
+for $sTable in "$GIT_T1_PK" "$GIT_T1_UK" "GIT_IDX1"
+{
+  select * from "${sTable}";
+
+  insert into "${sTable}" values default;
+  update "${sTable}" set "$GIT_RID" = 0;
+  delete from "${sTable}";
+}
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

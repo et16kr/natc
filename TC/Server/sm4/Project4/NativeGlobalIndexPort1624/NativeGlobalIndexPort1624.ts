@@ -5,4 +5,5 @@ pdt/pdt.ts                              # 2차 배치 - PROJ-1624-QC/PDT 전량 
 design/design.ts                        # 3차 배치 - 공식 design/ 16 (플랜/선택도/조인/잠금)
 bugs/bugs.ts                            # 4차 배치 - 공식 bugs/ 6
 tool/tool.ts                            # 4차 배치 - 공식 tool/isql + tool/atomic 2
+DDL/DDL.ts                              # 5차 배치 - 공식 DDL/ 25 (DESC_INDEX 재정의)
 -------------------------------------------------------------------------------

@@ -1,0 +1,71 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/DDL/index_name2.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+INCLUDE desc_global_index.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; INDEX NAME
+##################################
+
+create table t1( i1 integer, i2 integer, i3 integer )
+partition by range(i1)
+(
+  partition p1 values less than ('100'),
+  partition p2 values less than ('200'),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+
+##################################
+# SECTOR; INDEX NAME
+##################################
+
+create index idx1 on t1(i2);
+
+create index "idx1" on t1(i3);
+
+desc t1;
+CALL DESC_INDEX( "IDX1" );
+CALL DESC_INDEX( "idx1" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}
