@@ -68,13 +68,16 @@ The final aggregate rerun produced complete passes for 10 targets:
 - `sdpte_no_durability`
 
 `sdpte_allocator_runtime`, `sdpte_concurrency_error`, and `sdpte_sql_view`
-each reached the same known focused failure in
-`unittestSdpteDropTempFile.cpp:850-857`. The test expects a synthetic FINISH
-callback failure to roll the operation back, while the current component
-contract completes through a different result/state path. The failure is not
-caused by an F-01 through F-08 correction and was not changed as part of this
-scope. All checks before that artifact passed. It remains a separate test or
-contract reconciliation item.
+initially reached the same focused failure in
+`unittestSdpteDropTempFile.cpp:850-857`. 후속 pre-commit 검증에서 이 항목은 제품
+DROP contract가 아니라 synthetic publication fixture의 모델 오류로 확인됐다.
+fixture가 실제 제품과 달리 drain을 보유한 retired allocator의 definition
+generation을 APPLY 시점에 즉시 바꾸어, 이어지는 drain release가 자기 토큰을
+invalid로 판정했다. 해당 in-place generation 변경만 제거해 실제
+`sdpteService`의 old-runtime 보존 동작과 맞췄으며, 제품 DROP body는 변경하지
+않았다. 이후 `unittestSdpteDropTempFile`, `sdpte_component_ddl`,
+`sdpte_standard_node_io`, `sdpte_allocator_runtime`, `sdpte_concurrency_error`,
+`sdpte_sql_view`가 모두 통과했다.
 
 One initial `unittestSdpteExtent` run also saw the gate-versus-allocator worker
 make no scheduling progress. Three direct reruns and the subsequent aggregate

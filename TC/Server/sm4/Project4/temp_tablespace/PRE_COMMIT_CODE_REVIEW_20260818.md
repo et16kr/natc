@@ -2,12 +2,12 @@
 
 작성일: 2026-08-18
 
-## 결론
+## 최초 리뷰 결론
 
-현재 staged change-set은 **커밋 보류(BLOCKED)** 상태다. 제품 빌드와 집중
+리뷰 시점의 staged change-set은 **커밋 보류(BLOCKED)** 상태였다. 제품 빌드와 집중
 단위/NATC 테스트는 통과했지만, 커밋 전 필수 구조 검사가 새 변경 때문에
 실패하고 있으며 실행 suite에도 의도적으로 제외한 미검증 case가 등록되어
-있다.
+있었다.
 
 이번 리뷰에서는 제품 또는 TC 코드를 수정하지 않았다. 아래 문제와 재현
 근거만 기록했다.
@@ -154,3 +154,61 @@ change-set에서 새로 만든 회귀로 분류하지 않았으며 별도 baseli
    이를 고정한다.
 3. 38/67-page case를 suite에서 제외하거나 실제 실행·oracle 승격까지 완료한다.
 4. staged 검증 문서를 최종 실행 결과와 일치시킨다.
+
+## 후속 해결 및 최종 판정
+
+최초 리뷰의 네 종료 조건은 후속 변경에서 모두 충족했다. 따라서 현재 후속
+change-set의 판정은 **커밋 가능(RESOLVED)** 이다.
+
+1. protected `sctTableSpaceMgr.h/.cpp`는 기준 commit의 byte 상태로 복원했다. 새
+   public/low-level accessor는 두지 않았고, TEMP rename callback이 기존
+   `findSpaceNodeWithoutException()`과 tablespace별 lookup을 registry mutex 안에서
+   조합한다. DATA/UNDO rename body는 기존 `sddDiskMgr::alterDataFileName()` 경로를
+   유지한다.
+2. stale error의 근원은 새 rename에서 처음 생긴 것이 아니다. 기존
+   `getDataFileNodeByName()`의 tablespace 순회도 정상 miss에서 하위
+   `NotFoundDataFileNode`를 남길 수 있었다. legacy DATA/UNDO 동작은 바꾸지 않고,
+   이 동작을 새 callback이 재사용하는 경계에서 expected miss만 `IDE_CLEAR()`하여
+   격리했다. handler 테스트는 정상 miss/성공이 no-error를 유지하고 node/Anchor
+   failure가 각자 설정한 오류를 보존함을 확인한다.
+3. M-17 manifest는 CREATE와 TEMP RENAME 두 branch를 승인하도록 갱신했다. 측정된
+   `smiMediaRecovery.cpp` change surface는 `53 additions / 9 deletions`이며,
+   `sdpte_change_surface_check`, `sdpte_shared_diff_check`,
+   `sdpte_no_durability_check`가 모두 통과한다.
+4. `extent38Spill`, `extent67Spill`, `variableExtentSpill`은 future definition으로
+   보관하되 `runtime/spill/spill.ts`에서 주석 처리했다. 실행 suite와 non-empty
+   oracle 수는 `79 / 79`로 일치한다.
+5. 추가 aggregate 실행에서 확인된 `unittestSdpteDropTempFile` FINISH-failure 문제는
+   제품 DROP body가 아니라 테스트 fixture가 실제 publication과 달리 drain을 가진
+   retired allocator의 generation을 즉시 변경한 문제였다. fixture만 실제
+   `sdpteService`의 old-runtime 보존 방식에 맞췄고, 제품/공용 DROP 코드는 바꾸지
+   않았다. 이후 `sdpte_component_ddl`과 `sdpte_standard_node_io`가 통과했다.
+6. 커밋 직전 문서 리뷰에서 설계 변경 뒤 세 문서의 SHA-256 evidence가 이전 값인
+   것을 발견했다. 실제 설계 파일 hash `11f42099…97f580`으로 validation,
+   readiness, adapter-map을 함께 갱신했다.
+7. 제품 전체 `git diff --cached --check`는 복원된 protected `sct` baseline의 기존
+   trailing space 1건과 EOF blank line 1건을 보고한다. 두 파일은 `0953d614`와
+   byte-for-byte 일치해야 shared-diff 보호 계약을 만족하므로 정리하지 않았다.
+   두 baseline 파일을 제외한 intended staged diff와 NATC staged diff의
+   `--check`는 모두 통과한다.
+
+최종 확인 명령과 결과:
+
+```text
+make -C src/sm/unittest sdpte_change_surface    PASS
+make -C src/sm/unittest sdpte_wiring            PASS
+make -C src/sm/unittest sdpte_no_durability     PASS
+make -C src/sm/unittest sdpte_component_ddl     PASS
+make -C src/sm/unittest sdpte_standard_node_io  PASS
+make -C src/sm/unittest sdpte_allocator_runtime PASS
+make -C src/sm/unittest sdpte_concurrency_error PASS
+make -C src/sm/unittest sdpte_sql_view          PASS
+```
+
+`sdpte_no_durability_check`의 최종 계수는 84 files, 1005 external call sites,
+128 durable-state files이며, change-surface gate는 11 WAL owners, 14 wrapped
+bodies, 16 seam paths, 5 ordered phases를 확인했다. `make build -j8`도 exit 0으로
+완료했다. 새 서버 바이너리로 restart한 뒤 `renameTempfile.tc`는
+`PASS: 1 FAIL: 0 FATAL: 0 ERROR: 0`이었고, 생성된 `_A4_64.out`은 checked-in
+`_A4_64.lst`와 byte-for-byte 일치했다. 세 collision은 모두 `ERR-11099`, 네
+`PASS_*` 결과는 모두 1이었다.

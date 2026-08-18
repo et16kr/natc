@@ -199,7 +199,7 @@ staged 상태의 `README.md`와 `ORACLE_REVIEW_20260818.md`는 현재 suite를 �
 - `renameTempfile.tc`가 동일 TEMP, 다른 TEMP, DATA destination을 구분해 거부하며 세 결과의 `ERR-11099`를 `.out`에 직접 고정한다.
 - `dropPathSubstitution.tc`는 preflight subset으로 명시하고, post-commit path replacement는 `unittestSdpteStandardLane`의 별도 coverage로 기록했다.
 - backup 설명은 NOARCHIVELOG 선행 오류와 state preservation 범위로 한정했고, 완료된 spill 뒤의 비결정적 `OPENED=1` oracle을 제거했다.
-- README는 82 cases / 79 non-empty `_A4_64.lst`의 현재 상태를 사용하며, oracle review 문서는 초기 77-case historical snapshot임을 명시한다.
+- 실행 suite는 non-64 future definition 세 건을 `spill.ts`에서 주석 처리해 79 executable cases / 79 non-empty `_A4_64.lst`로 일치시키며, oracle review 문서는 초기 77-case historical snapshot임을 명시한다.
 - 최종 `temp_tablespace` TC·문서·검증된 15개 신규 oracle을 같은 index 상태로 맞췄으며, `TC/skip.ts`와 별도 실험/빌드 산출물은 staging에서 제외했다.
 
 검증 결과:
@@ -210,6 +210,14 @@ unittestSdpteControlLane                            PASS
 unittestSdpteStandardLane                           PASS
 unittestSdpteDropTableSpace                         PASS
 8개 영향 단위 테스트 target compile                PASS
+sdpte_change_surface                                PASS
+sdpte_wiring                                        PASS
+sdpte_no_durability                                 PASS
+sdpte_component_ddl                                 PASS
+sdpte_standard_node_io                              PASS
+sdpte_allocator_runtime                             PASS
+sdpte_concurrency_error                             PASS
+sdpte_sql_view                                      PASS
 renameTempfile.tc                                   PASS
 runtimeProjection.tc                                PASS
 reject_backup.tc                                    PASS
@@ -218,3 +226,16 @@ reattachAfterSpill.tc                               PASS
 ```
 
 NATC 다섯 건은 golden 갱신 후 각각 `PASS: 1 FAIL: 0 FATAL: 0 ERROR: 0`으로 재실행했다. 사용자 지정 제외 대상인 `extent38Spill`, `extent67Spill`, `variableExtentSpill`은 이 후속 검증에서도 실행하거나 oracle로 승격하지 않았다.
+
+후속 최소변경 재설계 뒤에는 protected `sctTableSpaceMgr.h/.cpp`를 기준 commit의
+byte 상태로 복원하고, 기존 accessor만 조합하는 TEMP callback 안에서 registry
+atomic lookup/mutation을 수행했다. stale lookup error는 legacy DATA/UNDO 경로를
+바꾸지 않고 새 callback 경계에서만 clear했다. `unittestSdpteEnvironment`가 정상
+miss/성공과 node/Anchor failure error 보존을 고정한다.
+
+추가 aggregate 검증 중 발견된 `unittestSdpteDropTempFile` 실패는 제품 DROP body가
+아니라 synthetic fixture가 drain을 보유한 retired allocator의 generation을 실제
+제품보다 일찍 바꾸던 문제였다. fixture만 실제 publication 모델에 맞춘 뒤
+`sdpte_component_ddl`과 `sdpte_standard_node_io`가 통과했다. 마지막 전체 빌드 후
+서버를 재기동해 `renameTempfile.tc`를 다시 실행한 결과도
+`PASS: 1 FAIL: 0 FATAL: 0 ERROR: 0`이며 output/list가 byte-for-byte 일치했다.

@@ -334,6 +334,31 @@ oracle.
 
 ## Change policy
 
-All product changes listed here are experimental working-tree changes only. No
-commit, push, branch rewrite, destructive source reset, or NATC oracle mass-update
-has been performed as part of this debugging pass.
+At the time of this debugging pass, all product changes listed here were
+experimental working-tree changes only. No commit, push, branch rewrite,
+destructive source reset, or NATC oracle mass-update was performed during that
+pass. The later checkpoint commits and pre-commit corrections are recorded in
+`PRE_COMMIT_CODE_REVIEW_20260818.md` and supersede the provisional delivery
+status above.
+
+## 2026-08-18 final pre-commit addendum
+
+- Protected `sctTableSpaceMgr` source was restored to its approved baseline;
+  atomic TEMP rename now composes existing lookup APIs inside the TEMP callback.
+- The pre-existing per-tablespace lookup miss behavior is contained only at the
+  new callback boundary; legacy DATA/UNDO behavior is unchanged.
+- The three non-64 future definitions are excluded from the executable suite,
+  leaving 79 executable cases and 79 non-empty oracles.
+- `sdpte_change_surface`, `sdpte_wiring`, `sdpte_no_durability`,
+  `sdpte_component_ddl`, and `sdpte_standard_node_io` all pass. The
+  no-durability gate reviewed 84 files, 1005 external call sites, and 128
+  durable-state files.
+- The three aggregates that previously stopped at the synthetic DROP fixture,
+  `sdpte_allocator_runtime`, `sdpte_concurrency_error`, and `sdpte_sql_view`,
+  now also pass completely.
+- `make build -j8` completed with exit 0. After restarting the rebuilt server,
+  `renameTempfile.tc` reported `PASS: 1 FAIL: 0 FATAL: 0 ERROR: 0`; its output
+  matches the checked-in `_A4_64.lst` byte-for-byte.
+- The former `unittestSdpteDropTempFile.cpp:850-857` failure was reconciled by
+  correcting only the synthetic publication fixture's retired-allocator model;
+  the product DROP body was not changed.

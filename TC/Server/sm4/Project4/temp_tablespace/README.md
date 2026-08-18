@@ -2,7 +2,7 @@
 
 This directory contains the NATC replacement surface for the Simple TEMP
 tablespace feature. The root suite registers one `.ts` per test folder; those
-folder suites contain 82 test cases in total.
+folder suites contain 79 executable test cases in total.
 
 ## Directory roles
 
@@ -28,12 +28,12 @@ registers only those folder suites.
 
 ## Oracle status
 
-The current suite has 79 matching `_A4_64.lst` files for 82 cases. The three
-intentional exceptions are `extent38Spill`, `extent67Spill`, and
-`variableExtentSpill`: their non-64-page runtime support is outside the current
-server capability and was explicitly excluded from this fix. They remain test
-definitions without a promoted oracle so their expected future behavior is not
-silently removed.
+The current executable suite has 79 matching `_A4_64.lst` files for 79 cases.
+`runtime/spill/spill.ts` comments out the three intentional future definitions:
+`extent38Spill`, `extent67Spill`, and `variableExtentSpill`. Their non-64-page
+runtime support is outside the current server capability and was explicitly
+excluded from this fix. The `.tc` definitions remain, without promoted oracles,
+so their expected future behavior is not silently removed.
 
 The original 77-case oracle audit is retained as a historical snapshot in
 [ORACLE_REVIEW_20260818.md](ORACLE_REVIEW_20260818.md). Subsequent focused
