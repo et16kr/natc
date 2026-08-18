@@ -841,10 +841,10 @@ $P0> SELECT A.INDEX_PARTITION_NAME
      ORDER BY A.INDEX_PARTITION_ID;
 INDEX_PARTITION_NAME                                                                                                              
 ------------------------------------------------------------------------------------------------------------------------------------
-__SYS_PART_IDX_ID_2061                                                                                                            
-__SYS_PART_IDX_ID_2062                                                                                                            
-__SYS_PART_IDX_ID_2063                                                                                                            
-__SYS_PART_IDX_ID_2064                                                                                                            
+__SYS_PART_IDX_ID_2205                                                                                                            
+__SYS_PART_IDX_ID_2206                                                                                                            
+__SYS_PART_IDX_ID_2207                                                                                                            
+__SYS_PART_IDX_ID_2208                                                                                                            
 4 rows selected.
 
 -- Result: PDT_TBS, PDT_TBS, PDT_TBS, PDT_TBS5
@@ -866,16 +866,16 @@ PARTITION_NAME
 ------------------------------------------------------------------------------------------------------------------------------------
 NAME                                      
 --------------------------------------------
-__SYS_PART_IDX_ID_2064                                                                                                            
+__SYS_PART_IDX_ID_2208                                                                                                            
 P1                                                                                                                                
 PDT_TBS                                   
-__SYS_PART_IDX_ID_2063                                                                                                            
+__SYS_PART_IDX_ID_2207                                                                                                            
 P2                                                                                                                                
 PDT_TBS                                   
-__SYS_PART_IDX_ID_2062                                                                                                            
+__SYS_PART_IDX_ID_2206                                                                                                            
 P3                                                                                                                                
 PDT_TBS                                   
-__SYS_PART_IDX_ID_2061                                                                                                            
+__SYS_PART_IDX_ID_2205                                                                                                            
 P4                                                                                                                                
 PDT_TBS5                                  
 4 rows selected.
@@ -901,8 +901,8 @@ $P0> SELECT A.INDEX_PARTITION_NAME
      ORDER BY A.INDEX_PARTITION_ID;
 INDEX_PARTITION_NAME                                                                                                              
 ------------------------------------------------------------------------------------------------------------------------------------
-__SYS_PART_IDX_ID_2065                                                                                                            
-__SYS_PART_IDX_ID_2066                                                                                                            
+__SYS_PART_IDX_ID_2209                                                                                                            
+__SYS_PART_IDX_ID_2210                                                                                                            
 IDX1_P2                                                                                                                           
 IDX1_P4                                                                                                                           
 4 rows selected.
@@ -926,13 +926,13 @@ PARTITION_NAME
 ------------------------------------------------------------------------------------------------------------------------------------
 NAME                                      
 --------------------------------------------
-__SYS_PART_IDX_ID_2066                                                                                                            
+__SYS_PART_IDX_ID_2210                                                                                                            
 P1                                                                                                                                
 PDT_TBS                                   
 IDX1_P2                                                                                                                           
 P2                                                                                                                                
 PDT_TBS2                                  
-__SYS_PART_IDX_ID_2065                                                                                                            
+__SYS_PART_IDX_ID_2209                                                                                                            
 P3                                                                                                                                
 PDT_TBS                                   
 IDX1_P4                                                                                                                           
