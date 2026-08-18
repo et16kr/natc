@@ -1,0 +1,501 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/selectivity2.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> ALTER SYSTEM SET __DBMS_STAT_METHOD = 1;
+Alter success.
+
+$T0> create table t1(i1 integer, i2 integer, i3 integer)
+partition by range(i1)
+(
+  partition p1 values less than (3),
+  partition p2 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values (1, 1, 1);
+1 row inserted.
+$T0> insert into t1 values (2, 2, 1);
+1 row inserted.
+$T0> insert into t1 values (3, 3, 3);
+1 row inserted.
+$T0> insert into t1 values (4, 4, 3);
+1 row inserted.
+
+$T0> create index idx1 on t1(i2);
+Create success.
+$T0> create index idx2 on t1(i3) local;
+Create success.
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       
+----------------------------------------
+1           1           1           
+2           2           1           
+3           3           3           
+4           4           3           
+4 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; SELECTIVITY
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+$T0> alter system set trclog_explain_graph = 1;
+Alter success.
+
+$T0> select * from t1 where i3=1;
+T1.I1       T1.I2       T1.I3       
+----------------------------------------
+1           1           1           
+2           2           1           
+2 rows selected.
+
+||----------------------------------------------------------
+||-------------------------------------------------
+||[[ PROJECTION GRAPH ]]
+||-------------------------------------------------
+||== Cost Information ==
+||INPUT_RECORD_COUNT : 2048
+||OUTPUT_RECORD_COUNT: 2048
+||RECORD_SIZE        : 12
+||SELECTIVITY        : 1
+||GRAPH_ACCESS_COST  : 69.4272
+||GRAPH_DISK_COST    : 0
+||GRAPH_TOTAL_COST   : 69.4272
+||TOTAL_ACCESS_COST  : 2119.65998
+||TOTAL_DISK_COST    : 0
+||TOTAL_ALL_COST     : 2119.65998
+|  |-------------------------------------------------
+|  |[[ PARTITION GRAPH ]]
+|  |-------------------------------------------------
+|  |== Cost Information ==
+|  |INPUT_RECORD_COUNT : 20480
+|  |OUTPUT_RECORD_COUNT: 2048
+|  |RECORD_SIZE        : 12
+|  |SELECTIVITY        : 0.1
+|  |GRAPH_ACCESS_COST  : 2050.23278
+|  |GRAPH_DISK_COST    : 0
+|  |GRAPH_TOTAL_COST   : 2050.23278
+|  |TOTAL_ACCESS_COST  : 2050.23278
+|  |TOTAL_DISK_COST    : 0
+|  |TOTAL_ALL_COST     : 2050.23278
+|  |== Table Information ==
+|  |TABLE NAME         : T1
+|  |  I1 : 100
+|  |  I2 : 100
+|  |  I3 : 100
+|  |== Index Information ==
+|  |  IDX1 : 100
+|  |  IDX2 : 2
+|  |== Access Method Information ==
+|  |FULL SCAN
+|  |  ACCESS_COST : 21174.272
+|  |  DISK_COST   : 345
+|  |  TOTAL_COST  : 21519.272
+|  |INDEX SCAN[IDX1]
+|  |  ACCESS_COST : 21175.272
+|  |  DISK_COST   : 0
+|  |  TOTAL_COST  : 21175.272
+|  |INDEX SCAN[IDX2]
+|  |  ACCESS_COST : 2050.23278
+|  |  DISK_COST   : 0
+|  |  TOTAL_COST  : 2050.23278
+|    |-------------------------------------------------
+|    |[[ SELECTION GRAPH ]]
+|    |-------------------------------------------------
+|    |== Cost Information ==
+|    |INPUT_RECORD_COUNT : 10240
+|    |OUTPUT_RECORD_COUNT: 1024
+|    |RECORD_SIZE        : 12
+|    |SELECTIVITY        : 0.1
+|    |GRAPH_ACCESS_COST  : 1025.11639
+|    |GRAPH_DISK_COST    : 0
+|    |GRAPH_TOTAL_COST   : 1025.11639
+|    |TOTAL_ACCESS_COST  : 1025.11639
+|    |TOTAL_DISK_COST    : 0
+|    |TOTAL_ALL_COST     : 1025.11639
+|    |== Partition Information ==
+|    |PARTITION NAME         : P2
+|    |  I1 : 100
+|    |  I2 : 100
+|    |  I3 : 100
+|    |== Index Information ==
+|    |  IDX2 : 1
+|    |-------------------------------------------------
+|    |[[ SELECTION GRAPH ]]
+|    |-------------------------------------------------
+|    |== Cost Information ==
+|    |INPUT_RECORD_COUNT : 10240
+|    |OUTPUT_RECORD_COUNT: 1024
+|    |RECORD_SIZE        : 12
+|    |SELECTIVITY        : 0.1
+|    |GRAPH_ACCESS_COST  : 1025.11639
+|    |GRAPH_DISK_COST    : 0
+|    |GRAPH_TOTAL_COST   : 1025.11639
+|    |TOTAL_ACCESS_COST  : 1025.11639
+|    |TOTAL_DISK_COST    : 0
+|    |TOTAL_ALL_COST     : 1025.11639
+|    |== Partition Information ==
+|    |PARTITION NAME         : P1
+|    |  I1 : 100
+|    |  I2 : 100
+|    |  I3 : 100
+|    |== Index Information ==
+|    |  IDX2 : 1
+||----------------------------------------------------------
+
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX2, ACCESS: 2, COST: BLOCKED )
+  SCAN ( PARTITION: P2, INDEX: SYS.IDX2, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.IDX2, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 = 1
+------------------------------------------------------------
+
+$T0> select * from t1 where i2=1;
+T1.I1       T1.I2       T1.I3       
+----------------------------------------
+1           1           1           
+1 row selected.
+
+||----------------------------------------------------------
+||-------------------------------------------------
+||[[ PROJECTION GRAPH ]]
+||-------------------------------------------------
+||== Cost Information ==
+||INPUT_RECORD_COUNT : 2048
+||OUTPUT_RECORD_COUNT: 2048
+||RECORD_SIZE        : 12
+||SELECTIVITY        : 1
+||GRAPH_ACCESS_COST  : 69.4272
+||GRAPH_DISK_COST    : 0
+||GRAPH_TOTAL_COST   : 69.4272
+||TOTAL_ACCESS_COST  : 2118.65885
+||TOTAL_DISK_COST    : 0
+||TOTAL_ALL_COST     : 2118.65885
+|  |-------------------------------------------------
+|  |[[ PARTITION GRAPH ]]
+|  |-------------------------------------------------
+|  |== Cost Information ==
+|  |INPUT_RECORD_COUNT : 20480
+|  |OUTPUT_RECORD_COUNT: 2048
+|  |RECORD_SIZE        : 12
+|  |SELECTIVITY        : 0.1
+|  |GRAPH_ACCESS_COST  : 2049.23165
+|  |GRAPH_DISK_COST    : 0
+|  |GRAPH_TOTAL_COST   : 2049.23165
+|  |TOTAL_ACCESS_COST  : 2049.23165
+|  |TOTAL_DISK_COST    : 0
+|  |TOTAL_ALL_COST     : 2049.23165
+|  |== Table Information ==
+|  |TABLE NAME         : T1
+|  |  I1 : 100
+|  |  I2 : 100
+|  |  I3 : 100
+|  |== Index Information ==
+|  |  IDX1 : 100
+|  |  IDX2 : 2
+|  |== Access Method Information ==
+|  |FULL SCAN
+|  |  ACCESS_COST : 21174.272
+|  |  DISK_COST   : 345
+|  |  TOTAL_COST  : 21519.272
+|  |INDEX SCAN[IDX1]
+|  |  ACCESS_COST : 2049.23165
+|  |  DISK_COST   : 0
+|  |  TOTAL_COST  : 2049.23165
+|  |INDEX SCAN[IDX2]
+|  |  ACCESS_COST : 21176.272
+|  |  DISK_COST   : 0
+|  |  TOTAL_COST  : 21176.272
+|    |-------------------------------------------------
+|    |[[ SELECTION GRAPH ]]
+|    |-------------------------------------------------
+|    |== Cost Information ==
+|    |INPUT_RECORD_COUNT : 10240
+|    |OUTPUT_RECORD_COUNT: 1024
+|    |RECORD_SIZE        : 12
+|    |SELECTIVITY        : 0.1
+|    |GRAPH_ACCESS_COST  : 10588.136
+|    |GRAPH_DISK_COST    : 0
+|    |GRAPH_TOTAL_COST   : 10588.136
+|    |TOTAL_ACCESS_COST  : 10588.136
+|    |TOTAL_DISK_COST    : 0
+|    |TOTAL_ALL_COST     : 10588.136
+|    |== Partition Information ==
+|    |PARTITION NAME         : P2
+|    |  I1 : 100
+|    |  I2 : 100
+|    |  I3 : 100
+|    |== Index Information ==
+|    |  IDX2 : 1
+|    |-------------------------------------------------
+|    |[[ SELECTION GRAPH ]]
+|    |-------------------------------------------------
+|    |== Cost Information ==
+|    |INPUT_RECORD_COUNT : 10240
+|    |OUTPUT_RECORD_COUNT: 1024
+|    |RECORD_SIZE        : 12
+|    |SELECTIVITY        : 0.1
+|    |GRAPH_ACCESS_COST  : 10588.136
+|    |GRAPH_DISK_COST    : 0
+|    |GRAPH_TOTAL_COST   : 10588.136
+|    |TOTAL_ACCESS_COST  : 10588.136
+|    |TOTAL_DISK_COST    : 0
+|    |TOTAL_ALL_COST     : 10588.136
+|    |== Partition Information ==
+|    |PARTITION NAME         : P1
+|    |  I1 : 100
+|    |  I2 : 100
+|    |  I3 : 100
+|    |== Index Information ==
+|    |  IDX2 : 1
+||----------------------------------------------------------
+
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 1
+------------------------------------------------------------
+
+$T0> select * from t1 where i2=1 and i3=1;
+T1.I1       T1.I2       T1.I3       
+----------------------------------------
+1           1           1           
+1 row selected.
+
+||----------------------------------------------------------
+||-------------------------------------------------
+||[[ PROJECTION GRAPH ]]
+||-------------------------------------------------
+||== Cost Information ==
+||INPUT_RECORD_COUNT : 204.8
+||OUTPUT_RECORD_COUNT: 204.8
+||RECORD_SIZE        : 12
+||SELECTIVITY        : 1
+||GRAPH_ACCESS_COST  : 6.94272
+||GRAPH_DISK_COST    : 0
+||GRAPH_TOTAL_COST   : 6.94272
+||TOTAL_ACCESS_COST  : 2125.60157
+||TOTAL_DISK_COST    : 0
+||TOTAL_ALL_COST     : 2125.60157
+|  |-------------------------------------------------
+|  |[[ PARTITION GRAPH ]]
+|  |-------------------------------------------------
+|  |== Cost Information ==
+|  |INPUT_RECORD_COUNT : 20480
+|  |OUTPUT_RECORD_COUNT: 204.8
+|  |RECORD_SIZE        : 12
+|  |SELECTIVITY        : 0.01
+|  |GRAPH_ACCESS_COST  : 2118.65885
+|  |GRAPH_DISK_COST    : 0
+|  |GRAPH_TOTAL_COST   : 2118.65885
+|  |TOTAL_ACCESS_COST  : 2118.65885
+|  |TOTAL_DISK_COST    : 0
+|  |TOTAL_ALL_COST     : 2118.65885
+|  |== Table Information ==
+|  |TABLE NAME         : T1
+|  |  I1 : 100
+|  |  I2 : 100
+|  |  I3 : 100
+|  |== Index Information ==
+|  |  IDX1 : 100
+|  |  IDX2 : 2
+|  |== Access Method Information ==
+|  |FULL SCAN
+|  |  ACCESS_COST : 21868.544
+|  |  DISK_COST   : 345
+|  |  TOTAL_COST  : 22213.544
+|  |INDEX SCAN[IDX1]
+|  |  ACCESS_COST : 2118.65885
+|  |  DISK_COST   : 0
+|  |  TOTAL_COST  : 2118.65885
+|  |INDEX SCAN[IDX2]
+|  |  ACCESS_COST : 2119.65998
+|  |  DISK_COST   : 0
+|  |  TOTAL_COST  : 2119.65998
+|    |-------------------------------------------------
+|    |[[ SELECTION GRAPH ]]
+|    |-------------------------------------------------
+|    |== Cost Information ==
+|    |INPUT_RECORD_COUNT : 10240
+|    |OUTPUT_RECORD_COUNT: 102.4
+|    |RECORD_SIZE        : 12
+|    |SELECTIVITY        : 0.01
+|    |GRAPH_ACCESS_COST  : 1059.82999
+|    |GRAPH_DISK_COST    : 0
+|    |GRAPH_TOTAL_COST   : 1059.82999
+|    |TOTAL_ACCESS_COST  : 1059.82999
+|    |TOTAL_DISK_COST    : 0
+|    |TOTAL_ALL_COST     : 1059.82999
+|    |== Partition Information ==
+|    |PARTITION NAME         : P2
+|    |  I1 : 100
+|    |  I2 : 100
+|    |  I3 : 100
+|    |== Index Information ==
+|    |  IDX2 : 1
+|    |-------------------------------------------------
+|    |[[ SELECTION GRAPH ]]
+|    |-------------------------------------------------
+|    |== Cost Information ==
+|    |INPUT_RECORD_COUNT : 10240
+|    |OUTPUT_RECORD_COUNT: 102.4
+|    |RECORD_SIZE        : 12
+|    |SELECTIVITY        : 0.01
+|    |GRAPH_ACCESS_COST  : 1059.82999
+|    |GRAPH_DISK_COST    : 0
+|    |GRAPH_TOTAL_COST   : 1059.82999
+|    |TOTAL_ACCESS_COST  : 1059.82999
+|    |TOTAL_DISK_COST    : 0
+|    |TOTAL_ALL_COST     : 1059.82999
+|    |== Partition Information ==
+|    |PARTITION NAME         : P1
+|    |  I1 : 100
+|    |  I2 : 100
+|    |  I3 : 100
+|    |== Index Information ==
+|    |  IDX2 : 1
+||----------------------------------------------------------
+
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I3 = 1
+------------------------------------------------------------
+
+$T0> ALTER SYSTEM SET __DBMS_STAT_METHOD = 0;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

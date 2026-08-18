@@ -1,0 +1,130 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/preserved_order.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+set linesize 200;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 varchar(10),
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values ( 1, 1, 'abc', 1 );
+insert into t1 values ( 2, 2, 'abc', 2 );
+insert into t1 values ( 3, 3, 'abc', 3 );
+insert into t1 values ( 4, 4, 'bcd', 1 );
+insert into t1 values ( 5, 5, 'bcd', 2 );
+insert into t1 values ( 6, 6, 'bcd', 3 );
+insert into t1 values ( 7, 7, 'bcd', 4 );
+insert into t1 values ( 8, 8, 'bcd', 1 );
+insert into t1 values ( 9, 9, 'bcd', 2 );
+insert into t1 values ( 10, 10, 'def', 1 );
+insert into t1 values ( 11, 11, 'def', 2 );
+insert into t1 values ( 12, 12, 'def', 3 );
+insert into t1 values ( 13, 13, 'def', 4 );
+insert into t1 values ( 14, 14, 'def', 5 );
+insert into t1 values ( 15, 15, 'ghi', 1 );
+insert into t1 values ( 16, 16, 'jkl', 1 );
+insert into t1 values ( 17, 17, 'jkl', 2 );
+insert into t1 values ( 18, 18, 'lmn', 1 );
+insert into t1 values ( 19, 19, 'lmn', 2 );
+insert into t1 values ( 20, null, 'lmn', 3 );
+
+create index t1_idx2 on t1(i2);
+create index t1_idx3 on t1(i3, i4 desc);
+
+desc t1;
+
+##################################
+# SECTOR; ORDER BY
+##################################
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+select * from t1 order by i2;
+select * from t1 order by i2 desc;
+
+select * from t1 order by i3;
+select * from t1 order by i3 desc;
+
+select * from t1 order by i3, i4;
+select * from t1 order by i3, i4 desc;
+
+##################################
+# SECTOR; DISTINCT
+##################################
+
+select distinct i2 from t1;
+
+select distinct i3 from t1;
+select distinct i3, i4 from t1;
+
+##################################
+# SECTOR; GROUP BY
+##################################
+
+select i2, count(i1) from t1 group by i2;
+
+select i3, count(i1) from t1 group by i3;
+select i3, i4, count(i1) from t1 group by i3, i4;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

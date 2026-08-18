@@ -1,0 +1,153 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/bugs/function_index.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+INCLUDE ../include/checkFunctionIndex.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop function get_pid;
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+create function get_pid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+}
+
+##########################################################################
+# PORT EDIT: the original's own consistency helper cannot be ported
+#
+# Original lines 34-90 defined DEF CHECK_GLOBAL_INDEX() right here. It FULL
+# OUTER JOINs the heap against "$GIT_T1_PK" / "$GIT_T1_IDX1", and the heap
+# side selects cast(_prowid as bigint). Neither survives the port:
+#
+#   - there are no such tables on the native path, and a b-tree's contents
+#     are not visible to SQL;
+#   - _PROWID is not supported on disk tables, so all ten of those
+#     statements are frozen as [ERR-31385] in the original .lst. That check
+#     never ran, not once -- v3-natc-port.md 3.1.
+#
+# The replacement is include/checkFunctionIndex.i, INCLUDEd at the head of
+# this file. It defines a DEF of the SAME NAME and the same (empty)
+# argument list, so the five CALL CHECK_GLOBAL_INDEX(); sites in MAIN below
+# are byte-identical to the original. What it measures, and why a function
+# based key makes this case measure something different than its name says,
+# is written in that file.
+##########################################################################
+
+##########################################################################
+# PORT EDIT END
+##########################################################################
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i4)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+
+alter table t1 add constraint t1_pk primary key (i1);
+create index t1_idx1 on t1( i1+i2 );
+
+desc t1;
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; INSERT
+##################################
+
+insert into t1 select level, level/3, mod(level,3), level from dual connect by level <= 100;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; SELECT
+##################################
+
+select * from t1 where i1 + i2 <= 10;
+
+##################################
+# SECTOR; INSERT
+##################################
+
+update t1 set i2 = i2+1;
+
+CALL CHECK_GLOBAL_INDEX();
+
+update t1 set i2 = i2+1, i4 = i4+10;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; INSERT
+##################################
+
+delete from t1 where i3 = 2;
+
+CALL CHECK_GLOBAL_INDEX();
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

@@ -1,0 +1,1547 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/plan.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> SKIP END;
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer,
+  i5 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition p2 values less than (20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 select level, level, level, level, level from dual connect by level <= 30;
+30 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T1 )
+ PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 40, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 30, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 30
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> create index t1_idx1 on t1(i1,i2) local;
+Create success.
+$T0> create index t1_idx2 on t1(i3,i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I1 ASC,
+                                                                I2 ASC
+T1_IDX2                                  BTREE                  I3 ASC,
+                                                                I4 ASC
+T1 has no primary key
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer,
+  i5 integer
+)
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 select level, level, level, level, level from dual connect by level <= 30;
+30 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T2 )
+ PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 40, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 30, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 30
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> create index t2_idx1 on t2(i1,i2) local;
+Create success.
+$T0> create index t2_idx2 on t2(i3,i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I1 ASC,
+                                                                I2 ASC
+T1_IDX2                                  BTREE                  I3 ASC,
+                                                                I4 ASC
+T1 has no primary key
+
+$T0> create table t3
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer,
+  i5 integer
+)
+partition by list(i1)
+(
+  partition p1 values (1,3,5,7,9,11,13,15,17,19),
+  partition p2 values (2,4,6,8,10,12,14,16,18,20),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t3 select level, level, level, level, level from dual connect by level <= 30;
+30 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T3 )
+ PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 40, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 30, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 30
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> create index t3_idx1 on t3(i1,i2) local;
+Create success.
+$T0> create index t3_idx2 on t3(i3,i4);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX1                                  BTREE                  I1 ASC,
+                                                                I2 ASC
+T1_IDX2                                  BTREE                  I3 ASC,
+                                                                I4 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; FULL SCAN
+$T0> ##################################
+
+$T0> select * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+20          20          20          20          20          
+21          21          21          21          21          
+22          22          22          22          22          
+23          23          23          23          23          
+24          24          24          24          24          
+25          25          25          25          25          
+26          26          26          26          26          
+27          27          27          27          27          
+28          28          28          28          28          
+29          29          29          29          29          
+30          30          30          30          30          
+30 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t2;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+2           2           2           2           2           
+3           3           3           3           3           
+7           7           7           7           7           
+8           8           8           8           8           
+10          10          10          10          10          
+17          17          17          17          17          
+19          19          19          19          19          
+20          20          20          20          20          
+22          22          22          22          22          
+26          26          26          26          26          
+27          27          27          27          27          
+28          28          28          28          28          
+1           1           1           1           1           
+5           5           5           5           5           
+6           6           6           6           6           
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+18          18          18          18          18          
+23          23          23          23          23          
+29          29          29          29          29          
+30          30          30          30          30          
+4           4           4           4           4           
+9           9           9           9           9           
+21          21          21          21          21          
+24          24          24          24          24          
+25          25          25          25          25          
+30 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 3/3, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 13, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select * from t3;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+21          21          21          21          21          
+22          22          22          22          22          
+23          23          23          23          23          
+24          24          24          24          24          
+25          25          25          25          25          
+26          26          26          26          26          
+27          27          27          27          27          
+28          28          28          28          28          
+29          29          29          29          29          
+30          30          30          30          30          
+2           2           2           2           2           
+4           4           4           4           4           
+6           6           6           6           6           
+8           8           8           8           8           
+10          10          10          10          10          
+12          12          12          12          12          
+14          14          14          14          14          
+16          16          16          16          16          
+18          18          18          18          18          
+20          20          20          20          20          
+1           1           1           1           1           
+3           3           3           3           3           
+5           5           5           5           5           
+7           7           7           7           7           
+9           9           9           9           9           
+11          11          11          11          11          
+13          13          13          13          13          
+15          15          15          15          15          
+17          17          17          17          17          
+19          19          19          19          19          
+30 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 3/3, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; PARTITION KEY, LOCAL KEY RANGE, KEY FILTER, FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i1 = 1 and i5 > 0;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/3, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+------------------------------------------------------------
+$T0> select * from t1 where i1 < 20 and i2 = 10 and i5 > 0;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/3, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 < 20
+  SCAN ( PARTITION: P2, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+  SCAN ( PARTITION: P1, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+------------------------------------------------------------
+
+$T0> select * from t2 where i1 = 1 and i5 > 0;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/3, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P2, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+------------------------------------------------------------
+$T0> select * from t2 where i1 < 20 and i2 = 10 and i5 > 0;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 3/3, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: P3, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+  SCAN ( PARTITION: P2, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+  SCAN ( PARTITION: P1, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+------------------------------------------------------------
+
+$T0> select * from t3 where i1 = 1 and i5 > 0;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/3, INDEX: SYS.T3_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+------------------------------------------------------------
+$T0> select * from t3 where i1 < 20 and i2 = 10 and i5 > 0;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 3/3, INDEX: SYS.T3_IDX1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: P3, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+  SCAN ( PARTITION: P2, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+  SCAN ( PARTITION: P1, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+   [ FIXED KEY FILTER ]
+   AND
+    OR
+     I2 = 10
+   [ FILTER SERIAL EXECUTE ]
+   I5 > 0
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; PARTITION KEY, CONSTANT FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i1 = 1 and 1 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/3, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+------------------------------------------------------------
+$T0> select * from t1 where i1 < 20 and 1 = 0;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/3, INDEX: SYS.T1_IDX1, ACCESS: 0, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 < 20
+  [ CONSTANT FILTER ]
+  1 = 0
+  SCAN ( PARTITION: P2, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P1, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+------------------------------------------------------------
+
+$T0> select * from t2 where i1 = 1 and 1 = 1;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/3, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P2, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+------------------------------------------------------------
+$T0> select * from t2 where i1 < 20 and 1 = 0;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 3/3, INDEX: SYS.T2_IDX1, ACCESS: 0, COST: BLOCKED )
+  [ CONSTANT FILTER ]
+  1 = 0
+  SCAN ( PARTITION: P3, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P2, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P1, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+------------------------------------------------------------
+
+$T0> select * from t3 where i1 = 1 and 1 = 1;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/3, INDEX: SYS.T3_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+------------------------------------------------------------
+$T0> select * from t3 where i1 < 20 and 1 = 0;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 3/3, INDEX: SYS.T3_IDX1, ACCESS: 0, COST: BLOCKED )
+  [ CONSTANT FILTER ]
+  1 = 0
+  SCAN ( PARTITION: P3, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P2, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P1, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; PARTITION KEY, SUBQUERY FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i1 = 1 and i5 = ( select i5 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/3, INDEX: SYS.T1_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: P1, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+------------------------------------------------------------
+$T0> select * from t1 where i1 < 20 and i5 = ( select i5 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/3, INDEX: SYS.T1_IDX1, ACCESS: 19, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 < 20
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 19, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: P2, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P1, INDEX: SYS.T1_IDX1, RANGE SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+------------------------------------------------------------
+
+$T0> select * from t2 where i1 = 1 and i5 = ( select i5 from dual );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/3, INDEX: SYS.T2_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: P2, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+------------------------------------------------------------
+$T0> select * from t2 where i1 < 20 and i5 = ( select i5 from dual );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+2           2           2           2           2           
+3           3           3           3           3           
+7           7           7           7           7           
+8           8           8           8           8           
+10          10          10          10          10          
+17          17          17          17          17          
+19          19          19          19          19          
+1           1           1           1           1           
+5           5           5           5           5           
+6           6           6           6           6           
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+18          18          18          18          18          
+4           4           4           4           4           
+9           9           9           9           9           
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 3/3, INDEX: SYS.T2_IDX1, ACCESS: 19, COST: BLOCKED )
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 19, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: P3, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P2, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P1, INDEX: SYS.T2_IDX1, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+------------------------------------------------------------
+
+$T0> select * from t3 where i1 = 1 and i5 = ( select i5 from dual );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/3, INDEX: SYS.T3_IDX1, ACCESS: 1, COST: BLOCKED )
+  [ PARTITION KEY ]
+  AND
+   OR
+    I1 = 1
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: P1, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 = 1
+------------------------------------------------------------
+$T0> select * from t3 where i1 < 20 and i5 = ( select i5 from dual );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+2           2           2           2           2           
+4           4           4           4           4           
+6           6           6           6           6           
+8           8           8           8           8           
+10          10          10          10          10          
+12          12          12          12          12          
+14          14          14          14          14          
+16          16          16          16          16          
+18          18          18          18          18          
+1           1           1           1           1           
+3           3           3           3           3           
+5           5           5           5           5           
+7           7           7           7           7           
+9           9           9           9           9           
+11          11          11          11          11          
+13          13          13          13          13          
+15          15          15          15          15          
+17          17          17          17          17          
+19          19          19          19          19          
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 3/3, INDEX: SYS.T3_IDX1, ACCESS: 19, COST: BLOCKED )
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 19, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: P3, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P2, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+  SCAN ( PARTITION: P1, INDEX: SYS.T3_IDX1, RANGE SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 < 20
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; GLOBAL KEY RANGE, KEY FILTER, FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i3 = 1 and i5 > 0;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+------------------------------------------------------------
+$T0> select * from t1 where i3 < 20 and i4 = 10 and i5 > 0;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 10
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+------------------------------------------------------------
+
+$T0> select * from t2 where i3 = 1 and i5 > 0;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+------------------------------------------------------------
+$T0> select * from t2 where i3 < 20 and i4 = 10 and i5 > 0;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 10
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+------------------------------------------------------------
+
+$T0> select * from t3 where i3 = 1 and i5 > 0;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+------------------------------------------------------------
+$T0> select * from t3 where i3 < 20 and i4 = 10 and i5 > 0;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 10
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; GLOBAL KEY RANGE, CONSTANT FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i3 = 1 and 1 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+------------------------------------------------------------
+$T0> select * from t1 where i3 < 20 and 1 = 0;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ CONSTANT FILTER ]
+  1 = 0
+------------------------------------------------------------
+
+$T0> select * from t2 where i3 = 1 and 1 = 1;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+------------------------------------------------------------
+$T0> select * from t2 where i3 < 20 and 1 = 0;
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ CONSTANT FILTER ]
+  1 = 0
+------------------------------------------------------------
+
+$T0> select * from t3 where i3 = 1 and 1 = 1;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+------------------------------------------------------------
+$T0> select * from t3 where i3 < 20 and 1 = 0;
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+No rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ CONSTANT FILTER ]
+  1 = 0
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; GLOBAL KEY RANGE, SUBQUERY FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i3 = 1 and i5 = ( select i5 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+$T0> select * from t1 where i3 < 20 and i5 = ( select i5 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 19, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> select * from t2 where i3 = 1 and i5 = ( select i5 from dual );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+$T0> select * from t2 where i3 < 20 and i5 = ( select i5 from dual );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 19, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> select * from t3 where i3 = 1 and i5 = ( select i5 from dual );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+$T0> select * from t3 where i3 < 20 and i5 = ( select i5 from dual );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+19 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 19, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; GLOBAL KEY RANGE, KEY FILTER, FILTER, 
+$T0> # CONSTANT FILTER, SUBQUERY FILTER
+$T0> ##################################
+
+$T0> select * from t1 where i3 = 1 and i5 > 0 and 1 = 1 and i5 = ( select i5 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+$T0> select * from t1 where i3 < 20 and i4 = 10 and i5 > 0 and 1 = 1 and i5 = ( select i5 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 10
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> select * from t2 where i3 = 1 and i5 > 0 and 1 = 1 and i5 = ( select i5 from dual );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+$T0> select * from t2 where i3 < 20 and i4 = 10 and i5 > 0 and 1 = 1 and i5 = ( select i5 from dual );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T2, INDEX: SYS.T2_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 10
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> select * from t3 where i3 = 1 and i5 > 0 and 1 = 1 and i5 = ( select i5 from dual );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 1
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+$T0> select * from t3 where i3 < 20 and i4 = 10 and i5 > 0 and 1 = 1 and i5 = ( select i5 from dual );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+10          10          10          10          10          
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T3, INDEX: SYS.T3_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 < 20
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 10
+  [ FILTER SERIAL EXECUTE ]
+  I5 > 0
+  [ SUBQUERY FILTER ]
+  I5 = (SELECT I5 FROM DUAL)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; NNF FILTER
+$T0> ##################################
+
+$T0> alter session set normalform_maximum = 1;
+Alter success.
+
+$T0> select * from t1 where 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) ) or 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) ) or 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) );
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 3/3, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+  [ NOT-NORMAL-FORM FILTER ]
+  OR
+   I5 = 1
+   I5 = 2
+   I5 = 3
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t2 where 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) ) or 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) ) or 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) );
+T2.I1       T2.I2       T2.I3       T2.I4       T2.I5       
+------------------------------------------------------------------
+2           2           2           2           2           
+3           3           3           3           3           
+1           1           1           1           1           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 3/3, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+  [ NOT-NORMAL-FORM FILTER ]
+  OR
+   I5 = 1
+   I5 = 2
+   I5 = 3
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 13, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> select * from t3 where 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) ) or 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) ) or 
+( (i5=1 or i5=2 or i5=3) and (i5=1 or i5=2 or i5=3) );
+T3.I1       T3.I2       T3.I3       T3.I4       T3.I5       
+------------------------------------------------------------------
+2           2           2           2           2           
+1           1           1           1           1           
+3           3           3           3           3           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 3/3, FULL SCAN, ACCESS: 30, COST: BLOCKED )
+  [ NOT-NORMAL-FORM FILTER ]
+  OR
+   I5 = 1
+   I5 = 2
+   I5 = 3
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> alter session set normalform_maximum = 128;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop table t3;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> SKIP END;
+

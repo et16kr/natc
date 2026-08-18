@@ -1,0 +1,907 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 정합성 검사, 함수 기반 키까지 (배치 4)
+$T0> #
+$T0> # checkGlobalIndex.i 가 원본 basic/check_global_index.i 를 대신하듯, 이
+$T0> # 파일은 원본 bugs/function_index.tc 가 **자기 안에** 들고 있던
+$T0> # DEF CHECK_GLOBAL_INDEX() 를 대신한다. 원본의 그것은 두 겹으로 이식이
+$T0> # 불가능하다 -- 1 차 배치가 겪은 것과 같은 두 겹이다:
+$T0> #
+$T0> #   1. "$GIT_T1_PK" / "$GIT_T1_IDX1" 을 힙과 FULL OUTER JOIN 한다.
+$T0> #      네이티브에는 그 테이블이 없고 b-tree 내용은 SQL 로 볼 수 없다.
+$T0> #   2. 힙 쪽 SELECT 가 cast(_prowid as bigint) 를 쓴다. 디스크 테이블은
+$T0> #      _PROWID 를 지원하지 않아 원본 .lst 의 그 자리 **열 개가 전부**
+$T0> #      [ERR-31385 : _PROWID is not supported.] 로 굳어 있다 -- 이 패턴이
+$T0> #      울리는 변경이 존재하지 않는 감시자였다(v3-natc-port.md 3.1).
+$T0> #
+$T0> # ---------------------------------------------------------------------
+$T0> # ★ 왜 checkGlobalIndex.i 를 고치지 않고 형제 파일을 두는가
+$T0> # ---------------------------------------------------------------------
+$T0> # ATC 는 INCLUDE 한 파일을 **주석까지** 케이스 전사에 인라인한다. 공유
+$T0> # 파일에 한 줄만 더해도 그것을 INCLUDE 한 1 차 배치 14 개의 .lst 가 전부
+$T0> # 움직인다. 얻는 것 없이 굳힌 기대 14 개를 다시 찍는 일이므로, 확장은
+$T0> # 이 형제 파일에 둔다. 같은 이유로 이 스위트는 자매 스위트
+$T0> # (NativeGlobalIndexClaude)의 공유 include 도 건드리지 않았다 -- README.
+$T0> #
+$T0> # ---------------------------------------------------------------------
+$T0> # ★ 무엇이 새로 필요한가 -- 함수 기반 키는 오늘 거절된다
+$T0> # ---------------------------------------------------------------------
+$T0> #   create index t1_idx1 on t1( i1+i2 );
+$T0> #
+$T0> # 는 파티션 키(i4)를 담지 않으므로 네이티브 글로벌 인덱스 후보이고,
+$T0> # qdx::validateNativeGlobalIndex(qdx.cpp) 가 숨김(함수 기반) 키 컬럼을
+$T0> # 보고 거절한다:
+$T0> #
+$T0> #   [ERR-314AD : A native global index cannot be created with this index
+$T0> #                option or key column type: FUNCTION-BASED key.]
+$T0> #
+$T0> # $GIT_ 는 같은 문장을 받아 숨김 테이블 위에 만들었다. 그래서 이 케이스가
+$T0> # 재는 것은 "함수 기반 글로벌 인덱스의 정합성"이 아니라 **거절이 무엇을
+$T0> # 남기는가**로 바뀐다. 그것을 에러 문구가 아니라 **값**으로 적는다
+$T0> # (v3-natc-port.md 6.1 -- "에러가 난다"를 기대로 굳히지 않는다):
+$T0> #
+$T0> #   겹 0. 거절이 흔적을 남기지 않았다 -- 숨김 컬럼 0, 숨김 테이블 0.
+$T0> #         qdx.cpp 의 그 검사는 "숨김 컬럼이 실제로 붙기 전에 돈다"고
+$T0> #         주석에 적혀 있고, FN_HIDDEN_KEY_COLUMNS 가 그 주석을 실물로
+$T0> #         확인하는 자리다. 프로퍼티 0 에서는 1 이 된다.
+$T0> #   겹 1~3. 이 픽스처에 실제로 남는 네이티브 글로벌 인덱스 T1_PK(i1) 를
+$T0> #         checkGlobalIndex.i 와 같은 세 겹으로 검사한다 -- 양방향 차집합,
+$T0> #         카운트/합계 교차, 그리고 힌트가 정말 그 인덱스를 잡았다는 플랜
+$T0> #         증거. 겹 3 이 없으면 겹 1 은 "풀스캔 minus 풀스캔"이라 무조건
+$T0> #         0 행이다.
+$T0> #
+$T0> # 이 케이스의 t1 은 파티션 키가 i4 이고 T1_PK 는 i1 하나이므로 비선두다
+$T0> # -- 원본 fixture 의 T1_PK(i2,i1) 과 달리 **정말로 글로벌**이고, 그래서
+$T0> # 행 이동(update ... i4 = i4+10)을 가로질러 검사할 값이 있다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 인덱스 하나를 세 겹으로 검사한다. checkGlobalIndex.i 의 CHECK_ONE_INDEX
+$T0> # 와 같은 모양이다 -- 이름을 달리한 것은 두 파일을 같은 케이스에서
+$T0> # INCLUDE 할 일이 없고, 공유 파일을 건드리지 않기 위해서다.
+$T0> #
+$T0> # @aTable : 테이블 이름
+$T0> # @aIndex : 검사할 인덱스 이름
+$T0> # @aPred  : 그 인덱스를 태울 술어. 전 행(널 포함)을 덮어야 한다.
+$T0> #
+
+$T0> #
+$T0> # 함수 기반 키가 남긴 흔적을 센다.
+$T0> #
+$T0> # PROJ-1090 의 함수 기반 인덱스는 식을 담을 **숨김 컬럼**을 테이블에
+$T0> # 붙이고 그 위에 인덱스를 만든다(SYS_COLUMNS_.IS_HIDDEN = 'T').
+$T0> #   프로퍼티 1(네이티브) : CREATE INDEX 가 ERR-314AD 로 거절되고,
+$T0> #                          숨김 컬럼은 붙기 전이라 0 이다.
+$T0> #   프로퍼티 0($GIT_)    : 같은 문장이 성공하고 숨김 컬럼이 1 이다.
+$T0> # 즉 이 한 줄이 이 케이스의 이빨이다.
+$T0> #
+
+$T0> #
+$T0> # 원본이 자기 안에 들고 있던 DEF 와 **같은 이름, 같은 인자(없음)**다.
+$T0> # 그래서 MAIN 의 다섯 CALL 자리는 원본과 바이트 동일하게 남는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/bugs/function_index.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> ##########################################################################
+$T0> # PORT EDIT: the original's own consistency helper cannot be ported
+$T0> #
+$T0> # Original lines 34-90 defined DEF CHECK_GLOBAL_INDEX() right here. It FULL
+$T0> # OUTER JOINs the heap against "$GIT_T1_PK" / "$GIT_T1_IDX1", and the heap
+$T0> # side selects cast(_prowid as bigint). Neither survives the port:
+$T0> #
+$T0> #   - there are no such tables on the native path, and a b-tree's contents
+$T0> #     are not visible to SQL;
+$T0> #   - _PROWID is not supported on disk tables, so all ten of those
+$T0> #     statements are frozen as [ERR-31385] in the original .lst. That check
+$T0> #     never ran, not once -- v3-natc-port.md 3.1.
+$T0> #
+$T0> # The replacement is include/checkFunctionIndex.i, INCLUDEd at the head of
+$T0> # this file. It defines a DEF of the SAME NAME and the same (empty)
+$T0> # argument list, so the five CALL CHECK_GLOBAL_INDEX(); sites in MAIN below
+$T0> # are byte-identical to the original. What it measures, and why a function
+$T0> # based key makes this case measure something different than its name says,
+$T0> # is written in that file.
+$T0> ##########################################################################
+
+$T0> ##########################################################################
+$T0> # PORT EDIT END
+$T0> ##########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop function get_pid;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> SKIP END;
+
+$T0> create function get_pid( tablename varchar(40), partname varchar(40) )
+return bigint
+as
+  v1 bigint;
+begin
+  select p.partition_oid into v1
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p
+  where t.table_name = tablename and t.user_id = user_id() and p.partition_name = partname
+  and t.table_id = p.table_id;
+
+  return v1;
+end;
+/
+Create success.
+
+$T0> ##################################
+$T0> # SECTOR; CREATE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i4)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> alter table t1 add constraint t1_pk primary key (i1);
+Alter success.
+$T0> create index t1_idx1 on t1( i1+i2 );
+[ERR-314AD : A native global index cannot be created with this index option or key column type: FUNCTION-BASED key.]
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     NOT NULL
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_PK                                    BTREE    UNIQUE        I1 ASC
+[ PRIMARY KEY ]                                                 
+------------------------------------------------------------------------------
+I1
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_PK                 NATIVE-GLOBAL     0           F  101         
+1 row selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+$T0> select count(*) fn_hidden_key_columns
+  from system_.sys_columns_ c, system_.sys_tables_ t
+  where c.table_id = t.table_id
+    and t.user_id = user_id()
+    and t.table_name = upper('t1')
+    and c.is_hidden = 'T';
+FN_HIDDEN_KEY_COLUMNS 
+------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+0                                                                                                        
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_pk) */ count(*) from t1 where i1 is not null or i1 is null;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_PK, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 IS NOT NULL
+     I1 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_pk) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i1 is not null or i1 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+0                                                                                                        
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> insert into t1 select level, level/3, mod(level,3), level from dual connect by level <= 100;
+100 rows inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.T1 )
+ PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 32, COST: BLOCKED )
+  CONNECT BY ( ACCESS: 100, COST: BLOCKED )
+   [ LEVEL FILTER ]
+   LEVEL <= 100
+   SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_PK                 NATIVE-GLOBAL     0           F  101         
+1 row selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+$T0> select count(*) fn_hidden_key_columns
+  from system_.sys_columns_ c, system_.sys_tables_ t
+  where c.table_id = t.table_id
+    and t.user_id = user_id()
+    and t.table_name = upper('t1')
+    and c.is_hidden = 'T';
+FN_HIDDEN_KEY_COLUMNS 
+------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  5050                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_pk) */ count(*) from t1 where i1 is not null or i1 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_PK, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 IS NOT NULL
+     I1 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_pk) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i1 is not null or i1 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1650                 100                  5050                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> select * from t1 where i1 + i2 <= 10;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           0           1           1           
+2           0           2           2           
+3           1           0           3           
+4           1           1           4           
+5           1           2           5           
+6           2           0           6           
+7           2           1           7           
+8           2           2           8           
+8 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 16, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   I1 + I2 <= 10
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> update t1 set i2 = i2+1;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_PK                 NATIVE-GLOBAL     0           F  101         
+1 row selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+$T0> select count(*) fn_hidden_key_columns
+  from system_.sys_columns_ c, system_.sys_tables_ t
+  where c.table_id = t.table_id
+    and t.user_id = user_id()
+    and t.table_name = upper('t1')
+    and c.is_hidden = 'T';
+FN_HIDDEN_KEY_COLUMNS 
+------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 100                  5050                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_pk) */ count(*) from t1 where i1 is not null or i1 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_PK, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 IS NOT NULL
+     I1 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_pk) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i1 is not null or i1 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1750                 100                  5050                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> update t1 set i2 = i2+1, i4 = i4+10;
+100 rows updated.
+------------------------------------------------------------
+UPDATE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 21, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 19, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_PK                 NATIVE-GLOBAL     0           F  101         
+1 row selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+$T0> select count(*) fn_hidden_key_columns
+  from system_.sys_columns_ c, system_.sys_tables_ t
+  where c.table_id = t.table_id
+    and t.user_id = user_id()
+    and t.table_name = upper('t1')
+    and c.is_hidden = 'T';
+FN_HIDDEN_KEY_COLUMNS 
+------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1850                 100                  6050                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_pk) */ count(*) from t1 where i1 is not null or i1 is null;
+COUNT                
+-----------------------
+100                  
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_PK, GLOBAL-INDEX, RANGE SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 IS NOT NULL
+     I1 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_pk) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i1 is not null or i1 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+100                  5050                 1850                 100                  6050                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> delete from t1 where i3 = 2;
+33 rows deleted.
+------------------------------------------------------------
+DELETE ( TABLE: SYS.T1 )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 5/5, FULL SCAN, ACCESS: 33, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 31, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   I3 = 2
+------------------------------------------------------------
+
+$T0> set linesize 200;
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_PK                 NATIVE-GLOBAL     0           F  101         
+1 row selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+$T0> select count(*) fn_hidden_key_columns
+  from system_.sys_columns_ c, system_.sys_tables_ t
+  where c.table_id = t.table_id
+    and t.user_id = user_id()
+    and t.table_name = upper('t1')
+    and c.is_hidden = 'T';
+FN_HIDDEN_KEY_COLUMNS 
+------------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(t1) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+67                   3400                 1256                 34                   4070                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> select /*+ index(t1, t1_pk) */ count(*) from t1 where i1 is not null or i1 is null;
+COUNT                
+-----------------------
+67                   
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_PK, GLOBAL-INDEX, RANGE SCAN, ACCESS: 67, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I1 IS NOT NULL
+     I1 IS NULL
+------------------------------------------------------------
+$T0> alter session set explain plan = off;
+Alter success.
+
+$T0> select * from
+  (
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select * from
+  (
+    select /*+ FULL SCAN(t1) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+    minus
+    select /*+ index(t1, t1_pk) */ i1, i2, i3, i4 from t1 where i1 is not null or i1 is null
+  )
+  order by 1, 2, 3, 4;
+I1          I2          I3          I4          
+-----------------------------------------------------
+No rows selected.
+
+$T0> select /*+ index(t1, t1_pk) */
+         count(*) c, sum(i1) s1, sum(i2) s2, sum(i3) s3, sum(i4) s4
+  from t1 where i1 is not null or i1 is null;
+C                    S1                   S2                   S3                   S4                   
+---------------------------------------------------------------------------------------------------------------
+67                   3400                 1256                 34                   4070                 
+1 row selected.
+
+$T0> alter session set explain plan = on;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop function get_pid;
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> SKIP END;
+

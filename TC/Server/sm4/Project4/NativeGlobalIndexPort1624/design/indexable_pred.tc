@@ -1,0 +1,157 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/indexable_pred.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+set linesize 200;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 varchar(10),
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values ( 1, 1, 'abc', 1 );
+insert into t1 values ( 2, 2, 'abc', 2 );
+insert into t1 values ( 3, 3, 'abc', 3 );
+insert into t1 values ( 4, 4, 'bcd', 1 );
+insert into t1 values ( 5, 5, 'bcd', 2 );
+insert into t1 values ( 6, 6, 'bcd', 3 );
+insert into t1 values ( 7, 7, 'bcd', 4 );
+insert into t1 values ( 8, 8, 'bcd', 1 );
+insert into t1 values ( 9, 9, 'bcd', 2 );
+insert into t1 values ( 10, 10, 'def', 1 );
+insert into t1 values ( 11, 11, 'def', 2 );
+insert into t1 values ( 12, 12, 'def', 3 );
+insert into t1 values ( 13, 13, 'def', 4 );
+insert into t1 values ( 14, 14, 'def', 5 );
+insert into t1 values ( 15, 15, 'ghi', 1 );
+insert into t1 values ( 16, 16, 'jkl', 1 );
+insert into t1 values ( 17, 17, 'jkl', 2 );
+insert into t1 values ( 18, 18, 'lmn', 1 );
+insert into t1 values ( 19, 19, 'lmn', 2 );
+insert into t1 values ( 20, null, 'lmn', 3 );
+
+create index t1_idx2 on t1(i2);
+create index t1_idx3 on t1(i3, i4 desc);
+
+desc t1;
+
+create table t2
+( 
+  i1 integer,
+  i2 clob, 
+  i3 geometry
+)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t2 values ( 1, 'a', geometry'polygon((0 0, 1 0, 1 1, 0 1))' );
+insert into t2 values ( 2, 'b', geometry'polygon((1 1, 2 1, 2 2, 1 2))' );
+insert into t2 values ( 3, 'c', geometry'polygon((2 2, 3 2, 3 3, 2 3))' );
+insert into t2 values ( 4, 'd', geometry'polygon((3 3, 4 3, 4 4, 3 4))' );
+insert into t2 values ( 5, 'e', geometry'polygon((4 4, 5 4, 5 5, 4 5))' );
+insert into t2 values ( 6, 'f', geometry'polygon((5 5, 6 5, 6 6, 5 6))' );
+insert into t2 values ( 7, 'g', geometry'polygon((6 6, 7 6, 7 7, 6 7))' );
+insert into t2 values ( 8, 'h', geometry'polygon((7 7, 8 7, 8 8, 7 8))' );
+insert into t2 values ( 9, 'i', geometry'polygon((8 8, 9 8, 9 9, 8 9))' );
+insert into t2 values ( 10, 'j', geometry'polygon((9 9, 10 9, 10 10, 9 10))' );
+
+create index t2_idx3 on t1(i3);
+
+desc t1;
+
+##################################
+# SECTOR; INDEXABLE PREDICATE
+##################################
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+select * from t1 where i2 is null;
+select * from t1 where i2 < 5;
+select * from t1 where i2 >= 15;
+select * from t1 where i2 in (1,3,5);
+select * from t1 where i2 between 11 and 13;
+select * from t1 where i2 in (select level from dual connect by level <= 5);
+
+##################################
+# SECTOR; INDEXABLE PREDICATE
+##################################
+
+select * from t1 where i3 = 'abc';
+select * from t1 where i3 = 'abc' and i4 = 2;
+select * from t1 where i3 like 'a%';
+select * from t1 where i3 like 'b%d';
+select * from t1 where i3 >= 'def' and i4 = 1;
+select * from t1 where (i3, i4) in ( select 'abc', 1 from dual 
+                                     union all
+                                     select 'def', 1 from dual );
+
+##################################
+# SECTOR; INDEXABLE PREDICATE
+##################################
+
+select i1,astext(i3,64) from t2 where within( i3, geometry'polygon((3 3, 5 3, 5 5, 3 5))' );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

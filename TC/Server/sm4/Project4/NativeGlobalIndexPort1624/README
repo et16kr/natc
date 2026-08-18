@@ -1,7 +1,7 @@
 Native Global Index (disk) -- PROJ-1624 이식
 
-  상태: 1차 배치(basic/, 16 .tc) 완료. 잔여 배치는 저장소 문서
-        altidev4/docs/analysis/claude-global-index/v3-natc-port.md 6 절.
+  상태: 배치 1~4 완료 (154 케이스 걸림 / 11 보류). 잔여 배치 47 은
+        altidev4/docs/analysis/claude-global-index/v4-natc-port-2.md 11 절.
 
   원본: TC/Server/qp4/Project3/PROJ-1624-GlobalIndex (596 파일)
   자매: TC/Server/sm4/Project4/NativeGlobalIndexClaude (메모리 쪽, 37 .tc)
@@ -87,12 +87,18 @@ Native Global Index (disk) -- PROJ-1624 이식
   include/
     globalIndexEnv.i     .tc 의 전제(DISK_GLOBAL_INDEX_ENABLE=1)와 판별자
     checkGlobalIndex.i   정합성 검사 3겹
+    checkFunctionIndex.i 그 3겹의 함수 기반 키 확장 (배치 4, bugs/function_index)
     pinNative.sql        .sql 의 전제. --+LOAD_SQL 로 케이스마다 끌어온다
   NEEDS_FRESH_INSTANCE   이 스위트는 이력 없는 DB 를 요구한다 (그 안에 이유)
   basic/                 1차 배치 16 케이스
                          select / insert / update / delete / move / null
   pdt/                   2차 배치 -- 공식 PROJ-1624-QC/PDT 121 케이스
                          (114 를 걸고 7 을 보류. 보류 이유는 그 .ts 주석에)
+  design/                3차 배치 -- 공식 design/ 16 케이스
+                         플랜 / 선택도 / 조인 / 순서 보존 / 필터 / 잠금
+  bugs/                  4차 배치 -- 공식 bugs/ 6 케이스
+  tool/                  4차 배치 -- 공식 tool/isql 1 + tool/atomic 1
+                         (tool/aexport 4 는 E-4 로 보류. 이유는 tool.ts 안에)
 
 
 [.sql 케이스는 전제를 어떻게 세우는가]
@@ -114,9 +120,35 @@ ATC 가 그 파일을 케이스 전사에 인라인하므로, .tc 의 CALL PIN_D
 [이식의 규칙]
 
 케이스 본문은 원본과 바이트 동일하다. 이식이 더하는 것은 출처 머리글과
-전제 한 줄뿐이고, 예외는 선언된 하나(v4-natc-port.md 6.3)다. 그 규칙은
-altidev4/scripts/global-index/natc-port-check.sh 가 원본 트리와 대조해
-사후 검증한다 -- 규칙대로 다시 만든 파일이 디스크의 것과 같아야 한다.
+전제 한 줄뿐이고, 그 밖의 변경은 전부 케이스 안에 선언된다.
+
+선언된 편집은 이 모양이다:
+
+  ##########################################################################
+  # PORT EDIT: <한 줄 제목>
+  # <왜 필요한가, 무엇을 대신하는가, 이빨은 무엇인가>
+  ##########################################################################
+  <대체 본문 (없을 수도 있다)>
+  ##########################################################################
+  # PORT EDIT END
+  ##########################################################################
+
+오늘 있는 것은 넷이다.
+
+  pdt/Design/CREATE_TABLE/RangePartTable.sql  DB 를 지우는 절을 뺐다
+                                              (v4-natc-port.md 6.3)
+  design/table_lock.tc                        v$lock 에서 사라지는 것을
+                                              값으로 적는다 (v4-natc-port-2.md 3)
+  bugs/function_index.tc                      원본이 자기 안에 들고 있던
+                                              정합성 검사를 대신한다 (같은 문서 4)
+  bugs/BUG-35460/BUG-35460.tc                 카탈로그 나열을 이 케이스의 것으로
+                                              좁히고 진짜 비선두 인덱스로 다시
+                                              묻는다 (같은 문서 5)
+
+그 규칙은 altidev4/scripts/global-index/natc-port-check.sh 가 원본 트리와
+대조해 사후 검증한다 -- 규칙대로 다시 만든 파일이 디스크의 것과 같아야
+한다. 검사기는 편집 본문의 사본을 갖지 않는다: 양쪽을 같은 자리표시자로
+접고 나머지를 견주므로, 편집 밖의 모든 바이트는 여전히 원본에 못박힌다.
 
 
 [돌리는 법]

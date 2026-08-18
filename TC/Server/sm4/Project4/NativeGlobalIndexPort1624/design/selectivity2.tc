@@ -1,0 +1,92 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/selectivity2.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+set linesize 200;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+ALTER SYSTEM SET __DBMS_STAT_METHOD = 1;
+
+create table t1(i1 integer, i2 integer, i3 integer)
+partition by range(i1)
+(
+  partition p1 values less than (3),
+  partition p2 values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values (1, 1, 1);
+insert into t1 values (2, 2, 1);
+insert into t1 values (3, 3, 3);
+insert into t1 values (4, 4, 3);
+
+create index idx1 on t1(i2);
+create index idx2 on t1(i3) local;
+
+select * from t1;
+
+##################################
+# SECTOR; SELECTIVITY
+##################################
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+alter system set trclog_explain_graph = 1;
+
+select * from t1 where i3=1;
+
+select * from t1 where i2=1;
+
+select * from t1 where i2=1 and i3=1;
+
+ALTER SYSTEM SET __DBMS_STAT_METHOD = 0;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

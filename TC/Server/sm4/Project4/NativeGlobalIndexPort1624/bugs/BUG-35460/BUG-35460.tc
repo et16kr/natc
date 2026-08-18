@@ -1,0 +1,164 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/bugs/BUG-35460/BUG-35460.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../../include/globalIndexEnv.i;
+
+###########################################################################
+# BUG-35460
+###########################################################################
+
+DEF FINALIZE()
+{
+
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; RANGE PARTITION
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (20),
+  partition p2 values less than (40),
+  partition p3 values less than (60),
+  partition p4 values less than (80),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+alter table t1 add constraint t1_pk primary key (i2, i1);
+alter table t1 add constraint t1_uk unique (i3, i2, i1);
+
+desc t1;
+desc "$GIT_T1_PK";
+desc "$GIT_T1_UK";
+
+##################################
+# SECTOR; INSERT
+##################################
+
+select * from t1;
+
+insert into t1 select level, level/3, mod(level,3), 1 from dual connect by level <= 100;
+
+select count(*) from t1;
+
+select count(*) from "$GIT_T1_PK";
+
+select count(*) from "$GIT_T1_UK";
+
+##########################################################################
+# PORT EDIT: make the case measure a global index, and stop measuring the
+#            rest of the suite
+#
+# (1) WHAT WAS WRONG WITH THE EXPECTATION
+#
+# Everything above this line is byte-identical to the original, and on the
+# native path it produces byte-identical RESULTS too -- only the premise
+# line differs. That is not a success, it is the finding: T1_PK(i2,i1) and
+# T1_UK(i3,i2,i1) both carry the partition key i1, so they are LOCAL under
+# BOTH implementations. The original never created a $GIT_ table here, so
+#
+#   desc "$GIT_T1_PK";                    -> [ERR-91014]
+#   select count(*) from "$GIT_T1_PK";    -> [ERR-31031]
+#   ... where table_type = 'G' ...        -> No rows selected.
+#
+# were green for a reason that has nothing to do with what BUG-35460 was
+# about. An error frozen as an expectation goes green when the reason
+# changes; here the reason was wrong from the start (v3-natc-port.md 6.1,
+# and 3.2 for the same mistake in the original's check_global_index.i).
+#
+# So the port adds an index that really is non-prefixed -- T1_IDX_G(i3)
+# does not contain the partition key i1 -- and then asks the question the
+# original meant to ask.
+#
+# (2) WHY THE 'T' LISTING IS NARROWED
+#
+# Original lines 68-70 were these two statements, unqualified:
+#
+#   select table_name from system_.sys_tables_
+#    where table_type = 'T' and user_id = user_id() order by table_id;
+#   select table_name from system_.sys_tables_
+#    where table_type = 'G' and user_id = user_id() order by table_id;
+#
+# The first lists every table SYS has, which makes this case's expectation
+# a function of what the OTHER cases in the suite left behind rather than
+# of what this case did. It really does: six batch-2 cases
+# (Design/CREATE_INDEX/LOCAL_UNIQUE/integer_{hash,range,list}.sql and
+# Design/ALTER_INDEX/REBUILD/integer_{hash,range,list}.tc) CREATE TABLE T
+# and drop it only in their own preamble, never in FINALIZE, so T outlives
+# the suite. The original never noticed: PROJ-1624.ts does not reference
+# PROJ-1624-QC at all, so those cases and this one never ran under one
+# root. The port put them under one root and the leak arrived here.
+#
+# The narrowing keeps exactly the discriminating content -- this case's own
+# table, plus anything named $GIT_ -- and drops the part that was reporting
+# on its neighbours.
+#
+# The 'G' listing is NOT narrowed, on purpose: with the premise pinned to 1
+# no case in this suite can create a hidden table, so "No rows selected"
+# here is a statement about the whole suite and it is stable.
+#
+# TEETH: with DISK_GLOBAL_INDEX_ENABLE = 0 the same CREATE INDEX builds a
+# hidden table, KIND reads GIT-HIDDEN-TABLE, GIT_HIDDEN_TABLE_COUNT reads 1
+# and the table_type = 'G' listing returns $GIT_T1_IDX_G instead of no rows.
+##########################################################################
+
+select table_name from system_.sys_tables_ where table_type = 'T' and user_id = user_id() and ( table_name = 'T1' or table_name like '$GIT!_%' escape '!' ) order by table_id;
+
+select table_name from system_.sys_tables_ where table_type = 'G' and user_id = user_id() order by table_id;
+
+create index t1_idx_g on t1(i3);
+
+CALL SHOW_INDEX_MEDIA( "t1" );
+
+CALL SHOW_NO_HIDDEN_TABLE();
+
+select table_name from system_.sys_tables_ where table_type = 'T' and user_id = user_id() and ( table_name = 'T1' or table_name like '$GIT!_%' escape '!' ) order by table_id;
+
+select table_name from system_.sys_tables_ where table_type = 'G' and user_id = user_id() order by table_id;
+
+select count(*) from t1 where i3 = 1;
+
+##########################################################################
+# PORT EDIT END
+##########################################################################
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

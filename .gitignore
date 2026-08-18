@@ -1,3 +1,19 @@
 # ATC 실행 산출물. 기대 결과는 *_A4_64.lst 이므로 .out 은 추적하지 않는다.
 *_A4_64.out
 *_A4_64.tdx
+
+# tool/atomic 의 실행 산출물. 케이스가 MAKE 로 ESQL 클라이언트를 그 자리에서
+# 빌드하고 EXEC 로 돌리므로 sesc 전처리 결과 · 오브젝트 · 로그가 남는다.
+# FINALIZE 의 MAKE "clean" 이 바이너리와 .cpp/.o 는 지우지만 나머지는 남는다.
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/atomic_insert
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/atomic_insert.cpp
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/atomic_insert.d
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/atomic_insert.o
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/make.log
+TC/Server/sm4/Project4/NativeGlobalIndexPort1624/tool/atomic/process.out
+
+# ATAF 가 매 실행마다 work/ 에 다시 쓰는 것들 (인스턴스 설정 복사본과 로그).
+work/*.ts
+work/altibase.info
+work/altibase.properties
+work/log/*.log

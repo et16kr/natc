@@ -1,0 +1,593 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/table_lock.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop view v1;
+$T0> drop view v2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition t1_p1 values less than (6),
+  partition t1_pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 4 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 5 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 6 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 7 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 8 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3);
+Create success.
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition t2_p1 values less than (6),
+  partition t2_pd values default
+)
+enable row movement
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 values ( 3, 3, 3 );
+1 row inserted.
+$T0> insert into t2 values ( 4, 4, 4 );
+1 row inserted.
+$T0> insert into t2 values ( 5, 5, 5 );
+1 row inserted.
+$T0> insert into t2 values ( 6, 6, 6 );
+1 row inserted.
+$T0> insert into t2 values ( 7, 7, 7 );
+1 row inserted.
+$T0> insert into t2 values ( 8, 8, 8 );
+1 row inserted.
+$T0> insert into t2 values ( 9, 9, 9 );
+1 row inserted.
+$T0> insert into t2 values ( 10, 10, 10 );
+1 row inserted.
+
+$T0> create index t2_idx2 on t2(i2);
+Create success.
+$T0> create index t2_idx3 on t2(i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC
+T1 has no primary key
+$T0> desc t2;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T2_IDX2                                  BTREE                  I2 ASC
+T2_IDX3                                  BTREE                  I3 ASC
+T2 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; SELECT
+$T0> ##################################
+
+$T0> create view v1 as
+  select cast(t.table_name || ',' || v.lock_desc || ',' || v.lock_cnt as varchar(50)) as lock_info
+  from system_.sys_tables_ t, v$lock v
+  where t.user_id = user_id() and t.table_oid = v.table_oid
+  order by t.table_name;
+Create success.
+
+$T0> create view v2 as
+  select cast(p.partition_name || ',' || v.lock_desc || ',' || v.lock_cnt as varchar(50)) as lock_info
+  from system_.sys_tables_ t, system_.sys_table_partitions_ p, v$lock v
+  where t.user_id = user_id() and t.table_id = p.table_id and p.partition_oid = v.table_oid
+  order by p.partition_name;
+Create success.
+
+$T0> select to_char(i1) i1 from t1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+2                                                                 
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+13 rows selected.
+
+$T0> select to_char(i1) i1 from t1 where i2=1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+4 rows selected.
+
+$T0> select to_char(i1) i1 from t1 where i3=1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+4 rows selected.
+
+$T0> select to_char(i1) i1 from t1 where i2=1 and i3=1
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+1                                                                 
+T1,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+4 rows selected.
+
+$T0> select to_char(t1.i1) i1 from t1, t2 where t1.i2=t2.i2
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+T1,IS_LOCK,1                                                      
+T2,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+12 rows selected.
+
+$T0> select to_char(t1.i1) i1 from t1, t2 where t1.i3=t2.i3
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+T1,IS_LOCK,1                                                      
+T2,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+12 rows selected.
+
+$T0> select to_char(t1.i1) i1 from t1, t2 where t1.i2=t2.i2 and t1.i3=t2.i3
+union all 
+select * from v1
+union all
+select * from v2;
+I1                                                                
+--------------------------------------------------------------------
+3                                                                 
+4                                                                 
+5                                                                 
+6                                                                 
+7                                                                 
+8                                                                 
+T1,IS_LOCK,1                                                      
+T2,IS_LOCK,1                                                      
+V1,IS_LOCK,1                                                      
+V2,IS_LOCK,1                                                      
+T1_P1,IS_LOCK,1                                                   
+T1_PD,IS_LOCK,1                                                   
+T2_P1,IS_LOCK,1                                                   
+T2_PD,IS_LOCK,1                                                   
+14 rows selected.
+
+$T0> ##################################
+$T0> # SECTOR; INSERT
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> insert into t1 values ( 10, 10, 10 );
+1 row inserted.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_PD,IX_LOCK,1                                     
+4 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> update t1 set i1=11, i2=11, i3=11 where i1=10;
+1 row updated.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_PD,IX_LOCK,1                                     
+4 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; UPDATE ROW MOVEMENT
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> update t1 set i1=0, i2=0, i3=0 where i1=11;
+1 row updated.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_P1,IX_LOCK,1                                     
+T1_PD,IX_LOCK,1                                     
+5 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##################################
+$T0> # SECTOR; DELETE
+$T0> ##################################
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> delete from t1 where i1=0;
+1 row deleted.
+
+$T0> select * from v1
+union all
+select * from v2;
+V1.LOCK_INFO                                        
+------------------------------------------------------
+T1,IX_LOCK,1                                        
+V1,IS_LOCK,1                                        
+V2,IS_LOCK,1                                        
+T1_P1,IX_LOCK,1                                     
+4 rows selected.
+
+$T0> commit;
+Commit success.
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##########################################################################
+$T0> # PORT EDIT: what replaces the $GIT_ rows this case used to see in v$lock
+$T0> #
+$T0> # v1/v2 above join system_.sys_tables_ (and sys_table_partitions_) against
+$T0> # v$lock, so on the $GIT_ implementation every sector of this case also
+$T0> # printed rows named $GIT_T1_IDX2 / $GIT_T1_IDX3 -- the hidden tables the
+$T0> # global indexes were made of, each carrying its own IS/IX lock. On the
+$T0> # native path those tables do not exist and those rows are simply gone.
+$T0> #
+$T0> # Re-recording the transcript would freeze that as an absence, and an
+$T0> # absence is the weakest expectation there is: it holds just as well when
+$T0> # the view is broken, when the index was never created, or when the case
+$T0> # is looking at the wrong table. So the port states it as a count, next to
+$T0> # the counts that must stay non-zero -- v3-natc-port.md 6.1 (assert "none"
+$T0> # with SHOW_NO_HIDDEN_TABLE / SHOW_INDEX_MEDIA, never with "an error").
+$T0> #
+$T0> # TEETH: with DISK_GLOBAL_INDEX_ENABLE = 0 the same INSERT locks the two
+$T0> # hidden tables and GIT_LOCK_ROWS reads 2, not 0, while T1_LOCK_ROWS and
+$T0> # T1_PART_LOCK_ROWS are unchanged. That is the whole difference this case
+$T0> # exists to show, stated as a value instead of as a missing line.
+$T0> ##########################################################################
+
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T1_IDX2               NATIVE-GLOBAL     0           F  101         
+T1_IDX3               NATIVE-GLOBAL     0           F  101         
+2 rows selected.
+$T0> select cast(i.index_name as varchar(20)) index_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         i.index_table_id,
+         cast(i.is_partitioned as varchar(1)) is_part,
+         nvl(p.partition_type,-1) part_type
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.table_id = t.table_id
+    and t.table_name = upper('t2')
+    and t.user_id = user_id()
+    and i.index_id = p.index_id(+)
+  order by 1;
+INDEX_NAME            KIND              INDEX_TABLE_ID IS_PART  PART_TYPE   
+----------------------------------------------------------------------------------
+T2_IDX2               NATIVE-GLOBAL     0           F  101         
+T2_IDX3               NATIVE-GLOBAL     0           F  101         
+2 rows selected.
+$T0> select count(*) git_hidden_table_count
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+GIT_HIDDEN_TABLE_COUNT 
+-------------------------
+0                    
+1 row selected.
+
+$T0> alter session set autocommit = false;
+Alter success.
+
+$T0> insert into t1 values ( 12, 12, 12 );
+1 row inserted.
+
+$T0> select count(*) git_lock_rows
+from system_.sys_tables_ t, v$lock v
+where t.user_id = user_id() and t.table_oid = v.table_oid
+  and t.table_name like '$GIT!_%' escape '!';
+GIT_LOCK_ROWS        
+-----------------------
+0                    
+1 row selected.
+
+$T0> select count(*) t1_lock_rows
+from system_.sys_tables_ t, v$lock v
+where t.user_id = user_id() and t.table_oid = v.table_oid
+  and t.table_name = 'T1';
+T1_LOCK_ROWS         
+-----------------------
+1                    
+1 row selected.
+
+$T0> select count(*) t1_part_lock_rows
+from system_.sys_tables_ t, system_.sys_table_partitions_ p, v$lock v
+where t.user_id = user_id() and t.table_id = p.table_id
+  and p.partition_oid = v.table_oid and t.table_name = 'T1';
+T1_PART_LOCK_ROWS    
+-----------------------
+1                    
+1 row selected.
+
+$T0> rollback;
+Rollback success.
+
+$T0> alter session set autocommit = true;
+Alter success.
+
+$T0> ##########################################################################
+$T0> # PORT EDIT END
+$T0> ##########################################################################
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+$T0> drop view v1;
+$T0> drop view v2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

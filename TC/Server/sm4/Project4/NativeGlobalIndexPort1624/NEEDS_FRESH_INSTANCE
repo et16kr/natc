@@ -15,4 +15,17 @@ OFF on purpose (it would destroy the isolated instance), so it reads this file
 instead and recreates the instance itself. The other 110 wired cases are
 byte-identical back to back on a database that already has history.
 
+There is a second, narrower version of the same hazard: a case that lists
+catalog rows can also see what its NEIGHBOURS in this run left behind, and a
+fresh database does not help with that. Six batch-2 cases
+
+  pdt/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_{hash,range,list}.sql
+  pdt/Design/ALTER_INDEX/REBUILD/integer_{hash,range,list}.tc
+
+CREATE TABLE T and drop it only in their own preamble, never in FINALIZE, so
+T outlives them. bugs/BUG-35460 listed every table SYS has and picked it up.
+That case now scopes its listing to its own objects, in a declared PORT EDIT
+block that says why. See v4-natc-port-2.md 5.2 -- and if you add a case that
+lists catalog rows, scope it the same way.
+
 See docs/analysis/claude-global-index/v4-natc-port.md 6.

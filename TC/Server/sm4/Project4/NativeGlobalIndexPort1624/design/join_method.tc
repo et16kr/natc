@@ -1,0 +1,192 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/join_method.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../include/globalIndexEnv.i;
+
+###########################################################################
+# Global Index Test
+###########################################################################
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+
+alter session set explain plan = off;
+alter session set trclog_detail_predicate = 0;
+alter system set trclog_explain_graph = 0;
+
+SKIP END;
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+
+set linesize 200;
+}
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; CREATE TABLE
+##################################
+
+create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (6),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t1 values ( 1, 1, 1 );
+insert into t1 values ( 2, 2, 2 );
+insert into t1 values ( 3, 3, 3 );
+insert into t1 values ( 4, 4, 4 );
+insert into t1 values ( 5, 5, 5 );
+insert into t1 values ( 6, 6, 6 );
+insert into t1 values ( 7, 7, 7 );
+insert into t1 values ( 8, 8, 8 );
+
+create index t1_idx2 on t1(i2);
+create index t1_idx3 on t1(i3) local;
+
+create table t2
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (6),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+
+insert into t2 values ( 3, 3, 3 );
+insert into t2 values ( 4, 4, 4 );
+insert into t2 values ( 5, 5, 5 );
+insert into t2 values ( 6, 6, 6 );
+insert into t2 values ( 7, 7, 7 );
+insert into t2 values ( 8, 8, 8 );
+insert into t2 values ( 9, 9, 9 );
+insert into t2 values ( 10, 10, 10 );
+
+create index t2_idx2 on t2(i2);
+create index t2_idx3 on t2(i3) local;
+
+desc t1;
+desc t2;
+
+alter session set explain plan = on;
+alter session set trclog_detail_predicate = 1;
+
+##################################
+# SECTOR; NL JOIN
+##################################
+
+select /*+ use_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; FULL NL JOIN
+##################################
+
+select /*+ use_full_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_full_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_full_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_full_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; FULL STORE NL JOIN
+##################################
+
+select /*+ use_full_store_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_full_store_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_full_store_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_full_store_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; INDEX NL JOIN
+##################################
+
+select /*+ use_index_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_index_nl(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_index_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_index_nl(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; HASH JOIN
+##################################
+
+select /*+ use_hash(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_hash(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_hash(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_hash(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; SORT JOIN
+##################################
+
+select /*+ use_sort(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_sort(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_sort(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_sort(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; MERGE JOIN
+##################################
+
+select /*+ use_merge(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2;
+select /*+ use_merge(t1,t2) */ * from t1, t2 where t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_merge(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3;
+select /*+ use_merge(t1,t2) */ * from t1, t2 where t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; ANTI OUTER JOIN
+##################################
+
+select /*+ use_anti(t1,t2) */ * from t1 full outer join t2 on t1.i2 = t2.i2;
+select /*+ use_anti(t1,t2) */ * from t1 full outer join t2 on t1.i2 = t2.i2 order by t1.i2;
+
+select /*+ use_anti(t1,t2) */ * from t1 full outer join t2 on t1.i3 = t2.i3;
+select /*+ use_anti(t1,t2) */ * from t1 full outer join t2 on t1.i3 = t2.i3 order by t1.i3;
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

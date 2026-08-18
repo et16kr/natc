@@ -1,0 +1,886 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/hint.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 integer,
+  i4 integer,
+  i5 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (50),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # idx2: i2, local index, ndv = 20
+$T0> # idx3: i3, local index, ndv = 30
+$T0> # idx4: i4, global index, ndv = 40
+$T0> # idx5: i5, global index, ndv = 50
+
+
+$T0> EXEC GATHER_TABLE_STATS('SYS','T1');
+Execute success.
+
+$T0> alter session set explain plan = off;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 0;
+Alter success.
+
+$T0> select count(distinct i1) from T1
+union all
+select count(distinct i2) from T1
+union all
+select count(distinct i3) from T1
+union all
+select count(distinct i4) from T1
+union all
+select count(distinct i5) from T1;
+COUNT(distinct I1)   
+-----------------------
+100                  
+20                   
+30                   
+40                   
+50                   
+5 rows selected.
+
+
+$T0> create index idx2 on t1(i2) local;
+Create success.
+$T0> create index idx3 on t1(i3) local;
+Create success.
+$T0> create index idx4 on t1(i4);
+Create success.
+$T0> create index idx5 on t1(i5);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+IDX2                                     BTREE                  I2 ASC
+IDX3                                     BTREE                  I3 ASC
+IDX4                                     BTREE                  I4 ASC
+IDX5                                     BTREE                  I5 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; HINT
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I5 = 1
+  [ FILTER SERIAL EXECUTE ]
+  AND
+   I4 = 1
+   I3 = 1
+   I2 = 1
+------------------------------------------------------------
+
+$T0> select /*+ full scan(t1) */ * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 51, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I5 = 1
+    I4 = 1
+    I3 = 1
+    I2 = 1
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 49, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I5 = 1
+    I4 = 1
+    I3 = 1
+    I2 = 1
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx2) */ * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX2, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: PD, INDEX: SYS.IDX2, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 1
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I5 = 1
+    I4 = 1
+    I3 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.IDX2, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I2 = 1
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I5 = 1
+    I4 = 1
+    I3 = 1
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx3) */ * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX3, ACCESS: 1, COST: BLOCKED )
+  SCAN ( PARTITION: PD, INDEX: SYS.IDX3, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 = 1
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I5 = 1
+    I4 = 1
+    I2 = 1
+  SCAN ( PARTITION: P1, INDEX: SYS.IDX3, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     I3 = 1
+   [ FILTER SERIAL EXECUTE ]
+   AND
+    I5 = 1
+    I4 = 1
+    I2 = 1
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx4) */ * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX4, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I4 = 1
+  [ FILTER SERIAL EXECUTE ]
+  AND
+   I5 = 1
+   I3 = 1
+   I2 = 1
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx5) */ * from t1 where i2 = 1 and i3 = 1 and i4 = 1 and i5 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX5, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I5 = 1
+  [ FILTER SERIAL EXECUTE ]
+  AND
+   I4 = 1
+   I3 = 1
+   I2 = 1
+------------------------------------------------------------
+
+$T0> select /*+ full scan(t1) */ * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+20          20          20          20          20          
+21          20          21          21          21          
+22          20          22          22          22          
+23          20          23          23          23          
+24          20          24          24          24          
+25          20          25          25          25          
+26          20          26          26          26          
+27          20          27          27          27          
+28          20          28          28          28          
+29          20          29          29          29          
+30          20          30          30          30          
+31          20          30          31          31          
+32          20          30          32          32          
+33          20          30          33          33          
+34          20          30          34          34          
+35          20          30          35          35          
+36          20          30          36          36          
+37          20          30          37          37          
+38          20          30          38          38          
+39          20          30          39          39          
+40          20          30          40          40          
+41          20          30          40          41          
+42          20          30          40          42          
+43          20          30          40          43          
+44          20          30          40          44          
+45          20          30          40          45          
+46          20          30          40          46          
+47          20          30          40          47          
+48          20          30          40          48          
+49          20          30          40          49          
+50          20          30          40          50          
+51          20          30          40          50          
+52          20          30          40          50          
+53          20          30          40          50          
+54          20          30          40          50          
+55          20          30          40          50          
+56          20          30          40          50          
+57          20          30          40          50          
+58          20          30          40          50          
+59          20          30          40          50          
+60          20          30          40          50          
+61          20          30          40          50          
+62          20          30          40          50          
+63          20          30          40          50          
+64          20          30          40          50          
+65          20          30          40          50          
+66          20          30          40          50          
+67          20          30          40          50          
+68          20          30          40          50          
+69          20          30          40          50          
+70          20          30          40          50          
+71          20          30          40          50          
+72          20          30          40          50          
+73          20          30          40          50          
+74          20          30          40          50          
+75          20          30          40          50          
+76          20          30          40          50          
+77          20          30          40          50          
+78          20          30          40          50          
+79          20          30          40          50          
+80          20          30          40          50          
+81          20          30          40          50          
+82          20          30          40          50          
+83          20          30          40          50          
+84          20          30          40          50          
+85          20          30          40          50          
+86          20          30          40          50          
+87          20          30          40          50          
+88          20          30          40          50          
+89          20          30          40          50          
+90          20          30          40          50          
+91          20          30          40          50          
+92          20          30          40          50          
+93          20          30          40          50          
+94          20          30          40          50          
+95          20          30          40          50          
+96          20          30          40          50          
+97          20          30          40          50          
+98          20          30          40          50          
+99          20          30          40          50          
+100         20          30          40          50          
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 51, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 49, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx2) */ * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+20          20          20          20          20          
+21          20          21          21          21          
+22          20          22          22          22          
+23          20          23          23          23          
+24          20          24          24          24          
+25          20          25          25          25          
+26          20          26          26          26          
+27          20          27          27          27          
+28          20          28          28          28          
+29          20          29          29          29          
+30          20          30          30          30          
+31          20          30          31          31          
+32          20          30          32          32          
+33          20          30          33          33          
+34          20          30          34          34          
+35          20          30          35          35          
+36          20          30          36          36          
+37          20          30          37          37          
+38          20          30          38          38          
+39          20          30          39          39          
+40          20          30          40          40          
+41          20          30          40          41          
+42          20          30          40          42          
+43          20          30          40          43          
+44          20          30          40          44          
+45          20          30          40          45          
+46          20          30          40          46          
+47          20          30          40          47          
+48          20          30          40          48          
+49          20          30          40          49          
+50          20          30          40          50          
+51          20          30          40          50          
+52          20          30          40          50          
+53          20          30          40          50          
+54          20          30          40          50          
+55          20          30          40          50          
+56          20          30          40          50          
+57          20          30          40          50          
+58          20          30          40          50          
+59          20          30          40          50          
+60          20          30          40          50          
+61          20          30          40          50          
+62          20          30          40          50          
+63          20          30          40          50          
+64          20          30          40          50          
+65          20          30          40          50          
+66          20          30          40          50          
+67          20          30          40          50          
+68          20          30          40          50          
+69          20          30          40          50          
+70          20          30          40          50          
+71          20          30          40          50          
+72          20          30          40          50          
+73          20          30          40          50          
+74          20          30          40          50          
+75          20          30          40          50          
+76          20          30          40          50          
+77          20          30          40          50          
+78          20          30          40          50          
+79          20          30          40          50          
+80          20          30          40          50          
+81          20          30          40          50          
+82          20          30          40          50          
+83          20          30          40          50          
+84          20          30          40          50          
+85          20          30          40          50          
+86          20          30          40          50          
+87          20          30          40          50          
+88          20          30          40          50          
+89          20          30          40          50          
+90          20          30          40          50          
+91          20          30          40          50          
+92          20          30          40          50          
+93          20          30          40          50          
+94          20          30          40          50          
+95          20          30          40          50          
+96          20          30          40          50          
+97          20          30          40          50          
+98          20          30          40          50          
+99          20          30          40          50          
+100         20          30          40          50          
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX2, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, INDEX: SYS.IDX2, FULL SCAN, ACCESS: 51, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, INDEX: SYS.IDX2, FULL SCAN, ACCESS: 49, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx3) */ * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+20          20          20          20          20          
+21          20          21          21          21          
+22          20          22          22          22          
+23          20          23          23          23          
+24          20          24          24          24          
+25          20          25          25          25          
+26          20          26          26          26          
+27          20          27          27          27          
+28          20          28          28          28          
+29          20          29          29          29          
+30          20          30          30          30          
+31          20          30          31          31          
+32          20          30          32          32          
+33          20          30          33          33          
+34          20          30          34          34          
+35          20          30          35          35          
+36          20          30          36          36          
+37          20          30          37          37          
+38          20          30          38          38          
+39          20          30          39          39          
+40          20          30          40          40          
+41          20          30          40          41          
+42          20          30          40          42          
+43          20          30          40          43          
+44          20          30          40          44          
+45          20          30          40          45          
+46          20          30          40          46          
+47          20          30          40          47          
+48          20          30          40          48          
+49          20          30          40          49          
+50          20          30          40          50          
+51          20          30          40          50          
+52          20          30          40          50          
+53          20          30          40          50          
+54          20          30          40          50          
+55          20          30          40          50          
+56          20          30          40          50          
+57          20          30          40          50          
+58          20          30          40          50          
+59          20          30          40          50          
+60          20          30          40          50          
+61          20          30          40          50          
+62          20          30          40          50          
+63          20          30          40          50          
+64          20          30          40          50          
+65          20          30          40          50          
+66          20          30          40          50          
+67          20          30          40          50          
+68          20          30          40          50          
+69          20          30          40          50          
+70          20          30          40          50          
+71          20          30          40          50          
+72          20          30          40          50          
+73          20          30          40          50          
+74          20          30          40          50          
+75          20          30          40          50          
+76          20          30          40          50          
+77          20          30          40          50          
+78          20          30          40          50          
+79          20          30          40          50          
+80          20          30          40          50          
+81          20          30          40          50          
+82          20          30          40          50          
+83          20          30          40          50          
+84          20          30          40          50          
+85          20          30          40          50          
+86          20          30          40          50          
+87          20          30          40          50          
+88          20          30          40          50          
+89          20          30          40          50          
+90          20          30          40          50          
+91          20          30          40          50          
+92          20          30          40          50          
+93          20          30          40          50          
+94          20          30          40          50          
+95          20          30          40          50          
+96          20          30          40          50          
+97          20          30          40          50          
+98          20          30          40          50          
+99          20          30          40          50          
+100         20          30          40          50          
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, INDEX: SYS.IDX3, ACCESS: 100, COST: BLOCKED )
+  SCAN ( PARTITION: PD, INDEX: SYS.IDX3, FULL SCAN, ACCESS: 51, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, INDEX: SYS.IDX3, FULL SCAN, ACCESS: 49, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx4) */ * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+20          20          20          20          20          
+21          20          21          21          21          
+22          20          22          22          22          
+23          20          23          23          23          
+24          20          24          24          24          
+25          20          25          25          25          
+26          20          26          26          26          
+27          20          27          27          27          
+28          20          28          28          28          
+29          20          29          29          29          
+30          20          30          30          30          
+31          20          30          31          31          
+32          20          30          32          32          
+33          20          30          33          33          
+34          20          30          34          34          
+35          20          30          35          35          
+36          20          30          36          36          
+37          20          30          37          37          
+38          20          30          38          38          
+39          20          30          39          39          
+50          20          30          40          50          
+51          20          30          40          50          
+52          20          30          40          50          
+53          20          30          40          50          
+54          20          30          40          50          
+55          20          30          40          50          
+56          20          30          40          50          
+57          20          30          40          50          
+58          20          30          40          50          
+59          20          30          40          50          
+60          20          30          40          50          
+61          20          30          40          50          
+62          20          30          40          50          
+63          20          30          40          50          
+64          20          30          40          50          
+65          20          30          40          50          
+66          20          30          40          50          
+67          20          30          40          50          
+68          20          30          40          50          
+69          20          30          40          50          
+70          20          30          40          50          
+71          20          30          40          50          
+72          20          30          40          50          
+73          20          30          40          50          
+74          20          30          40          50          
+75          20          30          40          50          
+76          20          30          40          50          
+77          20          30          40          50          
+78          20          30          40          50          
+79          20          30          40          50          
+80          20          30          40          50          
+81          20          30          40          50          
+82          20          30          40          50          
+83          20          30          40          50          
+84          20          30          40          50          
+85          20          30          40          50          
+86          20          30          40          50          
+87          20          30          40          50          
+88          20          30          40          50          
+89          20          30          40          50          
+90          20          30          40          50          
+91          20          30          40          50          
+92          20          30          40          50          
+93          20          30          40          50          
+94          20          30          40          50          
+95          20          30          40          50          
+96          20          30          40          50          
+97          20          30          40          50          
+98          20          30          40          50          
+99          20          30          40          50          
+100         20          30          40          50          
+40          20          30          40          40          
+41          20          30          40          41          
+42          20          30          40          42          
+43          20          30          40          43          
+44          20          30          40          44          
+45          20          30          40          45          
+46          20          30          40          46          
+47          20          30          40          47          
+48          20          30          40          48          
+49          20          30          40          49          
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX4, GLOBAL-INDEX, FULL SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> select /*+ index(t1, idx5) */ * from t1;
+T1.I1       T1.I2       T1.I3       T1.I4       T1.I5       
+------------------------------------------------------------------
+1           1           1           1           1           
+2           2           2           2           2           
+3           3           3           3           3           
+4           4           4           4           4           
+5           5           5           5           5           
+6           6           6           6           6           
+7           7           7           7           7           
+8           8           8           8           8           
+9           9           9           9           9           
+10          10          10          10          10          
+11          11          11          11          11          
+12          12          12          12          12          
+13          13          13          13          13          
+14          14          14          14          14          
+15          15          15          15          15          
+16          16          16          16          16          
+17          17          17          17          17          
+18          18          18          18          18          
+19          19          19          19          19          
+20          20          20          20          20          
+21          20          21          21          21          
+22          20          22          22          22          
+23          20          23          23          23          
+24          20          24          24          24          
+25          20          25          25          25          
+26          20          26          26          26          
+27          20          27          27          27          
+28          20          28          28          28          
+29          20          29          29          29          
+30          20          30          30          30          
+31          20          30          31          31          
+32          20          30          32          32          
+33          20          30          33          33          
+34          20          30          34          34          
+35          20          30          35          35          
+36          20          30          36          36          
+37          20          30          37          37          
+38          20          30          38          38          
+39          20          30          39          39          
+40          20          30          40          40          
+41          20          30          40          41          
+42          20          30          40          42          
+43          20          30          40          43          
+44          20          30          40          44          
+45          20          30          40          45          
+46          20          30          40          46          
+47          20          30          40          47          
+48          20          30          40          48          
+49          20          30          40          49          
+50          20          30          40          50          
+51          20          30          40          50          
+52          20          30          40          50          
+53          20          30          40          50          
+54          20          30          40          50          
+55          20          30          40          50          
+56          20          30          40          50          
+57          20          30          40          50          
+58          20          30          40          50          
+59          20          30          40          50          
+60          20          30          40          50          
+61          20          30          40          50          
+62          20          30          40          50          
+63          20          30          40          50          
+64          20          30          40          50          
+65          20          30          40          50          
+66          20          30          40          50          
+67          20          30          40          50          
+68          20          30          40          50          
+69          20          30          40          50          
+70          20          30          40          50          
+71          20          30          40          50          
+72          20          30          40          50          
+73          20          30          40          50          
+74          20          30          40          50          
+75          20          30          40          50          
+76          20          30          40          50          
+77          20          30          40          50          
+78          20          30          40          50          
+79          20          30          40          50          
+80          20          30          40          50          
+81          20          30          40          50          
+82          20          30          40          50          
+83          20          30          40          50          
+84          20          30          40          50          
+85          20          30          40          50          
+86          20          30          40          50          
+87          20          30          40          50          
+88          20          30          40          50          
+89          20          30          40          50          
+90          20          30          40          50          
+91          20          30          40          50          
+92          20          30          40          50          
+93          20          30          40          50          
+94          20          30          40          50          
+95          20          30          40          50          
+96          20          30          40          50          
+97          20          30          40          50          
+98          20          30          40          50          
+99          20          30          40          50          
+100         20          30          40          50          
+100 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 5, TUPLE_SIZE: 20, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.IDX5, GLOBAL-INDEX, FULL SCAN, ACCESS: 100, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+

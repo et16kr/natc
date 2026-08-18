@@ -1,0 +1,510 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/design/indexable_pred.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ###########################################################################
+$T0> # Global Index Test
+$T0> ###########################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> # SECTOR; PREPARATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
+$T0> set linesize 200;
+
+$T0> ##################################
+$T0> # SECTOR; CREATE TABLE
+$T0> ##################################
+
+$T0> create table t1
+( 
+  i1 integer,
+  i2 integer, 
+  i3 varchar(10),
+  i4 integer
+)
+partition by range(i1)
+(
+  partition p1 values less than (10),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t1 values ( 1, 1, 'abc', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 2, 2, 'abc', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 3, 3, 'abc', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 4, 4, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 5, 5, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 6, 6, 'bcd', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 7, 7, 'bcd', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 8, 8, 'bcd', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 9, 9, 'bcd', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 10, 10, 'def', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 11, 11, 'def', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 12, 12, 'def', 3 );
+1 row inserted.
+$T0> insert into t1 values ( 13, 13, 'def', 4 );
+1 row inserted.
+$T0> insert into t1 values ( 14, 14, 'def', 5 );
+1 row inserted.
+$T0> insert into t1 values ( 15, 15, 'ghi', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 16, 16, 'jkl', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 17, 17, 'jkl', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 18, 18, 'lmn', 1 );
+1 row inserted.
+$T0> insert into t1 values ( 19, 19, 'lmn', 2 );
+1 row inserted.
+$T0> insert into t1 values ( 20, null, 'lmn', 3 );
+1 row inserted.
+
+$T0> create index t1_idx2 on t1(i2);
+Create success.
+$T0> create index t1_idx3 on t1(i3, i4 desc);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T1 has no primary key
+
+$T0> create table t2
+( 
+  i1 integer,
+  i2 clob, 
+  i3 geometry
+)
+partition by range(i1)
+(
+  partition p1 values less than (5),
+  partition pd values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into t2 values ( 1, 'a', geometry'polygon((0 0, 1 0, 1 1, 0 1))' );
+1 row inserted.
+$T0> insert into t2 values ( 2, 'b', geometry'polygon((1 1, 2 1, 2 2, 1 2))' );
+1 row inserted.
+$T0> insert into t2 values ( 3, 'c', geometry'polygon((2 2, 3 2, 3 3, 2 3))' );
+1 row inserted.
+$T0> insert into t2 values ( 4, 'd', geometry'polygon((3 3, 4 3, 4 4, 3 4))' );
+1 row inserted.
+$T0> insert into t2 values ( 5, 'e', geometry'polygon((4 4, 5 4, 5 5, 4 5))' );
+1 row inserted.
+$T0> insert into t2 values ( 6, 'f', geometry'polygon((5 5, 6 5, 6 6, 5 6))' );
+1 row inserted.
+$T0> insert into t2 values ( 7, 'g', geometry'polygon((6 6, 7 6, 7 7, 6 7))' );
+1 row inserted.
+$T0> insert into t2 values ( 8, 'h', geometry'polygon((7 7, 8 7, 8 8, 7 8))' );
+1 row inserted.
+$T0> insert into t2 values ( 9, 'i', geometry'polygon((8 8, 9 8, 9 9, 8 9))' );
+1 row inserted.
+$T0> insert into t2 values ( 10, 'j', geometry'polygon((9 9, 10 9, 10 10, 9 10))' );
+1 row inserted.
+
+$T0> create index t2_idx3 on t1(i3);
+Create success.
+
+$T0> desc t1;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       INTEGER                     
+I3                                       VARCHAR(10)                 
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+T1_IDX2                                  BTREE                  I2 ASC
+T1_IDX3                                  BTREE                  I3 ASC,
+                                                                I4 DESC
+T2_IDX3                                  BTREE                  I3 ASC
+T1 has no primary key
+
+$T0> ##################################
+$T0> # SECTOR; INDEXABLE PREDICATE
+$T0> ##################################
+
+$T0> alter session set explain plan = on;
+Alter success.
+$T0> alter session set trclog_detail_predicate = 1;
+Alter success.
+
+$T0> select * from t1 where i2 is null;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+20                      lmn         3           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 IS NULL
+------------------------------------------------------------
+$T0> select * from t1 where i2 < 5;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 < 5
+------------------------------------------------------------
+$T0> select * from t1 where i2 >= 15;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+15          15          ghi         1           
+16          16          jkl         1           
+17          17          jkl         2           
+18          18          lmn         1           
+19          19          lmn         2           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 >= 15
+------------------------------------------------------------
+$T0> select * from t1 where i2 in (1,3,5);
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+3           3           abc         3           
+5           5           bcd         2           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    OR
+     I2 = 1
+     I2 = 3
+     I2 = 5
+------------------------------------------------------------
+$T0> select * from t1 where i2 between 11 and 13;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+11          11          def         2           
+12          12          def         3           
+13          13          def         4           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX2, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I2 BETWEEN 11 AND 13
+------------------------------------------------------------
+$T0> select * from t1 where i2 in (select level from dual connect by level <= 5);
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+2           2           abc         2           
+3           3           abc         3           
+4           4           bcd         1           
+5           5           bcd         2           
+5 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 2/2, FULL SCAN, ACCESS: 20, COST: BLOCKED )
+  [ SUBQUERY FILTER ]
+  EXISTS (SELECT '0' FROM DUAL WHERE T1.I2 = LEVEL CONNECT BY LEVEL <= 5)
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 3, COST: BLOCKED )
+   FILTER
+    [ FILTER ]
+    T1.I2 = LEVEL
+    CONNECT BY ( ACCESS: 94, COST: BLOCKED )
+     [ LEVEL FILTER ]
+     LEVEL <= 5
+     SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 94, COST: BLOCKED )
+  ::SUB-QUERY END
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 11, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; INDEXABLE PREDICATE
+$T0> ##################################
+
+$T0> select * from t1 where i3 = 'abc';
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 'abc'
+------------------------------------------------------------
+$T0> select * from t1 where i3 = 'abc' and i4 = 2;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+2           2           abc         2           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 = 'abc'
+   OR
+    I4 = 2
+------------------------------------------------------------
+$T0> select * from t1 where i3 like 'a%';
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+3           3           abc         3           
+2           2           abc         2           
+1           1           abc         1           
+3 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 LIKE 'a%'
+------------------------------------------------------------
+$T0> select * from t1 where i3 like 'b%d';
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+7           7           bcd         4           
+6           6           bcd         3           
+5           5           bcd         2           
+9           9           bcd         2           
+4           4           bcd         1           
+8           8           bcd         1           
+6 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 LIKE 'b%d'
+  [ FILTER ]
+  I3 LIKE 'b%d'
+------------------------------------------------------------
+$T0> select * from t1 where i3 >= 'def' and i4 = 1;
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+10          10          def         1           
+15          15          ghi         1           
+16          16          jkl         1           
+18          18          lmn         1           
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ FIXED KEY ]
+  AND
+   OR
+    I3 >= 'def'
+  [ FIXED KEY FILTER ]
+  AND
+   OR
+    I4 = 1
+------------------------------------------------------------
+$T0> select * from t1 where (i3, i4) in ( select 'abc', 1 from dual 
+                                     union all
+                                     select 'def', 1 from dual );
+T1.I1       T1.I2       T1.I3       T1.I4       
+-----------------------------------------------------
+1           1           abc         1           
+10          10          def         1           
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 4, TUPLE_SIZE: 24, COST: BLOCKED )
+ SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_IDX3, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  [ IN-SUBQUERY VARIABLE KEY ]
+  OR
+   AND
+    I3 = (SELECT 'abc', 1 FROM DUAL UNION ALL SELECT 'def', 1 FROM DUAL)
+    I4 = 
+  ::SUB-QUERY BEGIN
+  PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 12, COST: BLOCKED )
+   DISTINCT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, BUCKET_COUNT: 1024, ACCESS: 4, COST: BLOCKED )
+    VIEW ( ACCESS: 2, COST: BLOCKED )
+     PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 12, COST: BLOCKED )
+      VIEW ( ACCESS: 2, COST: BLOCKED )
+       BAG-UNION
+        PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 8, COST: BLOCKED )
+         SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+        PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 8, COST: BLOCKED )
+         SCAN ( TABLE: DUAL, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+  ::SUB-QUERY END
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; INDEXABLE PREDICATE
+$T0> ##################################
+
+$T0> select i1,astext(i3,64) from t2 where within( i3, geometry'polygon((3 3, 5 3, 5 5, 3 5))' );
+I1          ASTEXT(I3,64)                                                     
+---------------------------------------------------------------------------------
+4           POLYGON((3 3, 4 3, 4 4, 3 4, 3 3))                                
+5           POLYGON((4 4, 5 4, 5 5, 4 5, 4 4))                                
+2 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 2, TUPLE_SIZE: 70, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 2/2, FULL SCAN, ACCESS: 2, COST: BLOCKED )
+  SCAN ( PARTITION: PD, FULL SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   ST_WITHIN(I3, GEOMETRY'polygon((3 3, 5 3, 5 5, 3 5))')
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER ]
+   ST_WITHIN(I3, GEOMETRY'polygon((3 3, 5 3, 5 5, 3 5))')
+------------------------------------------------------------
+
+$T0> ##################################
+$T0> # SECTOR; FINALIZATION
+$T0> ##################################
+
+$T0> SKIP BEGIN;
+$T0> drop table t1;
+$T0> drop table t2;
+
+$T0> alter session set explain plan = off;
+$T0> alter session set trclog_detail_predicate = 0;
+$T0> alter system set trclog_explain_graph = 0;
+
+$T0> SKIP END;
+
