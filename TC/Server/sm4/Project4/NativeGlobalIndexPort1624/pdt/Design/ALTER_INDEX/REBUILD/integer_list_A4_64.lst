@@ -1,0 +1,606 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_list.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ########################################################
+$T0> ## REBUILD INDEX ON LIST PDT( PK:INTEGER )
+$T0> ########################################################
+
+$T0> #####################################
+$T0> ##+SECTOR; INTIALIZE
+$T0> #####################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE PDT_LIST;
+$T0> SKIP END;
+
+
+$T0> ###########################################
+$T0> ##+SECTOR; DO JOB #1 (1. Basic Test)
+$T0> ###########################################
+
+$T0> ############################
+$T0> ## 2.1 Unique index
+$T0> ############################
+$T0> CREATE TABLE PDT_LIST
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY LIST( F1 )
+(
+    PARTITION P1 VALUES ( 10, 15 ),
+    PARTITION P2 VALUES ( 20, 25 ),
+    PARTITION P3 VALUES ( 30, 35 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PDT_LIST VALUES( 10, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 15, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 20, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 25, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 30, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 35, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 40, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 45, 0 );
+1 row inserted.
+
+$T0> CREATE UNIQUE INDEX IDX1 
+ON PDT_LIST( F1 );
+Create success.
+
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> ALTER INDEX IDX1 REBUILD;
+Alter success.
+
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> ############################
+$T0> ## 2.2 Non-Unique Index
+$T0> ############################
+$T0> DROP TABLE PDT_LIST;
+Drop success.
+$T0> CREATE TABLE PDT_LIST
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY LIST( F1 )
+(
+    PARTITION P1 VALUES ( 10, 15 ),
+    PARTITION P2 VALUES ( 20, 25 ),
+    PARTITION P3 VALUES ( 30, 35 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PDT_LIST VALUES( 10, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 15, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 20, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 25, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 30, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 35, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 40, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 45, 0 );
+1 row inserted.
+
+$T0> CREATE INDEX IDX1 
+ON PDT_LIST( F1 );
+Create success.
+
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> ALTER INDEX IDX1 REBUILD;
+Alter success.
+
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> ##############################
+$T0> ## 2.3 Local Unique Index
+$T0> ##############################
+$T0> DROP TABLE PDT_LIST;
+Drop success.
+$T0> CREATE TABLE PDT_LIST
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY LIST( F1 )
+(
+    PARTITION P1 VALUES ( 10, 15 ),
+    PARTITION P2 VALUES ( 20, 25 ),
+    PARTITION P3 VALUES ( 30, 35 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PDT_LIST VALUES( 10, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 15, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 20, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 25, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 30, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 35, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 40, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 45, 0 );
+1 row inserted.
+
+$T0> CREATE LOCALUNIQUE INDEX IDX1 
+ON PDT_LIST( F1 );
+[ERR-31291 : Cannot create a local unique key constraint for a non-partitioned table.]
+
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+$T0> ALTER INDEX IDX1 REBUILD;
+[ERR-31014 : Index not found]
+
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P1 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P2 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P3 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+$T0> ## should be 2
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ COUNT(*)
+FROM PDT_LIST PARTITION( P4 );
+COUNT                
+-----------------------
+2                    
+1 row selected.
+
+
+$T0> ###########################################
+$T0> ##SECTOR; DO JOB #2 (2. Validation Test)
+$T0> ###########################################
+
+$T0> ############################
+$T0> ## 2.1 ��Ƽ�ųʺ� ��ü �˻� 
+$T0> ############################
+$T0> DROP TABLE T;
+Drop success.
+$T0> CREATE TABLE T
+(
+    F1   INTEGER,
+    F2   INTEGER
+);
+Create success.
+$T0> CREATE INDEX IDX
+ON T( F1 );
+Create success.
+
+$T0> ## should be fail
+$T0> ALTER INDEX IDX REBUILD PARTITION T;
+[ERR-31287 : cannot alter the index rebuild for a non-partitioned index.]
+
+$T0> ##################################
+$T0> ## 2.2 ��Ƽ�� �̸� �˻�
+$T0> ##################################
+$T0> DROP TABLE PDT_LIST;
+Drop success.
+$T0> CREATE TABLE PDT_LIST
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY LIST( F1 )
+(
+    PARTITION P1 VALUES ( 10, 15 ),
+    PARTITION P2 VALUES ( 20, 25 ),
+    PARTITION P3 VALUES ( 30, 35 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE INDEX IDX1 
+ON PDT_LIST( F1 );
+Create success.
+
+$T0> ## should be fail
+$T0> ALTER INDEX IDX1 REBUILD PARTITION IDX_P5;
+[ERR-31288 : The index partition does not exist.]
+
+
+$T0> ###########################################
+$T0> ##SECTOR; DO JOB #3 (3. Execution Test)
+$T0> ###########################################
+
+$T0> ########################################
+$T0> ## 3.1 �����Ƚ��� �ε���
+$T0> ########################################
+$T0> DROP TABLE PDT_LIST;
+Drop success.
+$T0> CREATE TABLE PDT_LIST
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY LIST( F1 )
+(
+    PARTITION P1 VALUES ( 10, 15 ),
+    PARTITION P2 VALUES ( 20, 25 ),
+    PARTITION P3 VALUES ( 30, 35 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PDT_LIST VALUES( 45, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 40, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 35, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 30, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 25, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 20, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 15, 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 10, 0 );
+1 row inserted.
+
+$T0> CREATE UNIQUE INDEX IDX1 
+ON PDT_LIST( F1 );
+Create success.
+
+$T0> ## should be {10,15,20,25,30,35,40,45}
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ F1
+FROM PDT_LIST;
+F1          
+--------------
+10          
+15          
+20          
+25          
+30          
+35          
+40          
+45          
+8 rows selected.
+
+$T0> ALTER INDEX IDX1 REBUILD PARTITION IDX_P1;
+[ERR-31288 : The index partition does not exist.]
+$T0> ALTER INDEX IDX1 REBUILD PARTITION IDX_P2;
+[ERR-31288 : The index partition does not exist.]
+$T0> ALTER INDEX IDX1 REBUILD PARTITION IDX_P3;
+[ERR-31288 : The index partition does not exist.]
+$T0> ALTER INDEX IDX1 REBUILD PARTITION IDX_P4;
+[ERR-31288 : The index partition does not exist.]
+
+$T0> ## should be {10,15,20,25,30,35,40,45}
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ F1
+FROM PDT_LIST;
+F1          
+--------------
+10          
+15          
+20          
+25          
+30          
+35          
+40          
+45          
+8 rows selected.
+
+$T0> ##############################################
+$T0> ## 3.2 �������Ƚ��� �ε���
+$T0> ##############################################
+$T0> DROP TABLE PDT_LIST;
+Drop success.
+$T0> CREATE TABLE PDT_LIST
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY LIST( F1 )
+(
+    PARTITION P1 VALUES ( 10, 15 ),
+    PARTITION P2 VALUES ( 20, 25 ),
+    PARTITION P3 VALUES ( 30, 35 ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PDT_LIST VALUES( 45, 20 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 40, 25 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 35, 30 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 30, 35 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 25, 40 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 20, 45 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 15, 10 );
+1 row inserted.
+$T0> INSERT INTO PDT_LIST VALUES( 10, 15 );
+1 row inserted.
+
+$T0> CREATE INDEX IDX1 
+ON PDT_LIST( F2 );
+Create success.
+
+$T0> ## will be {20,25,30,35,40,45,10,15}
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ F2
+FROM PDT_LIST;
+F2          
+--------------
+10          
+15          
+20          
+25          
+30          
+35          
+40          
+45          
+8 rows selected.
+
+$T0> ALTER INDEX IDX1 REBUILD;
+Alter success.
+$T0> ## will be {20,25,30,35,40,45,10,15}
+$T0> SELECT /*+ INDEX ASC ( PDT_LIST, IDX1 ) */ F2
+FROM PDT_LIST;
+F2          
+--------------
+10          
+15          
+20          
+25          
+30          
+35          
+40          
+45          
+8 rows selected.
+
+
+$T0> #####################################
+$T0> ##SECTOR; FINALIZE
+$T0> #####################################
+
+$T0> DROP TABLE PDT_LIST;
+Drop success.
+

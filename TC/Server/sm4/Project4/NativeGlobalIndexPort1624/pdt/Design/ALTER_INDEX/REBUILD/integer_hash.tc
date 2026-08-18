@@ -1,0 +1,331 @@
+###########################################################################
+# TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_hash.tc
+#
+# Body below is byte-identical to the original. What this port adds is the
+# premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+# the value into the transcript, so the case states what it measures
+# instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+#
+# Project ID           = Native Global Index (disk) - PROJ-1624 port
+###########################################################################
+INCLUDE ../../../../include/globalIndexEnv.i;
+
+######################################################
+# REBUILD INDEX ON HASH PDT( PK:INTEGER )
+######################################################
+
+###################################
+#SECTOR; INTIALIZE
+###################################
+
+DEF MAIN()
+{
+CALL PIN_DISK_NATIVE();
+
+SKIP BEGIN;
+DROP TABLE PDT_HASH;
+SKIP END;
+
+
+#########################################
+#SECTOR; DO JOB #1 (1. Basic Test)
+#########################################
+
+################################
+# 2.1 Unique index
+################################
+CREATE TABLE PDT_HASH
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_HASH VALUES( 0, 0 );
+INSERT INTO PDT_HASH VALUES( 1, 0 );
+INSERT INTO PDT_HASH VALUES( 2, 0 );
+INSERT INTO PDT_HASH VALUES( 3, 0 );
+INSERT INTO PDT_HASH VALUES( 4, 0 );
+INSERT INTO PDT_HASH VALUES( 5, 0 );
+INSERT INTO PDT_HASH VALUES( 6, 0 );
+INSERT INTO PDT_HASH VALUES( 7, 0 );
+
+CREATE UNIQUE INDEX IDX1 ON PDT_HASH( F1 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P1 );
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P2 );
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P3 );
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P4 );
+
+ALTER INDEX IDX1 REBUILD;
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P1 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P2 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P3 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P4 );
+
+#############################
+# 2.2 Non-Unique Index
+#############################
+DROP TABLE PDT_HASH;
+CREATE TABLE PDT_HASH
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_HASH VALUES( 0, 0 );
+INSERT INTO PDT_HASH VALUES( 1, 0 );
+INSERT INTO PDT_HASH VALUES( 2, 0 );
+INSERT INTO PDT_HASH VALUES( 3, 0 );
+INSERT INTO PDT_HASH VALUES( 4, 0 );
+INSERT INTO PDT_HASH VALUES( 5, 0 );
+INSERT INTO PDT_HASH VALUES( 6, 0 );
+INSERT INTO PDT_HASH VALUES( 7, 0 );
+
+CREATE INDEX IDX1 
+ON PDT_HASH( F1 );
+
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P1 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P2 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P3 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P4 );
+
+ALTER INDEX IDX1 REBUILD;
+
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P1 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P2 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P3 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P4 );
+
+##############################
+# 2.3 Local Unique Index
+##############################
+DROP TABLE PDT_HASH;
+CREATE TABLE PDT_HASH
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_HASH VALUES( 0, 0 );
+INSERT INTO PDT_HASH VALUES( 1, 0 );
+INSERT INTO PDT_HASH VALUES( 2, 0 );
+INSERT INTO PDT_HASH VALUES( 3, 0 );
+INSERT INTO PDT_HASH VALUES( 4, 0 );
+INSERT INTO PDT_HASH VALUES( 5, 0 );
+INSERT INTO PDT_HASH VALUES( 6, 0 );
+INSERT INTO PDT_HASH VALUES( 7, 0 );
+
+CREATE LOCALUNIQUE INDEX IDX1 
+ON PDT_HASH( F1 );
+
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P1 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P2 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P3 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P4 );
+
+ALTER INDEX IDX1 REBUILD;
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P1 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P2 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P3 );
+
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ COUNT(*)
+FROM PDT_HASH PARTITION( P4 );
+
+
+#########################################
+#SECTOR; DO JOB #2 (2. Validation Test)
+#########################################
+
+############################
+# 2.1 파티셔너블 객체 검사 
+############################
+DROP TABLE T;
+CREATE TABLE T
+(
+    F1   INTEGER,
+    F2   INTEGER
+);
+CREATE INDEX IDX
+ON T( F1 );
+
+# should be fail
+ALTER INDEX IDX REBUILD PARTITION T;
+
+####################################
+# 2.2 파티션 이름 검사
+####################################
+DROP TABLE PDT_HASH;
+CREATE TABLE PDT_HASH
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_HASH VALUES( 0, 0 );
+INSERT INTO PDT_HASH VALUES( 1, 0 );
+INSERT INTO PDT_HASH VALUES( 2, 0 );
+INSERT INTO PDT_HASH VALUES( 3, 0 );
+INSERT INTO PDT_HASH VALUES( 4, 0 );
+INSERT INTO PDT_HASH VALUES( 5, 0 );
+INSERT INTO PDT_HASH VALUES( 6, 0 );
+INSERT INTO PDT_HASH VALUES( 7, 0 );
+
+CREATE INDEX IDX1 
+ON PDT_HASH( F1 );
+
+# should be fail
+ALTER INDEX IDX1 REBUILD PARTITION IDX_P5;
+
+
+#########################################
+#SECTOR; DO JOB #3 (3. Execution Test)
+#########################################
+
+##########################################
+# 3.1 프리픽스드 인덱스
+##########################################
+DROP TABLE PDT_HASH;
+CREATE TABLE PDT_HASH
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_HASH VALUES( 7, 0 );
+INSERT INTO PDT_HASH VALUES( 6, 0 );
+INSERT INTO PDT_HASH VALUES( 5, 0 );
+INSERT INTO PDT_HASH VALUES( 4, 0 );
+INSERT INTO PDT_HASH VALUES( 3, 0 );
+INSERT INTO PDT_HASH VALUES( 2, 0 );
+INSERT INTO PDT_HASH VALUES( 1, 0 );
+INSERT INTO PDT_HASH VALUES( 0, 0 );
+
+CREATE UNIQUE INDEX IDX1 
+ON PDT_HASH( F1 );
+
+# should be {0,1,2,3,4,5,6,7}
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ F1
+FROM PDT_HASH;
+
+ALTER INDEX IDX1 REBUILD;
+
+# should be {0,1,2,3,4,5,6,7}
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ F1
+FROM PDT_HASH;
+
+#################################################
+# 3.2 논프리픽스드 인덱스
+#################################################
+DROP TABLE PDT_HASH;
+CREATE TABLE PDT_HASH
+(
+    F1   INTEGER,
+    F2   INTEGER
+) 
+PARTITION BY HASH( F1 )
+(
+    PARTITION P1,
+    PARTITION P2,
+    PARTITION P3,
+    PARTITION P4
+) TABLESPACE PDT_TBS;
+INSERT INTO PDT_HASH VALUES( 7, 2 );
+INSERT INTO PDT_HASH VALUES( 6, 3 );
+INSERT INTO PDT_HASH VALUES( 5, 4 );
+INSERT INTO PDT_HASH VALUES( 4, 5 );
+INSERT INTO PDT_HASH VALUES( 3, 6 );
+INSERT INTO PDT_HASH VALUES( 2, 7 );
+INSERT INTO PDT_HASH VALUES( 1, 0 );
+INSERT INTO PDT_HASH VALUES( 0, 1 );
+
+CREATE INDEX IDX1 
+ON PDT_HASH( F2 );
+
+# will be {1,5,0,4,3,7,2,6}
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ F2
+FROM PDT_HASH;
+
+ALTER INDEX IDX1 REBUILD;
+
+# will be {1,5,0,4,3,7,2,6}
+SELECT /*+ INDEX ASC ( PDT_HASH, IDX1 ) */ F2
+FROM PDT_HASH;
+
+###################################
+#SECTOR; FINALIZE
+###################################
+
+DROP TABLE PDT_HASH;
+}

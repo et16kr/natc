@@ -1,0 +1,368 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###########################################################################
+--# ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/MOVE/integer_hash.sql
+--#
+--# Body below is byte-identical to the original. The one line this port
+--# adds is the premise: the original measures these statements on the
+--# $GIT_ hidden-table implementation, this file measures the same
+--# statements on the native global index (F07 -- see include/pinNative.sql).
+--###########################################################################
+# ==> [../../../include/pinNative.sql] BEGIN <=
+--###########################################################################
+--# NativeGlobalIndexPort1624 - the premise of every ported .sql case.
+--#
+--# A .sql case cannot CALL a DEF the way a .tc case calls PIN_DISK_NATIVE(),
+--# so the same two statements are pulled in per case with ATC's own include
+--# directive:
+--#
+--#     --+LOAD_SQL <relative path>/include/pinNative.sql;
+--#
+--# ATC inlines this file into the case transcript between BEGIN/END markers,
+--# which is exactly what F07 asks for: the case states its own premise at the
+--# head of its own transcript instead of inheriting whatever the instance
+--# happens to be configured with.
+--#
+--#     DISK_GLOBAL_INDEX_ENABLE = 1  -> native  (this suite)
+--#     DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_   (the original suite)
+--#
+--# The readout below is not decoration. It is the tooth: if the property is
+--# ever 0 when a case runs, this one line differs and the case is red before
+--# it has measured anything, instead of quietly measuring the other
+--# implementation (disk-natc.md 6 records nine assertions that drifted that
+--# way).
+--#
+--# ASCII only, on purpose: 87 of the ported case bodies are EUC-KR and their
+--# bytes must stay untouched, so nothing this port adds may introduce a
+--# second encoding into a transcript.
+--###########################################################################
+
+$P0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$P0> SELECT CAST(VALUE1 AS VARCHAR(10)) DISK_GLOBAL_INDEX_ENABLE
+     FROM V$PROPERTY WHERE NAME = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+# ==> [../../../include/pinNative.sql] END <=
+
+--######################################################
+-- MOVE HASH PARTITIOIN ( PK:INTEGER )
+--######################################################
+
+--###################################
+--+SECTOR 1; INTIALIZE
+--###################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE PDT_HASH;
+$P0> DROP TABLE PDT_HASH_SRC;
+--+SKIP END; 
+
+$P0> CREATE TABLE PDT_HASH_SRC
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 3, 0 );
+1 row inserted.
+
+
+--#########################################
+--+SECTOR 2; DO JOB #1 (1. Basic Test)
+--#########################################
+
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+$P0> MOVE INTO PDT_HASH PARTITION( P1 ) FROM PDT_HASH_SRC PARTITION( P1 );
+1 row moved.
+$P0> MOVE INTO PDT_HASH PARTITION( P2 ) FROM PDT_HASH_SRC PARTITION( P2 );
+2 rows moved.
+$P0> MOVE INTO PDT_HASH PARTITION( P3 ) FROM PDT_HASH_SRC PARTITION( P3 );
+No rows moved.
+$P0> MOVE INTO PDT_HASH PARTITION( P4 ) FROM PDT_HASH_SRC PARTITION( P4 );
+1 row moved.
+
+-- should be [0]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+0           
+1 row selected.
+-- should be [1]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+1           
+3           
+2 rows selected.
+-- should be [2]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+No rows selected.
+-- should be [3]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+2           
+1 row selected.
+
+$P0> MOVE INTO PDT_HASH FROM PDT_HASH_SRC PARTITION( P1 );
+No rows moved.
+$P0> MOVE INTO PDT_HASH FROM PDT_HASH_SRC PARTITION( P2 );
+No rows moved.
+$P0> MOVE INTO PDT_HASH FROM PDT_HASH_SRC PARTITION( P3 );
+No rows moved.
+$P0> MOVE INTO PDT_HASH FROM PDT_HASH_SRC PARTITION( P4 );
+No rows moved.
+
+-- should be [0,0]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P1 );
+F1          
+--------------
+0           
+1 row selected.
+-- should be [1,1]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P2 );
+F1          
+--------------
+1           
+3           
+2 rows selected.
+-- should be [2,2]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P3 );
+F1          
+--------------
+No rows selected.
+-- should be [3,3]
+$P0> SELECT F1 FROM PDT_HASH PARTITION( P4 );
+F1          
+--------------
+2           
+1 row selected.
+
+
+--#########################################
+--+SECTOR 3; DO JOB #2 (2. Validation Test)
+--#########################################
+
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 0, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 1, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 2, 0 );
+1 row inserted.
+$P0> INSERT INTO PDT_HASH_SRC VALUES( 3, 0 );
+1 row inserted.
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P1 ) FROM PDT_HASH_SRC;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P1 ) FROM PDT_HASH_SRC PARTITION( P2 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P2 ) FROM PDT_HASH_SRC PARTITION( P3 );
+No rows moved.
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P3 ) FROM PDT_HASH_SRC PARTITION( P4 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P4 ) FROM PDT_HASH_SRC PARTITION( P1 );
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P1 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P2 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P1 ) FROM PDT_HASH_SRC WHERE F1 = 1;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P2 ) FROM PDT_HASH_SRC WHERE F1 = 2;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P3 ) FROM PDT_HASH_SRC WHERE F1 = 3;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be fail
+$P0> MOVE INTO PDT_HASH PARTITION( P4 ) FROM PDT_HASH_SRC WHERE F1 = 0;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P1 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P2 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 0
+$P0> SELECT COUNT(*) FROM PDT_HASH;
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--#########################################
+--+SECTOR 4; DO JOB #3 (3. Execution Test)
+--#########################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> CREATE TABLE PDT_HASH
+     (
+         F1   INTEGER,
+         F2   INTEGER
+     ) 
+     PARTITION BY HASH( F1 )
+     (
+         PARTITION P1,
+         PARTITION P2,
+         PARTITION P3,
+         PARTITION P4
+     ) TABLESPACE PDT_TBS;
+Create success.
+
+-- should be success
+$P0> MOVE INTO PDT_HASH PARTITION( P1 ) FROM PDT_HASH_SRC WHERE F1 = 0;
+1 row moved.
+-- should be success
+$P0> MOVE INTO PDT_HASH PARTITION( P2 ) FROM PDT_HASH_SRC WHERE F1 = 1;
+1 row moved.
+-- should be success
+$P0> MOVE INTO PDT_HASH PARTITION( P3 ) FROM PDT_HASH_SRC WHERE F1 = 2;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+-- should be success
+$P0> MOVE INTO PDT_HASH PARTITION( P4 ) FROM PDT_HASH_SRC WHERE F1 = 3;
+[ERR-3128A : Inserted partition key is not mapped to any partition.]
+
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P1 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P2 );
+COUNT                
+-----------------------
+1                    
+1 row selected.
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P3 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+-- should be 1
+$P0> SELECT COUNT(*) FROM PDT_HASH PARTITION( P4 );
+COUNT                
+-----------------------
+0                    
+1 row selected.
+
+
+--###################################
+--+SECTOR 5; FINALIZE
+--###################################
+
+$P0> DROP TABLE PDT_HASH;
+Drop success.
+$P0> DROP TABLE PDT_HASH_SRC;
+Drop success.
+

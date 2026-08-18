@@ -1,0 +1,18 @@
+This suite must be recorded and re-checked on a database with no history.
+
+Five batch-2 cases print values that are a function of how many objects the
+instance has ever created, not of what the case did:
+
+  pdt/Design/CREATE_INDEX/LOCAL/RangePartTable.sql   __SYS_PART_IDX_ID_<n>
+  pdt/Design/CREATE_INDEX/LOCAL/HashPartTable.sql    __SYS_PART_IDX_ID_<n>
+  pdt/Design/CREATE_INDEX/LOCAL/ListPartTable.sql    __SYS_PART_IDX_ID_<n>
+  pdt/Design/CREATE_TABLE/AS_SELECT/RangePartTable.sql  SYS_PART_TABLES_.TABLE_ID
+  pdt/Design/DELETE/RangePartTable.sql               which FK is reported first
+
+They came that way from the original suite, which never noticed because ATAF's
+auto-init recreates the database on every run. natc-check.sh keeps auto-init
+OFF on purpose (it would destroy the isolated instance), so it reads this file
+instead and recreates the instance itself. The other 110 wired cases are
+byte-identical back to back on a database that already has history.
+
+See docs/analysis/claude-global-index/v4-natc-port.md 6.

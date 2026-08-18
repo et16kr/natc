@@ -1,0 +1,810 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/SELECT/varchar_range.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> ########################################################
+$T0> ## SELECT RANGE PARTITIOIN ( PK:VARCHAR, INDEX:PREFIXED )
+$T0> ########################################################
+
+$T0> #####################################
+$T0> ##+SECTOR; INTIALIZE
+$T0> #####################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE PDT_RANGE;
+$T0> SKIP END;
+
+$T0> ###########################################
+$T0> ##+SECTOR; DO JOB #1 (1. Basic Test)
+$T0> ###########################################
+
+$T0> CREATE TABLE PDT_RANGE
+(
+    F1   VARCHAR(10),
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( '10' ),
+    PARTITION P2 VALUES LESS THAN ( '20' ),
+    PARTITION P3 VALUES LESS THAN ( '30' ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE UNIQUE INDEX PDT_RANGE_IDX ON PDT_RANGE( F1 );
+Create success.
+
+$T0> INSERT INTO PDT_RANGE VALUES( '00', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '10', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '20', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '30', 0 );
+1 row inserted.
+
+$T0> ## should be ['00']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P1 );
+F1          
+--------------
+00          
+1 row selected.
+$T0> ## should be ['10']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P2 );
+F1          
+--------------
+10          
+1 row selected.
+$T0> ## should be ['20']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P3 );
+F1          
+--------------
+20          
+1 row selected.
+$T0> ## should be ['30']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P4 );
+F1          
+--------------
+30          
+1 row selected.
+
+$T0> ## should be 4
+$T0> SELECT COUNT(*) FROM PDT_RANGE;
+COUNT                
+-----------------------
+4                    
+1 row selected.
+
+$T0> ## should be ['00', '10', '20', '30']
+$T0> SELECT F1 FROM PDT_RANGE;
+F1          
+--------------
+00          
+10          
+20          
+30          
+4 rows selected.
+
+
+$T0> ###########################################
+$T0> ##+SECTOR; DO JOB #2 (2. Validation Test)
+$T0> ###########################################
+
+$T0> DROP TABLE PDT_RANGE;
+Drop success.
+$T0> CREATE TABLE PDT_RANGE
+(
+    F1   VARCHAR(10),
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( '10' ),
+    PARTITION P2 VALUES LESS THAN ( '20' ),
+    PARTITION P3 VALUES LESS THAN ( '30' ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE UNIQUE INDEX PDT_RANGE_IDX ON PDT_RANGE( F1 );
+Create success.
+
+$T0> INSERT INTO PDT_RANGE VALUES( '00', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '10', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '20', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '30', 0 );
+1 row inserted.
+
+$T0> ## should be fail
+$T0> SELECT COUNT(*) FROM PDT_RANGE PARTITION( P5 );
+[ERR-3125B : The table partition does not exist. ]
+
+
+$T0> ###########################################
+$T0> ##+SECTOR; DO JOB #3 (3. Execution Test)
+$T0> ###########################################
+
+$T0> ####################################-
+$T0> ## 3.1 Partition Ordering
+$T0> ####################################-
+$T0> DROP TABLE PDT_RANGE;
+Drop success.
+$T0> CREATE TABLE PDT_RANGE
+(
+    F1   VARCHAR(10),
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P3 VALUES LESS THAN ( '30' ),
+    PARTITION P4 VALUES DEFAULT,
+    PARTITION P1 VALUES LESS THAN ( '10' ),
+    PARTITION P2 VALUES LESS THAN ( '20' )
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE UNIQUE INDEX PDT_RANGE_IDX ON PDT_RANGE( F1 );
+Create success.
+
+$T0> INSERT INTO PDT_RANGE VALUES( '00', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '10', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '20', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '30', 0 );
+1 row inserted.
+
+$T0> ## should be [0]
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P1 );
+F1          
+--------------
+00          
+1 row selected.
+$T0> ## should be ['10']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P2 );
+F1          
+--------------
+10          
+1 row selected.
+$T0> ## should be ['20']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P3 );
+F1          
+--------------
+20          
+1 row selected.
+$T0> ## should be ['30']
+$T0> SELECT F1 FROM PDT_RANGE PARTITION( P4 );
+F1          
+--------------
+30          
+1 row selected.
+
+$T0> ##########################################
+$T0> ## 3.2 Static Partition Pruning ( System )
+$T0> ##########################################
+$T0> DROP TABLE PDT_RANGE;
+Drop success.
+$T0> CREATE TABLE PDT_RANGE
+(
+    F1   VARCHAR(10),
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( '10' ),
+    PARTITION P2 VALUES LESS THAN ( '20' ),
+    PARTITION P3 VALUES LESS THAN ( '30' ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE UNIQUE INDEX PDT_RANGE_IDX ON PDT_RANGE( F1 );
+Create success.
+
+$T0> INSERT INTO PDT_RANGE VALUES( '00', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '10', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '20', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '30', 0 );
+1 row inserted.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$T0> ## less than 
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 < '10';
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 < '10'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 < '20';
+COUNT                
+-----------------------
+2                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 < '20'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 < '30';
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 < '30'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 < '40';
+COUNT                
+-----------------------
+4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 < '40'
+------------------------------------------------------------
+$T0> ## equal than 
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 = '10';
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 = '10'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 = '20';
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 = '20'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 = '30';
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 = '30'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 = '40';
+COUNT                
+-----------------------
+0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 = '40'
+------------------------------------------------------------
+$T0> ## greater than 
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 > '10';
+COUNT                
+-----------------------
+2                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 > '10'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 > '20';
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 > '20'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 > '30';
+COUNT                
+-----------------------
+0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 > '30'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 > '40';
+COUNT                
+-----------------------
+0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 > '40'
+------------------------------------------------------------
+$T0> ## less equal than 
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 <= '10';
+COUNT                
+-----------------------
+2                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <= '10'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 <= '20';
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <= '20'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 <= '30';
+COUNT                
+-----------------------
+4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <= '30'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 <= '40';
+COUNT                
+-----------------------
+4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <= '40'
+------------------------------------------------------------
+$T0> ## greater equal than 
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 >= '10';
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 >= '10'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 >= '20';
+COUNT                
+-----------------------
+2                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 >= '20'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 >= '30';
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 >= '30'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 >= '40';
+COUNT                
+-----------------------
+0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 >= '40'
+------------------------------------------------------------
+$T0> ## not equal
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 != '10';
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <> '10'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 != '20';
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <> '20'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 != '30';
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <> '30'
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 != '40';
+COUNT                
+-----------------------
+4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FIXED KEY ]
+   AND
+    OR
+     F1 <> '40'
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##########################################
+$T0> ## 3.3 Static Partition Pruning ( User )
+$T0> ##########################################
+$T0> DROP TABLE PDT_RANGE;
+Drop success.
+$T0> CREATE TABLE PDT_RANGE
+(
+    F1   VARCHAR(10),
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( '10' ),
+    PARTITION P2 VALUES LESS THAN ( '20' ),
+    PARTITION P3 VALUES LESS THAN ( '30' ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE UNIQUE INDEX PDT_RANGE_IDX ON PDT_RANGE( F1 );
+Create success.
+
+$T0> INSERT INTO PDT_RANGE VALUES( '00', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '10', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '20', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '30', 0 );
+1 row inserted.
+
+$T0> ## please check plan
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> ## no need execution
+$T0> SELECT COUNT(*) FROM PDT_RANGE PARTITION( P1 ) WHERE F1 >= '10';
+COUNT                
+-----------------------
+0                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.PDT_RANGE, PARTITION: 0/4, FULL SCAN, ACCESS: 0, COST: BLOCKED )
+   [ PARTITION KEY ]
+   AND
+    OR
+     F1 >= '10'
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ####################################-
+$T0> ## 3.4 Partition filtering
+$T0> ####################################-
+$T0> DROP TABLE PDT_RANGE;
+Drop success.
+$T0> CREATE TABLE PDT_RANGE
+(
+    F1   VARCHAR(10),
+    F2   INTEGER
+) 
+PARTITION BY RANGE( F1 )
+(
+    PARTITION P1 VALUES LESS THAN ( '10' ),
+    PARTITION P2 VALUES LESS THAN ( '20' ),
+    PARTITION P3 VALUES LESS THAN ( '30' ),
+    PARTITION P4 VALUES DEFAULT
+) TABLESPACE PDT_TBS;
+Create success.
+
+$T0> CREATE UNIQUE INDEX PDT_RANGE_IDX ON PDT_RANGE( F1 );
+Create success.
+
+$T0> INSERT INTO PDT_RANGE VALUES( '00', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '10', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '20', 0 );
+1 row inserted.
+$T0> INSERT INTO PDT_RANGE VALUES( '30', 0 );
+1 row inserted.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT F1 FROM PDT_RANGE;
+F1          
+--------------
+00          
+10          
+20          
+30          
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 12, COST: BLOCKED )
+ PARTITION-COORDINATOR ( TABLE: SYS.PDT_RANGE, PARTITION: 4/4, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+  SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F2 = 0;
+COUNT                
+-----------------------
+4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.PDT_RANGE, PARTITION: 4/4, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F2 = 0
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F2 = 0
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F2 = 0
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F2 = 0
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 = F1;
+COUNT                
+-----------------------
+4                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.PDT_RANGE, INDEX: SYS.PDT_RANGE_IDX, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   [ FILTER SERIAL EXECUTE ]
+   F1 = F1
+------------------------------------------------------------
+$T0> SELECT COUNT(*) FROM PDT_RANGE WHERE F1 = F2;
+COUNT                
+-----------------------
+1                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.PDT_RANGE, PARTITION: 4/4, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+   SCAN ( PARTITION: P4, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F1 = F2
+   SCAN ( PARTITION: P3, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F1 = F2
+   SCAN ( PARTITION: P2, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F1 = F2
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FILTER SERIAL EXECUTE ]
+    F1 = F2
+------------------------------------------------------------
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+$T0> #####################################
+$T0> ##+SECTOR; FINALIZE
+$T0> #####################################
+
+$T0> DROP TABLE PDT_RANGE;
+Drop success.
+

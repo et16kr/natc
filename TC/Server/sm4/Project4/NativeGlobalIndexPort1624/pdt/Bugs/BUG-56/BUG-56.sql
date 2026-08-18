@@ -1,0 +1,22 @@
+--###########################################################################
+--# ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Bugs/BUG-56/BUG-56.sql
+--#
+--# Body below is byte-identical to the original. The one line this port
+--# adds is the premise: the original measures these statements on the
+--# $GIT_ hidden-table implementation, this file measures the same
+--# statements on the native global index (F07 -- see include/pinNative.sql).
+--###########################################################################
+--+LOAD_SQL ../../../include/pinNative.sql;
+
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;
+--+LOAD_SQL query.sql;

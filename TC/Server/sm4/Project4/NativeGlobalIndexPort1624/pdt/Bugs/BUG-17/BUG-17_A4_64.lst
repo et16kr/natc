@@ -1,0 +1,109 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###########################################################################
+--# ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Bugs/BUG-17/BUG-17.sql
+--#
+--# Body below is byte-identical to the original. The one line this port
+--# adds is the premise: the original measures these statements on the
+--# $GIT_ hidden-table implementation, this file measures the same
+--# statements on the native global index (F07 -- see include/pinNative.sql).
+--###########################################################################
+# ==> [../../../include/pinNative.sql] BEGIN <=
+--###########################################################################
+--# NativeGlobalIndexPort1624 - the premise of every ported .sql case.
+--#
+--# A .sql case cannot CALL a DEF the way a .tc case calls PIN_DISK_NATIVE(),
+--# so the same two statements are pulled in per case with ATC's own include
+--# directive:
+--#
+--#     --+LOAD_SQL <relative path>/include/pinNative.sql;
+--#
+--# ATC inlines this file into the case transcript between BEGIN/END markers,
+--# which is exactly what F07 asks for: the case states its own premise at the
+--# head of its own transcript instead of inheriting whatever the instance
+--# happens to be configured with.
+--#
+--#     DISK_GLOBAL_INDEX_ENABLE = 1  -> native  (this suite)
+--#     DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_   (the original suite)
+--#
+--# The readout below is not decoration. It is the tooth: if the property is
+--# ever 0 when a case runs, this one line differs and the case is red before
+--# it has measured anything, instead of quietly measuring the other
+--# implementation (disk-natc.md 6 records nine assertions that drifted that
+--# way).
+--#
+--# ASCII only, on purpose: 87 of the ported case bodies are EUC-KR and their
+--# bytes must stay untouched, so nothing this port adds may introduce a
+--# second encoding into a transcript.
+--###########################################################################
+
+$P0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$P0> SELECT CAST(VALUE1 AS VARCHAR(10)) DISK_GLOBAL_INDEX_ENABLE
+     FROM V$PROPERTY WHERE NAME = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+# ==> [../../../include/pinNative.sql] END <=
+
+--###################################################################
+--# CREATE INDEX BUG
+--###################################################################
+
+--###################################################################
+--+SECTOR 1; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1
+     (
+         I1 INTEGER PRIMARY KEY, 
+         I2 INTEGER, 
+         I3 VARCHAR(10), 
+         I4 INTEGER 
+     ) 
+     PARTITION BY RANGE( I1 ) 
+     ( 
+         PARTITION P1 VALUES DEFAULT 
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> CREATE INDEX T1_IDX1 ON T1(I2 ASC);
+Create success.
+
+--#########################################
+--+SECTOR 2; DO JOB
+--#########################################
+
+$P0> INSERT INTO T1 VALUES(1 , 1 , 'a', 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(2 , 2 , 'b', 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(3 , 4 , 'c', 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(4 , 5 , 'd', 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES(5 , 9 , 'e', 5);
+1 row inserted.
+-- should be success
+$P0> INSERT INTO T1 VALUES(6 , 1 , 'f', 6);
+1 row inserted.
+
+--###################################################################
+--+SECTOR 3; FINALIZATION
+--###################################################################
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+--+SKIP END; 
+
+

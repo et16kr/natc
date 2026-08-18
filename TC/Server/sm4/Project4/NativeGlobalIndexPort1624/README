@@ -85,10 +85,38 @@ Native Global Index (disk) -- PROJ-1624 이식
 [디렉터리]
 
   include/
-    globalIndexEnv.i     전제(DISK_GLOBAL_INDEX_ENABLE=1)와 판별자
+    globalIndexEnv.i     .tc 의 전제(DISK_GLOBAL_INDEX_ENABLE=1)와 판별자
     checkGlobalIndex.i   정합성 검사 3겹
+    pinNative.sql        .sql 의 전제. --+LOAD_SQL 로 케이스마다 끌어온다
+  NEEDS_FRESH_INSTANCE   이 스위트는 이력 없는 DB 를 요구한다 (그 안에 이유)
   basic/                 1차 배치 16 케이스
                          select / insert / update / delete / move / null
+  pdt/                   2차 배치 -- 공식 PROJ-1624-QC/PDT 121 케이스
+                         (114 를 걸고 7 을 보류. 보류 이유는 그 .ts 주석에)
+
+
+[.sql 케이스는 전제를 어떻게 세우는가]
+
+.sql 은 isql 스크립트라 DEF/CALL 이 없다. 대신 ATC 자신의 인클루드
+지시자를 쓴다:
+
+  --+LOAD_SQL ../../../include/pinNative.sql;
+
+ATC 가 그 파일을 케이스 전사에 인라인하므로, .tc 의 CALL PIN_DISK_NATIVE()
+와 똑같이 "케이스가 자기 전제를 자기 전사 첫머리에 적는다"(F07)가 성립한다.
+프로퍼티가 0 이면 그 한 줄이 어긋나 케이스가 아무것도 재기 전에 붉어진다.
+
+스위트 앞에 전제 케이스를 하나 세우는 안은 버렸다 -- 케이스를 단독으로
+돌리면 전제가 서지 않고, 앞 케이스가 프로퍼티를 건드리면 뒤 케이스가
+조용히 다른 것을 재게 된다. 근거는 v4-natc-port.md 1 절.
+
+
+[이식의 규칙]
+
+케이스 본문은 원본과 바이트 동일하다. 이식이 더하는 것은 출처 머리글과
+전제 한 줄뿐이고, 예외는 선언된 하나(v4-natc-port.md 6.3)다. 그 규칙은
+altidev4/scripts/global-index/natc-port-check.sh 가 원본 트리와 대조해
+사후 검증한다 -- 규칙대로 다시 만든 파일이 디스크의 것과 같아야 한다.
 
 
 [돌리는 법]
@@ -96,6 +124,7 @@ Native Global Index (disk) -- PROJ-1624 이식
   altidev4/scripts/global-index/natc-check.sh --suite NativeGlobalIndexPort1624
 
   오프라인 검사(서버 없이):
+  altidev4/scripts/global-index/natc-port-check.sh
   python3 ../NativeGlobalIndexClaude/tools/lint-tc.py
 
 

@@ -199,18 +199,26 @@ select /*+ FULL SCAN(t1) */ count(*) from t1 where c1 between 'b' and 'c';
 ##################################
 # SECTOR; PRUNING GATE WITH A VARIABLE KEY
 ##################################
-# 단일 테이블스페이스라도, 파티션 프루닝이 일어나고 키 컬럼에 variable
-# 이 있으면 게이트가 닫힌다. 키 레인지 콜백이 프루닝으로 잘려나간 파티션의
-# 로우도 만나는데, 옵티마이저는 그 파티션의 서술자를 갖고 있지 않기
-# 때문이다.
+# 이 절은 한때 "프루닝 + variable 키 -> 게이트 닫힘" 을 단언했다. 닫은
+# 이유는 키 레인지 콜백이 프루닝으로 잘려나간 파티션의 로우도 만나는데
+# 옵티마이저가 그 파티션의 서술자를 갖고 있지 않다는 것이었다.
+#
+# V4 J11 (A-7 / GR-08) 이 그 게이트를 걷었다. 콜백 자신이 로우마다 owner 의
+# 테이블스페이스로 colSpace 를 보정하므로(qmnSCAN::wrapGlobalKeyRange ->
+# qtc::rangeCallBack*4MtdGlobal) 확인되지 않은 멤버가 남아 있어도 키 비교가
+# 틀리지 않는다 -- v4-stmt-colspace.md 3.
+#
+# 그래서 기대를 뒤집는다. 낮춘 것이 아니라 늘렸다: 닫힌 게이트를 재던
+# 자리는 "플랜에 GLOBAL-INDEX 가 없다" 하나만 볼 수 있었지만, 열린 게이트는
+# 플랜이 글로벌이라는 것과 **그 답이 풀스캔과 같다는 것**을 함께 본다.
 #
 # i1 이 파티션 키다. i1 술어가 있으면 프루닝이 일어난다.
 
 # 프루닝 없음 -> 열림
 CALL CHECK_INDEX_SCAN_OPEN_GATE( "t1", "gidx1", "i1, substr(c1, 1, 20)", "c1 >= 'a'" );
 
-# 프루닝 있음 + variable 키 -> 닫힘
-CALL CHECK_INDEX_SCAN_CLOSED_GATE( "t1", "gidx1", "i1, substr(c1, 1, 20)", "i1 < 100 and c1 >= 'a'" );
+# 프루닝 있음 + variable 키 -> J11 이후 열림
+CALL CHECK_INDEX_SCAN_OPEN_GATE( "t1", "gidx1", "i1, substr(c1, 1, 20)", "i1 < 100 and c1 >= 'a'" );
 
 ##################################
 # SECTOR; SHORT VARCHAR, MULTI TABLESPACE

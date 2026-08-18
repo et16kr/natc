@@ -1,0 +1,209 @@
+--###########################################################################
+--# ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Bugs/BUG-9/BUG-9.sql
+--#
+--# Body below is byte-identical to the original. The one line this port
+--# adds is the premise: the original measures these statements on the
+--# $GIT_ hidden-table implementation, this file measures the same
+--# statements on the native global index (F07 -- see include/pinNative.sql).
+--###########################################################################
+--+LOAD_SQL ../../../include/pinNative.sql;
+
+--###################################################################
+--# PARTITIONED SELECT BUG GIFT SET
+--###################################################################
+
+--###################################################################
+--+SECTOR; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN;
+DROP TABLE T1;
+--+SKIP END;
+
+CREATE TABLE T1 ( I1 CHAR(10), I2 VARCHAR(10), I3 NUMERIC,I4 NUMERIC, I5 DATE ) 
+PARTITION BY RANGE( I1 ) 
+( 
+    PARTITION P1 VALUES LESS THAN( 'a' ),
+    PARTITION P2 VALUES LESS THAN( 'b' ),
+    PARTITION P3 VALUES DEFAULT 
+) 
+TABLESPACE SYS_TBS_DISK_DATA;
+
+INSERT INTO T1 VALUES ('char','varchar',124.234,-12.000234,'2-APR-00');
+INSERT INTO T1 SELECT I3, I4, I3, I4, I5 FROM T1;
+INSERT INTO T1 SELECT 2, 1, I3, I4, I5 FROM T1;
+INSERT INTO T1 VALUES (TO_DATE('2-APR-00'), TO_DATE('2-APR-00'),
+                       '123','45.234E10',TRIM('2-APR-00'));
+INSERT INTO T1 VALUES ( 'a', '', TRIM('123'), TRIM('234.023E12'), '2-APR-00');
+INSERT INTO T1 VALUES ( '', 'b', TRIM('123'), TRIM('234.023E12'), '2-APR-00');
+INSERT INTO T1 VALUES ( '', '', TRIM('123'), TRIM('234.023E12'), '2-APR-00');
+
+SELECT * FROM T1;
+
+--#########################################
+--+SECTOR; DO JOB #1
+--#########################################
+
+SELECT * FROM T1 WHERE I5 = '2-APR-00';
+SELECT * FROM T1 WHERE '2-APR-00' = I5;
+SELECT * FROM T1 WHERE '2-APR-00' != I5;
+SELECT * FROM T1 WHERE '2-APR-00' <> I5;
+SELECT * FROM T1 WHERE '2-APR-00' > I5;
+SELECT * FROM T1 WHERE '2-APR-00' < I5;
+SELECT * FROM T1 WHERE '2-APR-00' >= I5;
+SELECT * FROM T1 WHERE '2-APR-00' <= I5;
+SELECT * FROM T1 WHERE '2-APR-00' = '2-APR-00';
+
+--#########################################
+--+SECTOR; DO JOB #2
+--#########################################
+
+-- should be 1 row
+SELECT * FROM T1 WHERE I1 LIKE I1 ESCAPE 1;
+-- should be 1 row
+SELECT * FROM T1 WHERE I3 NOT LIKE I1 ESCAPE 1;
+
+--###################################################################
+--+SECTOR; FINALIZATION
+--###################################################################
+--+SKIP BEGIN;
+DROP TABLE T1;
+--+SKIP END;
+
+--###################################################################
+--+SECTOR; PREPARATION
+--###################################################################
+
+--+SKIP BEGIN;
+DROP TABLE T1;
+--+SKIP END;
+
+CREATE TABLE T1(I1 NUMERIC, I2 NUMERIC, I3 NUMERIC) 
+PARTITION BY RANGE( I1 ) 
+( 
+    PARTITION P1 VALUES LESS THAN( 2 ),
+    PARTITION P2 VALUES LESS THAN( 3 ),
+    PARTITION P3 VALUES DEFAULT 
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+INSERT INTO T1 VALUES (1,1,1);
+INSERT INTO T1 VALUES (7,7,7);
+INSERT INTO T1 VALUES (2,2,2);
+INSERT INTO T1 VALUES (1,1,1);
+
+--#########################################
+--+SECTOR; DO JOB #3
+--#########################################
+
+-- should be 2 rows
+SELECT * FROM T1 WHERE 1 IN (I1);
+
+--###################################################################
+--+SECTOR; FINALIZATION
+--###################################################################
+--+SKIP BEGIN;
+DROP TABLE T1;
+--+SKIP END;
+
+--###################################################################
+--+SECTOR; PREPARATION
+-- ORGIN FROM ./Legacy/SELECT/FROM/PREDICATE/predicateNormalForm.sql L99
+--###################################################################
+
+--+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+--+SKIP END;
+
+CREATE TABLE T1 (I1 INTEGER , I2 CHAR(10) , I3 CHAR(10) , I4 INTEGER) 
+PARTITION BY RANGE( I1 ) 
+( 
+    PARTITION P1 VALUES DEFAULT 
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE TABLE T2 (I1 INTEGER , I2 CHAR(10) , I3 CHAR(10) , I4 INTEGER) 
+PARTITION BY RANGE( I1 ) 
+( 
+    PARTITION P1 VALUES DEFAULT 
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+INSERT INTO T1 VALUES ( NULL 	, NULL 		, NULL 		, 1);
+INSERT INTO T1 VALUES ( 1 		, 'ABC'		, ''		, 10);
+INSERT INTO T1 VALUES ( 2 		, '!@#$'	, 'ABC'		, 3);
+INSERT INTO T1 VALUES ( 3 		, '한글'	, 'ABC'		, 23);
+INSERT INTO T1 VALUES ( 4 		, 'atibase'	, '한글'	, 21);
+INSERT INTO T1 VALUES ( 5 		, '100'		, '100'		, 0);
+INSERT INTO T1 VALUES ( 6 		, '3'		, '4'		, -1);
+INSERT INTO T1 VALUES ( 1 		, '1'		, '1'		, 1);
+
+INSERT INTO T2 VALUES ( NULL 	, NULL 		, NULL 		, 2);
+INSERT INTO T2 VALUES ( 1 		, '1'		, '1'		, 1);
+INSERT INTO T2 VALUES ( 2 		, 'ABC'		, ''		, 0);
+INSERT INTO T2 VALUES ( 3 		, '100'		, '100'		, 100);
+INSERT INTO T2 VALUES ( 4 		, '!@$##$'	, 'ABC'		, 20);
+INSERT INTO T2 VALUES ( 5 		, '3'		, '4'		, 1);
+INSERT INTO T2 VALUES ( 6 		, '알티베이스'		, 'altibase'	, 3);
+INSERT INTO T2 VALUES ( 2 		, 'altibase'		, '1'	, 2);
+INSERT INTO T2 VALUES ( 1 		, 'false'		, '-_-'	, -1);
+
+--#########################################
+--+SECTOR; DO JOB #4
+--#########################################
+
+-- should be 3 rows
+SELECT * FROM T1, T2 WHERE ( ( T1.I1 > 2 OR T1.I1 = T2.I1 OR T2.I3 IS NOT NULL) AND (T1.I2 = T2.I2) AND T2.I4 > 0);
+
+--###################################################################
+--+SECTOR; FINALIZATION
+--###################################################################
+--+SKIP BEGIN;
+DROP TABLE T1;
+DROP TABLE T2;
+--+SKIP END;
+
+
+--###################################################################
+--+SECTOR; PREPARATION
+-- ORGIN FROM ./Legacy/SELECT/FROM/PREDICATE/predicateJoin.sql L664
+--###################################################################
+
+--+SKIP BEGIN;
+DROP TABLE J3;
+DROP TABLE J4;
+--+SKIP END;
+
+CREATE TABLE J3 ( I1 INTEGER, I2 VARCHAR(5), I3 DATE, I4 CHAR(2), I5 NUMBER ) 
+PARTITION BY RANGE( I1 ) ( PARTITION P1 VALUES DEFAULT ) TABLESPACE SYS_TBS_DISK_DATA;
+CREATE TABLE J4 ( I1 INTEGER, I2 VARCHAR(5), I3 DATE, I4 CHAR(2), I5 NUMBER ) 
+PARTITION BY RANGE( I1 ) ( PARTITION P1 VALUES DEFAULT ) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE INDEX J3_I12345 ON J3 ( I1, I2, I3, I4, I5 );
+CREATE INDEX J4_I12345 ON J4 ( I1, I2, I3, I4, I5 );
+
+INSERT INTO J3 VALUES (   -2,   'AAA', '01-JAN-1998', 'A4', NULL );
+INSERT INTO J3 VALUES ( -555,  'T/티', '20-APR-2001', 'A3', 10.5 ); 
+INSERT INTO J3 VALUES ( NULL,  'LIKE', '01-NOV-2002', 'A3',    1 );
+INSERT INTO J3 VALUES (  100,   'AAA', '27-OCT-2006', 'A2',   -1 );
+INSERT INTO J3 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
+
+INSERT INTO J4 VALUES (   -2,   'AAA', '01-JAN-1998', 'A4', NULL );
+INSERT INTO J4 VALUES ( NULL,  'LIKE', '01-NOV-2002', 'A3',    1 );
+INSERT INTO J4 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
+
+--#########################################
+--+SECTOR; DO JOB #5
+--#########################################
+
+-- should be success
+SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1 AND J3.I4=J4.I2
+                                        AND J3.I4='A3'  AND J4.I3 IS NOT NULL
+             WHERE J3.I1=100 AND J4.I1 IN (1,2,3) AND J4.I2 >=ALL (1,2,3);
+
+--###################################################################
+--+SECTOR; FINALIZATION
+--###################################################################
+--+SKIP BEGIN;
+DROP TABLE J3;
+DROP TABLE J4;
+--+SKIP END;
+

@@ -1,0 +1,631 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+$T0> ###########################################################################
+$T0> # NativeGlobalIndexPort1624 - 전제와 판별자
+$T0> #
+$T0> # 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+$T0> # 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+$T0> # 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+$T0> #
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+$T0> #   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+$T0> #
+$T0> # ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+$T0> #   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+$T0> #   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+$T0> #   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+$T0> #   어긋났었다(disk-natc.md 6).
+$T0> #
+$T0> # ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+$T0> #   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+$T0> #   복원이 유일한 방벽이다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
+$T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+$T0> #
+
+$T0> #
+$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
+$T0> #
+$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
+$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
+$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
+$T0> #
+$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
+$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
+$T0> #   착각이 여기서 깨진다.
+$T0> #
+$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
+$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
+$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
+$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
+$T0> #
+
+$T0> #
+$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
+$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
+$T0> #
+$T0> ###########################################################################
+$T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/INSERT/InsertSelect.tc
+$T0> #
+$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
+$T0> # the value into the transcript, so the case states what it measures
+$T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
+$T0> #
+$T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
+$T0> ###########################################################################
+
+$T0> #####################################################################
+$T0> ### INSERT TEST
+$T0> #####################################################################
+
+$T0> #####################################################################
+$T0> ##SECTOR; PREPARATION
+$T0> #####################################################################
+
+$T0> set linesize 200;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NPT_MEM;
+$T0> DROP TABLE NPT_DISK;
+$T0> DROP TABLE PT_RANGE;
+$T0> DROP TABLE PT_LIST;
+$T0> DROP TABLE PT_HASH;
+$T0> SKIP END;
+
+$T0> CREATE TABLE NPT_MEM ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NPT_MEM VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_MEM VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-06-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_MEM VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-07-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_MEM VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-08-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_MEM VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-09-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> CREATE INDEX IDX1 ON NPT_MEM(I1, I2, I4, I5);
+Create success.
+
+
+$T0> CREATE TABLE NPT_DISK ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> INSERT INTO NPT_DISK VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_DISK VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_DISK VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_DISK VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO NPT_DISK VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> CREATE INDEX IDX2 ON NPT_DISK(I1, I2, I4, I5);
+Create success.
+
+
+$T0> CREATE TABLE PT_RANGE ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+PARTITION BY RANGE (I1, I2, I4)
+( PARTITION P1 VALUES LESS THAN (100, 'ABC', 100.505 ) 
+                   TABLESPACE PDT_TBS2 LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+  PARTITION P2 VALUES LESS THAN (200, 'DEF', 200.505)
+                   TABLESPACE PDT_TBS3 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+  PARTITION P3 VALUES LESS THAN (300, 'GHI', 300.505)
+                   TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+  PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PT_RANGE VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_RANGE VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_RANGE VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_RANGE VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_RANGE VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> CREATE INDEX IDX3 ON PT_RANGE(I1, I2, I4);
+Create success.
+
+
+$T0> CREATE TABLE PT_LIST ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+PARTITION BY LIST(I1)
+( PARTITION P1 VALUES (100, 150)
+                   TABLESPACE PDT_TBS2 LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+  PARTITION P2 VALUES (200, 250)
+                   TABLESPACE PDT_TBS3 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+  PARTITION P3 VALUES (300, 350)
+                   TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+  PARTITION P4 VALUES DEFAULT TABLESPACE PDT_TBS5
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PT_LIST VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_LIST VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_LIST VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_LIST VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_LIST VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> CREATE INDEX IDX4 ON PT_LIST(I1, I2, I4);
+Create success.
+
+
+$T0> CREATE TABLE PT_HASH ( I1 INTEGER, I2 VARCHAR(1000), I3 BLOB, I4 NUMERIC(10, 5), I5 DATE )
+PARTITION BY HASH(I1, I2, I4)
+( PARTITION P1 TABLESPACE PDT_TBS2 LOB STORE AS ( TABLESPACE PDT_TBS3 ),
+  PARTITION P2 TABLESPACE PDT_TBS3 LOB STORE AS ( TABLESPACE PDT_TBS4 ),
+  PARTITION P3 TABLESPACE PDT_TBS4 LOB STORE AS ( TABLESPACE PDT_TBS5 ),
+  PARTITION P4 TABLESPACE PDT_TBS5
+) TABLESPACE PDT_TBS;
+Create success.
+$T0> INSERT INTO PT_HASH VALUES ( 100, 'AAA', 'AAA', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_HASH VALUES ( 150, 'BBB', 'BBB', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_HASH VALUES ( 200, 'CCC', 'CCC', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_HASH VALUES ( 250, 'DDD', 'DDD', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> INSERT INTO PT_HASH VALUES ( 300, 'EEE', 'EEE', 100.505, TO_DATE('2007-05-05', 'YYYY-MM-DD') );
+1 row inserted.
+$T0> CREATE INDEX IDX5 ON PT_HASH(I1, I2, I4);
+Create success.
+
+
+
+$T0> #####################################################################
+$T0> ##SECTOR; INSERT TABLE(None-Partitioned Table(mem))
+$T0> #####################################################################
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Range-PT)
+$T0> ################################
+
+$T0> INSERT INTO NPT_MEM SELECT * FROM PT_RANGE;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_MEM;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+$T0> INSERT INTO NPT_MEM SELECT * FROM PT_RANGE PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_MEM;
+COUNT                
+-----------------------
+12                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(List-PT)
+$T0> ################################
+
+$T0> INSERT INTO NPT_MEM SELECT * FROM PT_LIST;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_MEM;
+COUNT                
+-----------------------
+17                   
+1 row selected.
+
+$T0> INSERT INTO NPT_MEM SELECT * FROM PT_LIST PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_MEM;
+COUNT                
+-----------------------
+19                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Hash-PT)
+$T0> ################################
+
+$T0> INSERT INTO NPT_MEM SELECT * FROM PT_HASH;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_MEM;
+COUNT                
+-----------------------
+24                   
+1 row selected.
+
+$T0> INSERT INTO NPT_MEM SELECT * FROM PT_HASH PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_MEM;
+COUNT                
+-----------------------
+26                   
+1 row selected.
+
+
+
+$T0> #####################################################################
+$T0> ##SECTOR; INSERT TABLE(None-Partitioned Table(disk))
+$T0> #####################################################################
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Range-PT)
+$T0> ################################
+
+$T0> INSERT INTO NPT_DISK SELECT * FROM PT_RANGE;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_DISK;
+COUNT                
+-----------------------
+10                   
+1 row selected.
+
+$T0> INSERT INTO NPT_DISK SELECT * FROM PT_RANGE PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_DISK;
+COUNT                
+-----------------------
+12                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(List-PT)
+$T0> ################################
+
+$T0> INSERT INTO NPT_DISK SELECT * FROM PT_LIST;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_DISK;
+COUNT                
+-----------------------
+17                   
+1 row selected.
+
+$T0> INSERT INTO NPT_DISK SELECT * FROM PT_LIST PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_DISK;
+COUNT                
+-----------------------
+19                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Hash-PT)
+$T0> ################################
+
+$T0> INSERT INTO NPT_DISK SELECT * FROM PT_HASH;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_DISK;
+COUNT                
+-----------------------
+24                   
+1 row selected.
+
+$T0> INSERT INTO NPT_DISK SELECT * FROM PT_HASH PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM NPT_DISK;
+COUNT                
+-----------------------
+26                   
+1 row selected.
+
+
+
+$T0> #####################################################################
+$T0> ##SECTOR; INSERT TABLE(Range Partitioned Table)
+$T0> #####################################################################
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(None-Partitioned Table(mem))
+$T0> ################################
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM NPT_MEM;
+26 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+31                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(None-Partitioned Table(disk))
+$T0> ################################
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM NPT_DISK;
+26 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+57                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Range-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM PT_RANGE;
+57 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+114                  
+1 row selected.
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM PT_RANGE PARTITION(P2);
+52 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+166                  
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(List-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM PT_LIST;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+171                  
+1 row selected.
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM PT_LIST PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+173                  
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Hash-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM PT_HASH;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+178                  
+1 row selected.
+
+$T0> INSERT INTO PT_RANGE SELECT * FROM PT_HASH PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_RANGE;
+COUNT                
+-----------------------
+180                  
+1 row selected.
+
+
+
+$T0> #####################################################################
+$T0> ##SECTOR; INSERT TABLE(List Partitioned Table)
+$T0> #####################################################################
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(None-Partitioned Table(mem))
+$T0> ################################
+
+$T0> INSERT INTO PT_LIST SELECT * FROM NPT_MEM;
+26 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+31                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(None-Partitioned Table(disk))
+$T0> ################################
+
+$T0> INSERT INTO PT_LIST SELECT * FROM NPT_DISK;
+26 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+57                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Range-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_LIST SELECT * FROM PT_RANGE;
+180 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+237                  
+1 row selected.
+
+$T0> INSERT INTO PT_LIST SELECT * FROM PT_RANGE PARTITION(P2);
+110 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+347                  
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(List-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_LIST SELECT * FROM PT_LIST;
+347 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+694                  
+1 row selected.
+
+$T0> INSERT INTO PT_LIST SELECT * FROM PT_LIST PARTITION(P2);
+332 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+1026                 
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Hash-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_LIST SELECT * FROM PT_HASH;
+5 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+1031                 
+1 row selected.
+
+$T0> INSERT INTO PT_LIST SELECT * FROM PT_HASH PARTITION(P2);
+2 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_LIST;
+COUNT                
+-----------------------
+1033                 
+1 row selected.
+
+
+
+
+$T0> #####################################################################
+$T0> ##SECTOR; INSERT TABLE(Hash Partitioned Table)
+$T0> #####################################################################
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(None-Partitioned Table(mem))
+$T0> ################################
+
+$T0> INSERT INTO PT_HASH SELECT * FROM NPT_MEM;
+26 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+31                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(None-Partitioned Table(disk))
+$T0> ################################
+
+$T0> INSERT INTO PT_HASH SELECT * FROM NPT_DISK;
+26 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+57                   
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Range-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_HASH SELECT * FROM PT_RANGE;
+180 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+237                  
+1 row selected.
+
+$T0> INSERT INTO PT_HASH SELECT * FROM PT_RANGE PARTITION(P2);
+110 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+347                  
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(List-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_HASH SELECT * FROM PT_LIST;
+1033 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+1380                 
+1 row selected.
+
+$T0> INSERT INTO PT_HASH SELECT * FROM PT_LIST PARTITION(P2);
+667 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+2047                 
+1 row selected.
+
+
+$T0> ################################
+$T0> ##SECTOR; SELECT TABLE(Hash-PT)
+$T0> ################################
+
+$T0> INSERT INTO PT_HASH SELECT * FROM PT_HASH;
+2047 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+4094                 
+1 row selected.
+
+$T0> INSERT INTO PT_HASH SELECT * FROM PT_HASH PARTITION(P2);
+1524 rows inserted.
+$T0> SELECT COUNT(*) FROM PT_HASH;
+COUNT                
+-----------------------
+5618                 
+1 row selected.
+
+
+
+$T0> #####################################################################
+$T0> ##SECTOR; FINALIZATION
+$T0> #####################################################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NPT_MEM;
+$T0> DROP TABLE NPT_DISK;
+$T0> DROP TABLE PT_RANGE;
+$T0> DROP TABLE PT_LIST;
+$T0> DROP TABLE PT_HASH;
+$T0> SKIP END;
+
