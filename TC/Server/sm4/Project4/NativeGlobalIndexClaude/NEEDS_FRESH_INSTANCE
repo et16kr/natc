@@ -1,5 +1,30 @@
 This suite must be recorded and re-checked on a database with no history.
 
+★ 통합(Phase C)이 이 마커를 스위트 루트로 올렸다 -- 그리고 그 과정에서
+두 가지를 재게 됐다.
+
+(1) 위치. 러너는 <스위트 루트>/NEEDS_FRESH_INSTANCE 만 본다. Port1624 를
+    서브트리로 편입한 직후 이 파일이 그 안에 남아 있어 신선한 인스턴스
+    단계가 **조용히 건너뛰어졌고** 240 중 7 이 붉었다. 마커를 올리자
+    셋이 살아났다(233/7 -> 236/4):
+      pdt ALTER_TABLE/DROP_COLUMN/basic.sql
+      pdt DROP_TABLESPACE/basic.sql
+      tool/aexport/aexport_all.tc
+    이 셋은 아래 다섯에 이름이 없던 것들이다. 이력 의존이 원본이 적어 둔
+    다섯보다 넓다는 뜻이므로 여기 적어 둔다.
+
+(2) 순서. 남은 넷은 신선한 인스턴스로도 붉었다 --
+      pdt CREATE_INDEX/LOCAL/{Range,Hash,List}PartTable.sql
+      pdt CREATE_TABLE/AS_SELECT/RangePartTable.sql
+    기대값이 절대 카탈로그 id 라서(__SYS_PART_IDX_ID_1933 대 실측 2553)
+    **앞에서 무엇이 도는지**에 달려 있다. Memory/ 37 개가 앞서면 카운터가
+    밀린다. 그래서 루트 .ts 는 Port1624 를 첫째로 둔다 -- 기대값이 찍힌
+    조건(신선한 인스턴스에서 Port1624 가 처음)을 복원하는 것이다.
+
+    ★ 이것은 임시 처방이다. 항구적 수리는 그 넷이 절대 id 대신 자기
+    객체로 범위를 좁힌 값을 찍게 다시 쓰는 것이고, BUG-35460 이 이미 그렇게
+    고쳐졌다(아래 두 번째 위험 참조). 그때 순서 제약이 풀린다.
+
 Five batch-2 cases print values that are a function of how many objects the
 instance has ever created, not of what the case did:
 

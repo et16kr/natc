@@ -1,0 +1,235 @@
+# PROJ-1624 이식 대조표 (MANIFEST)
+#
+# 공식 원본 TC/Server/qp4/Project3/PROJ-1624-GlobalIndex 의 실행 단위 208 개가
+# 이 서브트리에서 각각 어떻게 되었는지를 적는다. "조용히 빠진 케이스가 없다"
+# 를 보증하는 것이 이 파일이다.
+#
+#   원본 루트 둘의 전개:  PROJ-1624.ts 77 + PROJ-1624-QC/PROJ-1624-QC.ts 131 = 208
+#   이 서브트리:          ported 203 + held 5 = 208
+#
+# 종전에는 삭제 예정인 scripts/global-index/natc-port-check.sh 절 H 가 이것을
+# 세었다. 그 스크립트가 사라지므로 표로 동결한다.
+#   -- 통합 계획 NativeGlobalIndex-Consolidation-Plan.md §8.4
+#
+# 경로는 각 트리의 루트 기준 상대경로다. verdict 는 ported | held.
+# Port1624/ 아래 케이스를 더하거나 빼면 이 파일을 같은 커밋에서 갱신할 것.
+#
+# 보류 5 의 사유
+#   PROJ-1624-QC/repl/ 4  두 서버 토폴로지가 필요하다. 관례는 프로젝트마다
+#       자기 서버 이름과 자기 db1/db2 를 세우는 것이고 템플릿은 원본 자신의
+#       PROJ-1624-QC/repl/initialize.tc 다. 막고 있는 것은 conf/server.conf 에
+#       PROJ_1624_SERVER1/2 블록이 없는 것 하나 -- 상태 ConfigPending.
+#       (계획 §9.3 · §10.1)
+#   PROJ-1624-QC/PDT/Design/DELETE/RangePartTable.sql
+#       재현되지 않는다: 위반된 여러 FK 중 어느 것이 이름으로 보고되는지가
+#       실행마다 갈린다. (v4-natc-port.md)
+#
+# ORIGINAL                                                      	PORTED                                                  	VERDICT
+DDL/create_index.tc                                             	DDL/create_index.tc                                     	ported
+DDL/drop_index.tc                                               	DDL/drop_index.tc                                       	ported
+DDL/alter_index.tc                                              	DDL/alter_index.tc                                      	ported
+DDL/index_name.tc                                               	DDL/index_name.tc                                       	ported
+DDL/index_name2.tc                                              	DDL/index_name2.tc                                      	ported
+DDL/index_column_name.tc                                        	DDL/index_column_name.tc                                	ported
+DDL/index_rename.tc                                             	DDL/index_rename.tc                                     	ported
+DDL/reserved_name.tc                                            	DDL/reserved_name.tc                                    	ported
+DDL/create_table.tc                                             	DDL/create_table.tc                                     	ported
+DDL/truncate_table.tc                                           	DDL/truncate_table.tc                                   	ported
+DDL/drop_table.tc                                               	DDL/drop_table.tc                                       	ported
+DDL/add_column.tc                                               	DDL/add_column.tc                                       	ported
+DDL/drop_column.tc                                              	DDL/drop_column.tc                                      	ported
+DDL/rename_column.tc                                            	DDL/rename_column.tc                                    	ported
+DDL/add_constraint.tc                                           	DDL/add_constraint.tc                                   	ported
+DDL/drop_constraint.tc                                          	DDL/drop_constraint.tc                                  	ported
+DDL/add_partition.tc                                            	DDL/add_partition.tc                                    	ported
+DDL/drop_partition.tc                                           	DDL/drop_partition.tc                                   	ported
+DDL/coalesce_partition.tc                                       	DDL/coalesce_partition.tc                               	ported
+DDL/split_partition.tc                                          	DDL/split_partition.tc                                  	ported
+DDL/merge_partition.tc                                          	DDL/merge_partition.tc                                  	ported
+DDL/truncate_partition.tc                                       	DDL/truncate_partition.tc                               	ported
+DDL/security_column.tc                                          	DDL/security_column.tc                                  	ported
+DDL/global_index_table.tc                                       	DDL/global_index_table.tc                               	ported
+DDL/partitioned_mview.tc                                        	DDL/partitioned_mview.tc                                	ported
+meta/create_index.tc                                            	meta/create_index.tc                                    	ported
+meta/drop_index.tc                                              	meta/drop_index.tc                                      	ported
+meta/add_constraint.tc                                          	meta/add_constraint.tc                                  	ported
+meta/drop_constraint.tc                                         	meta/drop_constraint.tc                                 	ported
+meta/create_table.tc                                            	meta/create_table.tc                                    	ported
+meta/drop_table.tc                                              	meta/drop_table.tc                                      	ported
+meta/drop_user.tc                                               	meta/drop_user.tc                                       	ported
+meta/drop_tablespace.tc                                         	meta/drop_tablespace.tc                                 	ported
+design/plan.tc                                                  	design/plan.tc                                          	ported
+design/selectivity.tc                                           	design/selectivity.tc                                   	ported
+design/selectivity2.tc                                          	design/selectivity2.tc                                  	ported
+design/indexable_pred.tc                                        	design/indexable_pred.tc                                	ported
+design/join_method.tc                                           	design/join_method.tc                                   	ported
+design/join_pred.tc                                             	design/join_pred.tc                                     	ported
+design/join_pred2.tc                                            	design/join_pred2.tc                                    	ported
+design/host_var.tc                                              	design/host_var.tc                                      	ported
+design/preserved_order.tc                                       	design/preserved_order.tc                               	ported
+design/preserved_order2.tc                                      	design/preserved_order2.tc                              	ported
+design/part_filter.tc                                           	design/part_filter.tc                                   	ported
+design/constant_filter.tc                                       	design/constant_filter.tc                               	ported
+design/subq_key_range.tc                                        	design/subq_key_range.tc                                	ported
+design/hint.tc                                                  	design/hint.tc                                          	ported
+design/view_push_pred.tc                                        	design/view_push_pred.tc                                	ported
+design/table_lock.tc                                            	design/table_lock.tc                                    	ported
+basic/select.tc                                                 	basic/select.tc                                         	ported
+basic/insert_range.tc                                           	basic/insert_range.tc                                   	ported
+basic/insert_hash.tc                                            	basic/insert_hash.tc                                    	ported
+basic/insert_list.tc                                            	basic/insert_list.tc                                    	ported
+basic/insert_part_range.tc                                      	basic/insert_part_range.tc                              	ported
+basic/insert_part_list.tc                                       	basic/insert_part_list.tc                               	ported
+basic/update_range.tc                                           	basic/update_range.tc                                   	ported
+basic/update_hash.tc                                            	basic/update_hash.tc                                    	ported
+basic/update_list.tc                                            	basic/update_list.tc                                    	ported
+basic/delete_range.tc                                           	basic/delete_range.tc                                   	ported
+basic/delete_hash.tc                                            	basic/delete_hash.tc                                    	ported
+basic/delete_list.tc                                            	basic/delete_list.tc                                    	ported
+basic/move_range.tc                                             	basic/move_range.tc                                     	ported
+basic/move_hash.tc                                              	basic/move_hash.tc                                      	ported
+basic/move_list.tc                                              	basic/move_list.tc                                      	ported
+basic/null_value.tc                                             	basic/null_value.tc                                     	ported
+tool/isql/global_index.tc                                       	tool/isql/global_index.tc                               	ported
+tool/aexport/initialize.tc                                      	tool/aexport/initialize.tc                              	ported
+tool/aexport/aexport_all.tc                                     	tool/aexport/aexport_all.tc                             	ported
+tool/aexport/aexport_user.tc                                    	tool/aexport/aexport_user.tc                            	ported
+tool/aexport/aexport_obj.tc                                     	tool/aexport/aexport_obj.tc                             	ported
+tool/atomic/atomic_test.tc                                      	tool/atomic/atomic_test.tc                              	ported
+bugs/function_index.tc                                          	bugs/function_index.tc                                  	ported
+bugs/rollup.tc                                                  	bugs/rollup.tc                                          	ported
+bugs/maxvalue.tc                                                	bugs/maxvalue.tc                                        	ported
+bugs/drop_table.tc                                              	bugs/drop_table.tc                                      	ported
+bugs/reset_subquery_exec.sql                                    	bugs/reset_subquery_exec.sql                            	ported
+bugs/BUG-35460/BUG-35460.tc                                     	bugs/BUG-35460/BUG-35460.tc                             	ported
+PROJ-1624-QC/DuplicateIndexName.tc                              	qc/DuplicateIndexName.tc                                	ported
+PROJ-1624-QC/index.tc                                           	qc/index.tc                                             	ported
+PROJ-1624-QC/index_disable.tc                                   	qc/index_disable.tc                                     	ported
+PROJ-1624-QC/indexThrMovement.sql                               	qc/indexThrMovement.sql                                 	ported
+PROJ-1624-QC/JoinTest.tc                                        	qc/JoinTest.tc                                          	ported
+PROJ-1624-QC/keyrange.tc                                        	qc/keyrange.tc                                          	ported
+PROJ-1624-QC/repl/initialize.tc                                 	-                                                       	held
+PROJ-1624-QC/repl/createIndex.tc                                	-                                                       	held
+PROJ-1624-QC/repl/NoIndexCreate.tc                              	-                                                       	held
+PROJ-1624-QC/repl/finalize.tc                                   	-                                                       	held
+PROJ-1624-QC/PDT/Design/INITIALIZE.sql                          	pdt/Design/INITIALIZE.sql                               	ported
+PROJ-1624-QC/PDT/Design/CREATE_TABLE/RangePartTable.sql         	pdt/Design/CREATE_TABLE/RangePartTable.sql              	ported
+PROJ-1624-QC/PDT/Design/CREATE_TABLE/HashPartTable.sql          	pdt/Design/CREATE_TABLE/HashPartTable.sql               	ported
+PROJ-1624-QC/PDT/Design/CREATE_TABLE/ListPartTable.sql          	pdt/Design/CREATE_TABLE/ListPartTable.sql               	ported
+PROJ-1624-QC/PDT/Design/CREATE_TABLE/AS_SELECT/RangePartTable.sql	pdt/Design/CREATE_TABLE/AS_SELECT/RangePartTable.sql    	ported
+PROJ-1624-QC/PDT/Design/CREATE_TABLE/AS_SELECT/HashPartTable.sql	pdt/Design/CREATE_TABLE/AS_SELECT/HashPartTable.sql     	ported
+PROJ-1624-QC/PDT/Design/CREATE_TABLE/AS_SELECT/ListPartTable.sql	pdt/Design/CREATE_TABLE/AS_SELECT/ListPartTable.sql     	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/HashPartTable_Integer.sql	pdt/Design/ALTER_TABLE/ADD/HashPartTable_Integer.sql    	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/HashPartTable_Date.sql  	pdt/Design/ALTER_TABLE/ADD/HashPartTable_Date.sql       	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/HashPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/ADD/HashPartTable_Varchar.sql    	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/integer_hash.sql        	pdt/Design/ALTER_TABLE/ADD/integer_hash.sql             	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/integer_range.sql       	pdt/Design/ALTER_TABLE/ADD/integer_range.sql            	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/integer_list.sql        	pdt/Design/ALTER_TABLE/ADD/integer_list.sql             	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD/index_partition.sql     	pdt/Design/ALTER_TABLE/ADD/index_partition.sql          	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/COALESCE/HashPartTable_Integer.sql	pdt/Design/ALTER_TABLE/COALESCE/HashPartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/COALESCE/HashPartTable_Date.sql	pdt/Design/ALTER_TABLE/COALESCE/HashPartTable_Date.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/COALESCE/HashPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/COALESCE/HashPartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/RangePartTable_Integer.sql	pdt/Design/ALTER_TABLE/DROP/RangePartTable_Integer.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/RangePartTable_Date.sql	pdt/Design/ALTER_TABLE/DROP/RangePartTable_Date.sql     	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/RangePartTable_Varchar.sql	pdt/Design/ALTER_TABLE/DROP/RangePartTable_Varchar.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/ListPartTable_Integer.sql	pdt/Design/ALTER_TABLE/DROP/ListPartTable_Integer.sql   	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/ListPartTable_Date.sql 	pdt/Design/ALTER_TABLE/DROP/ListPartTable_Date.sql      	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/ListPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/DROP/ListPartTable_Varchar.sql   	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/integer_hash.sql       	pdt/Design/ALTER_TABLE/DROP/integer_hash.sql            	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/integer_range.sql      	pdt/Design/ALTER_TABLE/DROP/integer_range.sql           	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP/integer_list.sql       	pdt/Design/ALTER_TABLE/DROP/integer_list.sql            	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/MERGE/RangePartTable_Integer.sql	pdt/Design/ALTER_TABLE/MERGE/RangePartTable_Integer.sql 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/MERGE/RangePartTable_Date.sql	pdt/Design/ALTER_TABLE/MERGE/RangePartTable_Date.sql    	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/MERGE/RangePartTable_Varchar.sql	pdt/Design/ALTER_TABLE/MERGE/RangePartTable_Varchar.sql 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/MERGE/ListPartTable_Integer.sql	pdt/Design/ALTER_TABLE/MERGE/ListPartTable_Integer.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/MERGE/ListPartTable_Date.sql	pdt/Design/ALTER_TABLE/MERGE/ListPartTable_Date.sql     	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/MERGE/ListPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/MERGE/ListPartTable_Varchar.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/SPLIT/RangePartTable_Integer.sql	pdt/Design/ALTER_TABLE/SPLIT/RangePartTable_Integer.sql 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/SPLIT/RangePartTable_Date.sql	pdt/Design/ALTER_TABLE/SPLIT/RangePartTable_Date.sql    	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/SPLIT/RangePartTable_Varchar.sql	pdt/Design/ALTER_TABLE/SPLIT/RangePartTable_Varchar.sql 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/SPLIT/ListPartTable_Integer.sql	pdt/Design/ALTER_TABLE/SPLIT/ListPartTable_Integer.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/SPLIT/ListPartTable_Date.sql	pdt/Design/ALTER_TABLE/SPLIT/ListPartTable_Date.sql     	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/SPLIT/ListPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/SPLIT/ListPartTable_Varchar.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/RENAME/hash.sql             	pdt/Design/ALTER_TABLE/RENAME/hash.sql                  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/RENAME/range.sql            	pdt/Design/ALTER_TABLE/RENAME/range.sql                 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/RENAME/list.sql             	pdt/Design/ALTER_TABLE/RENAME/list.sql                  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/RangePartTable_Integer.sql	pdt/Design/ALTER_TABLE/TRUNCATE/RangePartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/RangePartTable_Date.sql	pdt/Design/ALTER_TABLE/TRUNCATE/RangePartTable_Date.sql 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/RangePartTable_Varchar.sql	pdt/Design/ALTER_TABLE/TRUNCATE/RangePartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/HashPartTable_Integer.sql	pdt/Design/ALTER_TABLE/TRUNCATE/HashPartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/HashPartTable_Date.sql	pdt/Design/ALTER_TABLE/TRUNCATE/HashPartTable_Date.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/HashPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/TRUNCATE/HashPartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/ListPartTable_Integer.sql	pdt/Design/ALTER_TABLE/TRUNCATE/ListPartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/ListPartTable_Date.sql	pdt/Design/ALTER_TABLE/TRUNCATE/ListPartTable_Date.sql  	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/ListPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/TRUNCATE/ListPartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/hash.sql           	pdt/Design/ALTER_TABLE/TRUNCATE/hash.sql                	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/range.sql          	pdt/Design/ALTER_TABLE/TRUNCATE/range.sql               	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/TRUNCATE/list.sql           	pdt/Design/ALTER_TABLE/TRUNCATE/list.sql                	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ADD_COLUMN/basic.sql        	pdt/Design/ALTER_TABLE/ADD_COLUMN/basic.sql             	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/DROP_COLUMN/basic.sql       	pdt/Design/ALTER_TABLE/DROP_COLUMN/basic.sql            	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ALTER_COLUMN_LOB/basic.sql  	pdt/Design/ALTER_TABLE/ALTER_COLUMN_LOB/basic.sql       	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ALTER_COLUMN_LOB/alter_table.sql	pdt/Design/ALTER_TABLE/ALTER_COLUMN_LOB/alter_table.sql 	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/RangePartTable_Integer.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/RangePartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/RangePartTable_Date.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/RangePartTable_Date.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/RangePartTable_Varchar.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/RangePartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/ListPartTable_Integer.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/ListPartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/ListPartTable_Date.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/ListPartTable_Date.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/ListPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/ListPartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/HashPartTable_Integer.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/HashPartTable_Integer.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/HashPartTable_Date.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/HashPartTable_Date.sql	ported
+PROJ-1624-QC/PDT/Design/ALTER_TABLE/ROW_MOVEMENT/HashPartTable_Varchar.sql	pdt/Design/ALTER_TABLE/ROW_MOVEMENT/HashPartTable_Varchar.sql	ported
+PROJ-1624-QC/PDT/Design/CREATE_INDEX/LOCAL/RangePartTable.sql   	pdt/Design/CREATE_INDEX/LOCAL/RangePartTable.sql        	ported
+PROJ-1624-QC/PDT/Design/CREATE_INDEX/LOCAL/HashPartTable.sql    	pdt/Design/CREATE_INDEX/LOCAL/HashPartTable.sql         	ported
+PROJ-1624-QC/PDT/Design/CREATE_INDEX/LOCAL/ListPartTable.sql    	pdt/Design/CREATE_INDEX/LOCAL/ListPartTable.sql         	ported
+PROJ-1624-QC/PDT/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_range.sql	pdt/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_range.sql  	ported
+PROJ-1624-QC/PDT/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_hash.sql	pdt/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_hash.sql   	ported
+PROJ-1624-QC/PDT/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_list.sql	pdt/Design/CREATE_INDEX/LOCAL_UNIQUE/integer_list.sql   	ported
+PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_range.tc    	pdt/Design/ALTER_INDEX/REBUILD/integer_range.tc         	ported
+PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_hash.tc     	pdt/Design/ALTER_INDEX/REBUILD/integer_hash.tc          	ported
+PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_list.tc     	pdt/Design/ALTER_INDEX/REBUILD/integer_list.tc          	ported
+PROJ-1624-QC/PDT/Design/DROP_TABLESPACE/basic.sql               	pdt/Design/DROP_TABLESPACE/basic.sql                    	ported
+PROJ-1624-QC/PDT/Design/SELECT/integer_hash.tc                  	pdt/Design/SELECT/integer_hash.tc                       	ported
+PROJ-1624-QC/PDT/Design/SELECT/date_hash.tc                     	pdt/Design/SELECT/date_hash.tc                          	ported
+PROJ-1624-QC/PDT/Design/SELECT/varchar_hash.tc                  	pdt/Design/SELECT/varchar_hash.tc                       	ported
+PROJ-1624-QC/PDT/Design/SELECT/numeric_hash.tc                  	pdt/Design/SELECT/numeric_hash.tc                       	ported
+PROJ-1624-QC/PDT/Design/SELECT/integer_range.tc                 	pdt/Design/SELECT/integer_range.tc                      	ported
+PROJ-1624-QC/PDT/Design/SELECT/date_range.tc                    	pdt/Design/SELECT/date_range.tc                         	ported
+PROJ-1624-QC/PDT/Design/SELECT/varchar_range.tc                 	pdt/Design/SELECT/varchar_range.tc                      	ported
+PROJ-1624-QC/PDT/Design/SELECT/numeric_range.tc                 	pdt/Design/SELECT/numeric_range.tc                      	ported
+PROJ-1624-QC/PDT/Design/SELECT/integer_list.tc                  	pdt/Design/SELECT/integer_list.tc                       	ported
+PROJ-1624-QC/PDT/Design/SELECT/date_list.tc                     	pdt/Design/SELECT/date_list.tc                          	ported
+PROJ-1624-QC/PDT/Design/SELECT/varchar_list.tc                  	pdt/Design/SELECT/varchar_list.tc                       	ported
+PROJ-1624-QC/PDT/Design/SELECT/numeric_list.tc                  	pdt/Design/SELECT/numeric_list.tc                       	ported
+PROJ-1624-QC/PDT/Design/INSERT/InsertSelect.tc                  	pdt/Design/INSERT/InsertSelect.tc                       	ported
+PROJ-1624-QC/PDT/Design/DELETE/integer_hash.sql                 	pdt/Design/DELETE/integer_hash.sql                      	ported
+PROJ-1624-QC/PDT/Design/DELETE/integer_range.sql                	pdt/Design/DELETE/integer_range.sql                     	ported
+PROJ-1624-QC/PDT/Design/DELETE/integer_list.sql                 	pdt/Design/DELETE/integer_list.sql                      	ported
+PROJ-1624-QC/PDT/Design/DELETE/RangePartTable.sql               	-                                                       	held
+PROJ-1624-QC/PDT/Design/DELETE/ListPartTable.sql                	pdt/Design/DELETE/ListPartTable.sql                     	ported
+PROJ-1624-QC/PDT/Design/DELETE/HashPartTable.sql                	pdt/Design/DELETE/HashPartTable.sql                     	ported
+PROJ-1624-QC/PDT/Design/UPDATE/integer_hash.sql                 	pdt/Design/UPDATE/integer_hash.sql                      	ported
+PROJ-1624-QC/PDT/Design/UPDATE/integer_range.sql                	pdt/Design/UPDATE/integer_range.sql                     	ported
+PROJ-1624-QC/PDT/Design/UPDATE/integer_list.sql                 	pdt/Design/UPDATE/integer_list.sql                      	ported
+PROJ-1624-QC/PDT/Design/MOVE/integer_hash.sql                   	pdt/Design/MOVE/integer_hash.sql                        	ported
+PROJ-1624-QC/PDT/Design/MOVE/integer_range.sql                  	pdt/Design/MOVE/integer_range.sql                       	ported
+PROJ-1624-QC/PDT/Design/MOVE/integer_list.sql                   	pdt/Design/MOVE/integer_list.sql                        	ported
+PROJ-1624-QC/PDT/Design/LOCK_TABLE/S_NOWAIT.sql                 	pdt/Design/LOCK_TABLE/S_NOWAIT.sql                      	ported
+PROJ-1624-QC/PDT/Design/LOCK_TABLE/IS_NOWAIT.sql                	pdt/Design/LOCK_TABLE/IS_NOWAIT.sql                     	ported
+PROJ-1624-QC/PDT/Design/LOCK_TABLE/IX_NOWAIT.sql                	pdt/Design/LOCK_TABLE/IX_NOWAIT.sql                     	ported
+PROJ-1624-QC/PDT/Design/LOCK_TABLE/X_NOWAIT.sql                 	pdt/Design/LOCK_TABLE/X_NOWAIT.sql                      	ported
+PROJ-1624-QC/PDT/Design/LOCK_TABLE/SIX_NOWAIT.sql               	pdt/Design/LOCK_TABLE/SIX_NOWAIT.sql                    	ported
+PROJ-1624-QC/PDT/Design/FINALIZE.sql                            	pdt/Design/FINALIZE.sql                                 	ported
+PROJ-1624-QC/PDT/Bugs/INITIALIZE.sql                            	pdt/Bugs/INITIALIZE.sql                                 	ported
+PROJ-1624-QC/PDT/Bugs/BUG-9/BUG-9.sql                           	pdt/Bugs/BUG-9/BUG-9.sql                                	ported
+PROJ-1624-QC/PDT/Bugs/BUG-14/BUG-14.sql                         	pdt/Bugs/BUG-14/BUG-14.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-17/BUG-17.sql                         	pdt/Bugs/BUG-17/BUG-17.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-18/BUG-18.sql                         	pdt/Bugs/BUG-18/BUG-18.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-20/BUG-20.sql                         	pdt/Bugs/BUG-20/BUG-20.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-22/BUG-22.sql                         	pdt/Bugs/BUG-22/BUG-22.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-24/BUG-24.sql                         	pdt/Bugs/BUG-24/BUG-24.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-27/BUG-27.sql                         	pdt/Bugs/BUG-27/BUG-27.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-37/BUG-37.sql                         	pdt/Bugs/BUG-37/BUG-37.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-45/BUG-45.sql                         	pdt/Bugs/BUG-45/BUG-45.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-49/BUG-49.sql                         	pdt/Bugs/BUG-49/BUG-49.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/BUG-56/BUG-56.sql                         	pdt/Bugs/BUG-56/BUG-56.sql                              	ported
+PROJ-1624-QC/PDT/Bugs/FINALIZE.sql                              	pdt/Bugs/FINALIZE.sql                                   	ported
