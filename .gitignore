@@ -28,3 +28,10 @@ work/*.ts
 work/altibase.info
 work/altibase.properties
 work/log/*.log
+
+# 복제 레인이 케이스 안에서 짓는 두 인스턴스. initialize.tc 가 RM -rf 로
+# 지우고 다시 만들므로 추적하지 않는다 (repl4 의 db1/db2 와 같다).
+TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/db1/
+TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/db2/
+TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/Altibase.log
+TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/process.out

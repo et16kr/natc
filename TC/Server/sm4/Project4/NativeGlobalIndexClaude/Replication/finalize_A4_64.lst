@@ -1,0 +1,26 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 복제 레인의 두 인스턴스를 내린다.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # initialize.tc 의 짝. 스위트가 자기가 세운 것을 자기가 걷는다 --
+$T0> # 원본 PROJ-1624-QC/repl/replication.ts 와 같은 모양이다.
+$T0> ###########################################################################
+
+$T0> DECLARE SERVER NGI_SERVER1 DB1;
+$T0> DECLARE SERVER NGI_SERVER2 DB2;
+
+$T0> DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+$T0> DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+$T0> THREAD T11 C11
+$T0> THREAD T21 C21
+$T0> join;
+

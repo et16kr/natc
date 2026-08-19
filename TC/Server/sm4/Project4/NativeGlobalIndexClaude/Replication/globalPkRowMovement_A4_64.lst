@@ -1,0 +1,275 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 글로벌 PK 테이블이 복제되고, row movement 가 receiver 에서 한 행으로 반영된다.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # ★ 이 파일이 복제 본문 TC 의 템플릿이다.
+$T0> #
+$T0> # 무엇을 재는가 -- V4 C 트랙(J04 · J05)의 결과다
+$T0> #
+$T0> #   `ERR-314B4` 는 "글로벌 PK 를 가진 테이블은 복제할 수 없다" 였다. V3 B-4
+$T0> #   가 대부분을 걷었고 마지막으로 남은 조합이 **글로벌 PK + row movement**
+$T0> #   였다. J04 가 뿌리를 닫고(qmnUPTE 의 순서를 원본 DELETE -> 대상 INSERT 로
+$T0> #   뒤집었다) J05 가 거부 자체를 걷었다.
+$T0> #
+$T0> #   그러므로 이 케이스가 재는 것은 두 가지다:
+$T0> #     1. 그 테이블에 복제를 걸 수 있는가 (거부가 사라졌는가)
+$T0> #     2. 파티션을 넘는 UPDATE 가 receiver 에서 **정확히 한 행**이 되는가
+$T0> #
+$T0> #   2 가 핵심이다. 송신 측에서 그 UPDATE 는 delete + insert 로 갈린다.
+$T0> #   갈린 채로 반영되면 receiver 에 두 행이 남거나 한 행이 사라진다.
+$T0> #
+$T0> # 어떻게 재는가 -- 값으로 잰다
+$T0> #   송신 측에 N 건을 넣고 수신 측에서 N 건이 같은 값으로 보이면 apply 된
+$T0> #   것이다. 별도 계수 장치가 필요 없다. 보조로 X$REPRECEIVER 의 카운터를
+$T0> #   같이 찍는다.
+$T0> #
+$T0> # 알아 둘 관용구 (다른 복제 케이스를 쓸 때 그대로 쓴다)
+$T0> #   - '${HOST_IP@DB2}' · ${ALTIBASE_REPLICATION_PORT_NO@DB2}
+$T0> #       다른 서버의 값을 참조한다. **.lst 에는 전개되지 않은 원문 그대로**
+$T0> #       찍히므로 호스트·포트가 기대값에 새지 않는다 -- 그래서 케이스가
+$T0> #       기계 독립이다.
+$T0> #   - ALTER REPLICATION <n> FLUSH;
+$T0> #       수신 측을 읽기 전의 동기화 배리어. 이것 없이 읽으면 깜빡인다.
+$T0> #   - JOIN;  스레드 배리어.
+$T0> #   - .lst 는 T0 에 제어 흐름만, 그다음 스레드별로 묶여 전사된다.
+$T0> #     시간순 인터리브가 아니라서 결정적이다.
+$T0> ###########################################################################
+
+$T0> DECLARE SERVER NGI_SERVER1 DB1;
+$T0> DECLARE SERVER NGI_SERVER2 DB2;
+
+$T0> DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+$T0> DECLARE CLIENT DEFAULT C2 ( SERVER = DB2 );
+
+$T0> ##################################
+$T0> SECTOR 0; PREPARATION
+$T0> ##################################
+
+$T0> THREAD T1 C1
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 1; 1 -- 기본 DML 이 반영된다
+$T0> ##################################
+
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 2; 2 -- row movement 가 한 행으로 반영된다
+$T0> ##################################
+
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 3; 3 -- 여러 건을 옮겨도 같다
+$T0> ##################################
+
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+
+$T0> THREAD T1 C1
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T1> SKIP BEGIN;
+$T1> ALTER REPLICATION NGI_REP STOP;
+$T1> DROP REPLICATION NGI_REP;
+$T1> DROP TABLE NGI_RP_PK;
+$T1> SKIP END;
+
+$T1> # 파티션 키는 P, PK 는 K -- PK 가 파티션 키를 **포함하지 않으므로**
+$T1> # 이 PK 는 글로벌이다. 그것이 ERR-314B4 가 겨누던 모양이다.
+$T1> CREATE TABLE NGI_RP_PK
+        (
+            P INTEGER,
+            K INTEGER PRIMARY KEY,
+            V VARCHAR(16)
+        )
+        PARTITION BY RANGE ( P )
+        (
+            PARTITION P1 VALUES LESS THAN ( 10 ),
+            PARTITION P2 VALUES LESS THAN ( 20 ),
+            PARTITION PD VALUES DEFAULT
+        ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T1> ALTER TABLE NGI_RP_PK ENABLE ROW MOVEMENT;
+Alter success.
+
+$T1> # 그 PK 가 정말 네이티브 글로벌인가 (판별자 101 · 숨김 테이블 없음)
+$T1> SELECT COUNT(*) AS PK_IS_NATIVE_GLOBAL
+          FROM SYSTEM_.SYS_PART_INDICES_ PI, SYSTEM_.SYS_INDICES_ I
+         WHERE PI.INDEX_ID = I.INDEX_ID
+           AND PI.PARTITION_TYPE = 101
+           AND I.TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                               WHERE TABLE_NAME = 'NGI_RP_PK' );
+PK_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+
+$T1> # ★ 여기가 ERR-314B4 가 나던 자리다. 지금은 서야 한다.
+$T1> CREATE REPLICATION NGI_REP
+            WITH '${HOST_IP@DB2}', ${ALTIBASE_REPLICATION_PORT_NO@DB2}
+            FROM SYS.NGI_RP_PK TO SYS.NGI_RP_PK;
+Create success.
+$T1> ALTER REPLICATION NGI_REP START;
+Alter success.
+
+$T1> INSERT INTO NGI_RP_PK VALUES ( 1,  101, 'A' );
+1 row inserted.
+$T1> INSERT INTO NGI_RP_PK VALUES ( 11, 102, 'B' );
+1 row inserted.
+$T1> INSERT INTO NGI_RP_PK VALUES ( 21, 103, 'C' );
+1 row inserted.
+$T1> COMMIT;
+Commit success.
+
+$T1> ALTER REPLICATION NGI_REP FLUSH;
+Alter success.
+$T1> # P 를 1 -> 15 로 바꾸면 로우가 P1 에서 P2 로 옮겨 간다.
+$T1> # 송신 측에서 이 한 문장은 DELETE + INSERT 로 갈린다.
+$T1> UPDATE NGI_RP_PK SET P = 15, V = 'A-MOVED' WHERE K = 101;
+1 row updated.
+$T1> COMMIT;
+Commit success.
+
+$T1> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+P           K           V                 
+----------------------------------------------
+15          101         A-MOVED           
+11          102         B                 
+21          103         C                 
+3 rows selected.
+
+$T1> ALTER REPLICATION NGI_REP FLUSH;
+Alter success.
+$T1> UPDATE NGI_RP_PK SET P = P + 10 WHERE K IN ( 102, 103 );
+2 rows updated.
+$T1> COMMIT;
+Commit success.
+$T1> ALTER REPLICATION NGI_REP FLUSH;
+Alter success.
+$T1> ALTER REPLICATION NGI_REP STOP;
+Alter success.
+$T1> DROP REPLICATION NGI_REP;
+Drop success.
+$T1> DROP TABLE NGI_RP_PK;
+Drop success.
+$T2> SKIP BEGIN;
+$T2> ALTER REPLICATION NGI_REP STOP;
+$T2> DROP REPLICATION NGI_REP;
+$T2> DROP TABLE NGI_RP_PK;
+$T2> SKIP END;
+
+$T2> CREATE TABLE NGI_RP_PK
+        (
+            P INTEGER,
+            K INTEGER PRIMARY KEY,
+            V VARCHAR(16)
+        )
+        PARTITION BY RANGE ( P )
+        (
+            PARTITION P1 VALUES LESS THAN ( 10 ),
+            PARTITION P2 VALUES LESS THAN ( 20 ),
+            PARTITION PD VALUES DEFAULT
+        ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T2> ALTER TABLE NGI_RP_PK ENABLE ROW MOVEMENT;
+Alter success.
+
+$T2> CREATE REPLICATION NGI_REP
+            WITH '${HOST_IP@DB1}', ${ALTIBASE_REPLICATION_PORT_NO@DB1}
+            FROM SYS.NGI_RP_PK TO SYS.NGI_RP_PK;
+Create success.
+$T2> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+P           K           V                 
+----------------------------------------------
+1           101         A                 
+11          102         B                 
+21          103         C                 
+3 rows selected.
+$T2> SELECT COUNT(*) AS RECEIVED_ROWS FROM NGI_RP_PK;
+RECEIVED_ROWS        
+-----------------------
+3                    
+1 row selected.
+$T2> # ★ 여기가 이 케이스의 핵심이다.
+$T2> #   K = 101 이 **한 행**이어야 하고 P 가 15 여야 한다.
+$T2> #   갈린 채로 반영되면 두 행이 되거나 사라진다.
+$T2> SELECT COUNT(*) AS K101_ROW_COUNT FROM NGI_RP_PK WHERE K = 101;
+K101_ROW_COUNT       
+-----------------------
+1                    
+1 row selected.
+$T2> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+P           K           V                 
+----------------------------------------------
+15          101         A-MOVED           
+11          102         B                 
+21          103         C                 
+3 rows selected.
+$T2> SELECT COUNT(*) AS TOTAL_AFTER_MOVE FROM NGI_RP_PK;
+TOTAL_AFTER_MOVE     
+-----------------------
+3                    
+1 row selected.
+$T2> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+P           K           V                 
+----------------------------------------------
+15          101         A-MOVED           
+21          102         B                 
+31          103         C                 
+3 rows selected.
+$T2> SELECT COUNT(*) AS TOTAL_AFTER_BULK FROM NGI_RP_PK;
+TOTAL_AFTER_BULK     
+-----------------------
+3                    
+1 row selected.
+$T2> SELECT REP_NAME, INSERT_SUCCESS_COUNT FROM X$REPRECEIVER;
+REP_NAME                                  INSERT_SUCCESS_COUNT 
+------------------------------------------------------------------
+NGI_REP                                   5                    
+1 row selected.
+$T2> SELECT REP_NAME, DELETE_SUCCESS_COUNT FROM X$REPRECEIVER;
+REP_NAME                                  DELETE_SUCCESS_COUNT 
+------------------------------------------------------------------
+NGI_REP                                   2                    
+1 row selected.
+$T2> SELECT REP_NAME, UPDATE_SUCCESS_COUNT FROM X$REPRECEIVER;
+REP_NAME                                  UPDATE_SUCCESS_COUNT 
+------------------------------------------------------------------
+NGI_REP                                   1                    
+1 row selected.
+$T2> SKIP BEGIN;
+$T2> ALTER REPLICATION NGI_REP STOP;
+$T2> SKIP END;
+$T2> DROP REPLICATION NGI_REP;
+Drop success.
+$T2> DROP TABLE NGI_RP_PK;
+Drop success.
+

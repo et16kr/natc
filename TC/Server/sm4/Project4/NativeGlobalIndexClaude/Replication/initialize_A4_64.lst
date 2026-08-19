@@ -1,0 +1,87 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 복제 레인의 두 인스턴스를 세운다.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # ★ 이 파일이 복제 TC 의 템플릿이다 -- 새 복제 케이스는 이것을 보고 쓴다.
+$T0> #
+$T0> # 관례 (원본 PROJ-1624-QC/repl/initialize.tc, sm4 PROJ-2429 과 같은 모양)
+$T0> #
+$T0> #   프로젝트마다 **자기 서버 이름과 자기 db1/db2** 를 갖는다. repl4 의
+$T0> #   REPL_SERVER1/2/3 은 conf/server.conf 가 ALTIBASE_HOME 을
+$T0> #   TC/Server/repl4/db1 로 박아 두었으므로 남의 것이고, 쓰지 않는다.
+$T0> #
+$T0> #   우리 블록은 conf/server.conf 의 [NGI_SERVER1] / [NGI_SERVER2] 이고
+$T0> #   ALTIBASE_HOME 이 이 디렉터리의 db1 / db2 를 가리킨다.
+$T0> #
+$T0> #   $ALTIBASE_HOME_C0 로 **컨트롤러의 home 을 먼저 잡는다.** 스레드 안에서
+$T0> #   $ALTIBASE_HOME 은 그 스레드가 붙은 서버의 것이 되므로, 원본 설치에서
+$T0> #   bin/msg/conf 를 복사하려면 잡아 둔 값이 필요하다.
+$T0> #
+$T0> # 왜 이 레인이 이제야 열렸는가
+$T0> #   종전 진단은 "stdFunc.i 가 include 시점에 ALTIBASE_HOME 을 굳혀서
+$T0> #   프레임워크가 막는다" 였다. 틀렸다. 막고 있던 것은 conf/server.conf 에
+$T0> #   우리 블록이 없던 것 하나이고, 그것을 더해 열었다.
+$T0> #   (통합 계획 §9.3 · §10.1)
+$T0> ###########################################################################
+
+
+$T0> DECLARE SERVER NGI_SERVER1 DB1;
+$T0> DECLARE SERVER NGI_SERVER2 DB2;
+
+$T0> DECLARE CLIENT DEFAULT C11 (SERVER=DB1);
+$T0> DECLARE CLIENT DEFAULT C21 (SERVER=DB2);
+
+$T0> SET_ENV ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+$T0> THREAD T11 C11
+$T0> THREAD T21 C21
+$T0> join;
+$T11> --########################################
+$T11> --# Set Up DB 1
+$T11> --########################################
+
+$T11> SET_ENV @DB1 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+$T11> RM -rf "db1";
+
+$T11> MKDIR "db1";
+$T11> MKDIR "db1/conf";
+$T11> MKDIR "db1/dbs";
+$T11> MKDIR "db1/logs";
+$T11> MKDIR "db1/trc";
+$T11> MKDIR "db1/arch_logs";
+
+$T11> CP -r "${ALTIBASE_HOME_C0}/bin" "db1/bin";
+$T11> CP -r "${ALTIBASE_HOME_C0}/msg" "db1/msg";
+$T11> CP "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db1/conf/altibase.properties";
+$T11> CP "${ALTIBASE_HOME_C0}/conf/license" "db1/conf/license";
+
+$T21> --########################################
+$T21> --# Set Up DB 2
+$T21> --########################################
+
+$T21> SET_ENV @DB2 ALTIBASE_REPLICATION_LOCK_TIMEOUT="30";
+
+$T21> RM -rf "db2";
+
+$T21> MKDIR "db2";
+$T21> MKDIR "db2/conf";
+$T21> MKDIR "db2/dbs";
+$T21> MKDIR "db2/logs";
+$T21> MKDIR "db2/trc";
+$T21> MKDIR "db2/arch_logs";
+
+$T21> CP -r "${ALTIBASE_HOME_C0}/bin" "db2/bin";
+$T21> CP -r "${ALTIBASE_HOME_C0}/msg" "db2/msg";
+$T21> CP "${ALTIBASE_HOME_C0}/conf/altibase.properties" "db2/conf/altibase.properties";
+$T21> CP "${ALTIBASE_HOME_C0}/conf/license" "db2/conf/license";
+
+
