@@ -1,0 +1,215 @@
+###########################################################################
+# TestCase Description = UPDATE 와 DELETE 후 글로벌 인덱스 정합성.
+#                        키 컬럼 갱신, 비키 컬럼 갱신, 반복 갱신, 대량 삭제.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; UPDATE KEY COLUMN
+##################################
+# 인덱스 키 컬럼을 바꾸면 옛 키가 지워지고 새 키가 들어가야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+update t1 set i2 = i2 + 10000 where i1 < 10;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# 옛 값으로는 찾히면 안 된다
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 between 1 and 9;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 >= 10000;
+
+##################################
+# SECTOR; UPDATE NON-KEY COLUMN
+##################################
+# 인덱스와 무관한 컬럼만 바꾸면 인덱스는 그대로여야 한다.
+
+update t1 set i4 = i4 + 1 where i1 < 50;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; UPDATE ALL PARTITIONS
+##################################
+
+update t1 set i2 = i2 + 1;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; REPEATED UPDATE
+##################################
+# 같은 로우를 여러 번 갱신한다. 중간 버전의 키가 남으면 안 된다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+insert into t1 values (10, 1, 1, 1);
+insert into t1 values (150, 2, 2, 2);
+insert into t1 values (250, 3, 3, 3);
+commit;
+
+for $sStep in 1 2 3 4 5
+{
+  update t1 set i2 = i2 + 100 where i1 = 10;
+  commit;
+  CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+}
+
+select i1, i2 from t1 order by i1;
+
+##################################
+# SECTOR; UPDATE IN ONE TRANSACTION
+##################################
+# 커밋하지 않은 상태에서 여러 번 갱신한 뒤 커밋한다.
+
+update t1 set i2 = i2 + 1 where i1 = 150;
+update t1 set i2 = i2 + 1 where i1 = 150;
+update t1 set i2 = i2 + 1 where i1 = 150;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+select i1, i2 from t1 order by i1;
+
+##################################
+# SECTOR; UPDATE AND ROLLBACK
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+update t1 set i2 = i2 + 50000;
+rollback;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 >= 50000;
+
+##################################
+# SECTOR; UPDATE AND SAVEPOINT ROLLBACK
+##################################
+# savepoint 는 트랜잭션 안에서만 산다. 자동 커밋 상태에서는 문장마다
+# 커밋되어 savepoint 가 즉시 사라지고, rollback to savepoint 가
+# ERR-11016(Savepoint not found) 이 된다. 그래서 이 섹터는 자동 커밋을 끈다.
+alter session set autocommit = false;
+
+savepoint sp1;
+update t1 set i2 = i2 + 60000 where i1 < 50;
+savepoint sp2;
+update t1 set i2 = i2 + 70000 where i1 >= 200;
+
+rollback to savepoint sp2;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+rollback to savepoint sp1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+rollback;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter session set autocommit = true;
+
+##################################
+# SECTOR; DELETE SOME
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3);
+
+CALL FILL_RANGE_DATA();
+
+# 파티션마다 일부씩 지운다
+delete from t1 where i1 < 10;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+delete from t1 where i1 >= 100 and i1 < 110;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+delete from t1 where i1 >= 200 and i1 < 210;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx2", "i1, i3", "i3" );
+
+##################################
+# SECTOR; DELETE WHOLE PARTITION WORTH
+##################################
+# 한 파티션의 로우를 전부 지운다. 파티션 자체는 남는다.
+
+delete from t1 where i1 < 100;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; DELETE ALL
+##################################
+
+delete from t1;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+
+# 빈 인덱스에 다시 넣는다
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; DELETE AND ROLLBACK
+##################################
+
+delete from t1;
+rollback;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

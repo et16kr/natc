@@ -1,0 +1,228 @@
+###########################################################################
+# TestCase Description = 파티션 키를 바꿔 로우가 다른 파티션으로 이동할 때
+#                        글로벌 인덱스가 자동으로 정합을 유지하는지 확인한다.
+#                        구버전은 이 경로에 전용 코드가 있었지만 네이티브는
+#                        delete + insert 로 자연히 처리되어야 한다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+#
+# row movement 가 켜진 range 파티션드 테이블.
+#
+DEF CREATE_MOVABLE_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+enable row movement
+tablespace sys_tbs_mem_data;
+}
+
+DEF CREATE_MOVABLE_TABLE_MULTI_TBS()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100) tablespace mem1,
+  partition p2 values less than (200) tablespace mem2,
+  partition p3 values default tablespace mem3
+)
+enable row movement;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; SINGLE ROW MOVE
+##################################
+# 로우 하나를 파티션 사이로 옮긴다. 인덱스 키 값(i2)은 그대로이므로
+# 값은 유지되고 위치만 바뀐다.
+
+CALL CREATE_MOVABLE_TABLE();
+
+create index gidx1 on t1(i2);
+
+insert into t1 values (10, 1000, 1, 1);
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# p1 -> p2
+update t1 set i1 = 150 where i2 = 1000;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# p2 -> p3
+update t1 set i1 = 250 where i2 = 1000;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# p3 -> p1 (역방향)
+update t1 set i1 = 50 where i2 = 1000;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; MOVE WITH KEY CHANGE
+##################################
+# 파티션 키와 인덱스 키를 동시에 바꾼다. 옛 키가 지워지고 새 키가
+# 들어가야 한다.
+
+update t1 set i1 = 150, i2 = 2000 where i2 = 1000;
+commit;
+
+select i1, i2 from t1 order by i1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# 옛 키로는 찾히면 안 된다
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 1000;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 2000;
+
+##################################
+# SECTOR; BULK MOVE
+##################################
+# 여러 로우를 한 번에 옮긴다.
+
+CALL CREATE_MOVABLE_TABLE();
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3, i2);
+
+CALL FILL_RANGE_DATA();
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+
+# p1 의 로우 전부를 p3 로
+update t1 set i1 = i1 + 250 where i1 < 100;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx2", "i1, i3", "i3" );
+
+# 다시 되돌린다
+update t1 set i1 = i1 - 250 where i1 >= 250 and i2 < 100;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; MOVE ACROSS TABLESPACES
+##################################
+# 파티션이 서로 다른 테이블스페이스에 있을 때의 이동.
+# 로우의 소속 테이블스페이스가 바뀌므로 인덱스가 로우 위치를 해석하는
+# 방식이 틀리면 여기서 드러난다.
+
+CALL CREATE_MOVABLE_TABLE_MULTI_TBS();
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# mem1 -> mem3
+update t1 set i1 = i1 + 250 where i1 < 100;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+# mem3 -> mem2
+update t1 set i1 = 150 where i1 >= 250 and i2 < 10;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; MOVE AND ROLLBACK
+##################################
+# 이동을 롤백하면 옛 위치의 키가 복원되고 새 위치의 키는 사라져야 한다.
+
+CALL CREATE_MOVABLE_TABLE();
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+update t1 set i1 = i1 + 250 where i1 < 100;
+rollback;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; MOVE WITHOUT ROW MOVEMENT ENABLED
+##################################
+# row movement 가 꺼져 있으면 파티션을 넘는 update 는 실패해야 한다.
+# 실패한 뒤에도 인덱스는 정합이어야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+
+update t1 set i1 = i1 + 250 where i1 < 100;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

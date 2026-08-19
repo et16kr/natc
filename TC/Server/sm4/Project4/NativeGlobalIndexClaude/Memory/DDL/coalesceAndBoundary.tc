@@ -1,0 +1,264 @@
+###########################################################################
+# TestCase Description = COALESCE PARTITION(해시)과 파티션 경계값.
+#                        구버전 DDL/coalesce_partition.tc, bugs/maxvalue.tc 에
+#                        해당한다. 해시 파티션은 coalesce 로 파티션 수가
+#                        줄면서 로우가 재분배되므로 인덱스가 가리키는 위치가
+#                        대량으로 바뀐다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+#
+# 해시 파티션 4개.
+#
+DEF CREATE_HASH4_TABLE()
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4
+)
+tablespace sys_tbs_mem_data;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; COALESCE HASH PARTITION
+##################################
+# 파티션 수를 줄인다. 사라지는 파티션의 로우가 남은 파티션으로
+# 재분배되므로, 인덱스의 로우 위치가 대량으로 바뀐다.
+
+CALL CREATE_HASH4_TABLE();
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3);
+
+insert into t1 select level, level, level * 2, level * 3 from dual connect by level <= 120;
+commit;
+
+select count(*) from t1;
+select /*+ index(t1, gidx1) */ count(i2) from t1 where i2 is not null;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+alter table t1 coalesce partition;
+
+select count(*) from t1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+CALL CHECK_INDEX_SCAN( "t1", "gidx2", "i1, i3", "i3 is not null" );
+
+# 값 자체가 보존됐는지
+select /*+ index(t1, gidx1) */ min(i2), max(i2), sum(i2), count(*) from t1;
+select /*+ FULL SCAN(t1) */ min(i2), max(i2), sum(i2), count(*) from t1;
+
+# 한 번 더 줄인다
+alter table t1 coalesce partition;
+
+select count(*) from t1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+# coalesce 후 DML
+insert into t1 values (500, 500, 1, 1);
+commit;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+update t1 set i2 = i2 + 1 where i1 < 10;
+commit;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+delete from t1 where i1 > 110;
+commit;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; COALESCE WITH UNIQUE INDEX
+##################################
+# 재분배 후에도 파티션 간 유일성이 유지되어야 한다.
+
+CALL CREATE_HASH4_TABLE();
+
+create unique index t1_uk on t1(i2);
+
+insert into t1 select level, level, level, level from dual connect by level <= 100;
+commit;
+
+alter table t1 coalesce partition;
+
+CALL CHECK_INDEX_SCAN( "t1", "t1_uk", "i1, i2", "i2 is not null" );
+
+# 기존 값 재삽입 -> 실패해야 한다
+insert into t1 values (500, 50, 1, 1);
+
+# 새 값 -> 성공
+insert into t1 values (500, 5000, 1, 1);
+commit;
+
+select count(*) from t1;
+
+##################################
+# SECTOR; ADD HASH PARTITION
+##################################
+# 반대 방향. 파티션을 늘리면 역시 재분배가 일어난다.
+
+alter table t1 add partition p4;
+
+CALL CHECK_INDEX_SCAN( "t1", "t1_uk", "i1, i2", "i2 is not null" );
+select count(*) from t1;
+
+alter table t1 add partition p4;
+
+CALL CHECK_INDEX_SCAN( "t1", "t1_uk", "i1, i2", "i2 is not null" );
+select count(*) from t1;
+
+insert into t1 values (600, 6000, 1, 1);
+commit;
+CALL CHECK_INDEX_SCAN( "t1", "t1_uk", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; RANGE BOUNDARY VALUES
+##################################
+# 경계값이 어느 파티션으로 가는지, 그리고 인덱스가 그 로우를 옳게
+# 가리키는지. VALUES LESS THAN 은 상한 미포함이다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values less than (maxvalue)
+)
+tablespace sys_tbs_mem_data;
+
+create index gidx1 on t1(i2);
+
+# 경계 바로 앞뒤
+insert into t1 values (99,  99,  1, 1);
+insert into t1 values (100, 100, 1, 1);
+insert into t1 values (199, 199, 2, 2);
+insert into t1 values (200, 200, 2, 2);
+commit;
+
+select 'P1' part_name, count(*) cnt from t1 partition (p1)
+union all
+select 'P2', count(*) from t1 partition (p2)
+union all
+select 'P3', count(*) from t1 partition (p3)
+order by 1;
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 order by i1;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; MAXVALUE PARTITION
+##################################
+# maxvalue 파티션에 극단값을 넣는다.
+
+insert into t1 values (2147483647, 2147483647, 3, 3);
+insert into t1 values (-2147483648, -2147483648, 0, 0);
+commit;
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 order by i1;
+select /*+ FULL SCAN(t1) */ i1, i2 from t1 order by i1;
+
+select /*+ index(t1, gidx1) */ min(i2), max(i2) from t1;
+select /*+ FULL SCAN(t1) */ min(i2), max(i2) from t1;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; NULL PARTITION KEY
+##################################
+# 파티션 키가 NULL 인 로우는 maxvalue(또는 default) 파티션으로 간다.
+
+insert into t1 values (null, 12345, 9, 9);
+commit;
+
+select nvl(i1, -1) i1, i2 from t1 where i2 = 12345;
+select /*+ index(t1, gidx1) */ nvl(i1, -1) i1, i2 from t1 where i2 = 12345;
+
+select 'P3' part_name, count(*) cnt from t1 partition (p3);
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i2", "i2 is not null" );
+
+##################################
+# SECTOR; LIST DEFAULT PARTITION
+##################################
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by list(i1)
+(
+  partition p1 values (10, 20, 30),
+  partition p2 values (40, 50),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+create index gidx1 on t1(i2);
+
+insert into t1 values (10, 1, 1, 1);
+insert into t1 values (20, 2, 2, 2);
+insert into t1 values (40, 3, 3, 3);
+insert into t1 values (99, 4, 4, 4);
+insert into t1 values (null, 5, 5, 5);
+commit;
+
+select 'P1' part_name, count(*) cnt from t1 partition (p1)
+union all
+select 'P2', count(*) from t1 partition (p2)
+union all
+select 'P3', count(*) from t1 partition (p3)
+order by 1;
+
+select /*+ index(t1, gidx1) */ nvl(i1, -1) i1, i2 from t1 order by i2;
+CALL CHECK_INDEX_SCAN( "t1", "gidx1", "i2", "i2 is not null" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

@@ -1,0 +1,208 @@
+###########################################################################
+# TestCase Description = 조인, 서브쿼리 키 레인지, 상수 필터.
+#                        글로벌 인덱스가 조인의 안쪽 테이블로 쓰이거나,
+#                        서브쿼리 결과가 키 레인지가 되는 경우.
+#                        구버전 design/join_pred.tc, join_method.tc,
+#                        subq_key_range.tc, constant_filter.tc 에 해당한다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+SKIP END;
+CALL SHOW_PLAN_OFF();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+create index gidx2 on t1(i3);
+create index lidx1 on t1(i4) local;
+
+CALL FILL_RANGE_DATA();
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+
+create table t2( c1 integer, c2 integer, c3 integer )
+tablespace sys_tbs_mem_data;
+
+insert into t2 select level, level, level * 10 from dual connect by level <= 10;
+insert into t2 select level + 100, level + 100, level * 10 from dual connect by level <= 10;
+insert into t2 select level + 200, level + 200, level * 10 from dual connect by level <= 10;
+commit;
+
+##################################
+# SECTOR; JOIN PREDICATE ON GLOBAL INDEX KEY
+##################################
+# 조인 조건이 글로벌 인덱스 키 컬럼이다. 파티션드 테이블이 안쪽이면
+# 글로벌 인덱스로 한 번에 찾을 수 있다.
+
+select t1.i1, t1.i2, t2.c1, t2.c2
+from t1, t2
+where t1.i2 = t2.c2
+order by t1.i1, t2.c1;
+
+select count(*) from t1, t2 where t1.i2 = t2.c2;
+
+##################################
+# SECTOR; JOIN METHOD
+##################################
+# 조인 방식을 강제해도 결과가 같아야 한다.
+
+CALL SHOW_PLAN_ON();
+
+select /*+ use_nl(t1,t2) */ count(*) from t1, t2 where t1.i2 = t2.c2;
+select /*+ use_hash(t1,t2) */ count(*) from t1, t2 where t1.i2 = t2.c2;
+select /*+ use_sort(t1,t2) */ count(*) from t1, t2 where t1.i2 = t2.c2;
+select /*+ use_index_nl(t1,t2) */ count(*) from t1, t2 where t1.i2 = t2.c2;
+
+CALL SHOW_PLAN_OFF();
+
+# 결과 자체가 방식과 무관하게 같은지
+select /*+ use_nl(t1,t2) */ t1.i2 from t1, t2 where t1.i2 = t2.c2 order by t1.i2;
+select /*+ use_hash(t1,t2) */ t1.i2 from t1, t2 where t1.i2 = t2.c2 order by t1.i2;
+
+##################################
+# SECTOR; JOIN ON PARTITION KEY
+##################################
+# 조인 조건이 파티션 키다. 프루닝이 가능하므로 로컬 인덱스가 유리할 수
+# 있다.
+
+CALL SHOW_PLAN_ON();
+
+select count(*) from t1, t2 where t1.i1 = t2.c1;
+
+CALL SHOW_PLAN_OFF();
+
+select t1.i1, t2.c1 from t1, t2 where t1.i1 = t2.c1 order by t1.i1;
+
+##################################
+# SECTOR; OUTER JOIN
+##################################
+
+select t2.c1, t1.i1, t1.i2
+from t2 left outer join t1 on t2.c2 = t1.i2
+order by t2.c1;
+
+select count(*) from t2 left outer join t1 on t2.c2 = t1.i2;
+
+##################################
+# SECTOR; SUBQUERY KEY RANGE
+##################################
+# 서브쿼리 결과가 글로벌 인덱스의 키 레인지가 된다.
+
+select /*+ index(t1, gidx1) */ i1, i2
+from t1
+where i2 in ( select c2 from t2 where c1 < 5 )
+order by i1;
+
+select /*+ index(t1, gidx1) */ count(*)
+from t1
+where i2 in ( select c2 from t2 );
+
+# 서브쿼리가 여러 파티션에 걸친 값을 반환하는 경우
+select /*+ index(t1, gidx1) */ i1, i2
+from t1
+where i2 in ( select c2 from t2 where c2 in (5, 105, 205) )
+order by i1;
+
+# 결과가 없는 서브쿼리
+select /*+ index(t1, gidx1) */ count(*)
+from t1
+where i2 in ( select c2 from t2 where c1 > 99999 );
+
+##################################
+# SECTOR; EXISTS AND NOT EXISTS
+##################################
+
+select count(*) from t1 where exists ( select 1 from t2 where t2.c2 = t1.i2 );
+select count(*) from t1 where not exists ( select 1 from t2 where t2.c2 = t1.i2 );
+
+##################################
+# SECTOR; SCALAR SUBQUERY
+##################################
+
+select /*+ index(t1, gidx1) */ i1, i2
+from t1
+where i2 = ( select max(c2) from t2 where c1 < 10 )
+order by i1;
+
+##################################
+# SECTOR; CONSTANT FILTER
+##################################
+# 항상 참/거짓인 조건이 붙었을 때.
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 > 0 and 1 = 1;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 > 0 and 1 = 0;
+select /*+ index(t1, gidx1) */ count(*) from t1 where 1 = 1;
+
+##################################
+# SECTOR; IN LIST
+##################################
+# 여러 파티션에 흩어진 값들.
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 in (1, 101, 201) order by i1;
+select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 in (1, 2, 3) order by i1;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 in (99998, 99999);
+
+##################################
+# SECTOR; OR PREDICATE
+##################################
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 = 5 or i2 = 105;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 < 5 or i2 > 225;
+
+##################################
+# SECTOR; VIEW AND DERIVED TABLE
+##################################
+
+select count(*) from ( select i1, i2 from t1 where i2 > 100 ) v1;
+
+select v1.i2, t2.c2
+from ( select i1, i2 from t1 where i2 > 100 ) v1, t2
+where v1.i2 = t2.c2
+order by v1.i2;
+
+##################################
+# SECTOR; UNION AND MINUS
+##################################
+
+select i2 from t1 where i2 < 5
+union all
+select i2 from t1 where i2 > 225
+order by 1;
+
+select count(*) from ( select i2 from t1 minus select c2 from t2 );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

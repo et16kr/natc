@@ -1,0 +1,217 @@
+###########################################################################
+# TestCase Description = 테이블 잠금과 글로벌 인덱스.
+#
+#                        글로벌 인덱스 스캔은 논리 테이블을 열고 여러
+#                        파티션의 로우를 반환한다. 그래서 잠금이 논리
+#                        테이블과 파티션 어느 쪽에, 어떤 모드로 걸리는지가
+#                        로컬 인덱스와 다르다.
+#                        구버전 design/table_lock.tc 에 해당한다.
+#                        (여러 세션이 필요한 경합 시험은 deferred/ 참조)
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+# 자동 커밋을 되돌린다. 이 파일이 껐으므로 다음 케이스에 새면 안 된다.
+alter session set autocommit = true;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+#
+# 현재 세션이 잡고 있는 잠금을 보여 준다.
+#
+DEF SHOW_LOCK()
+{
+# V$LOCK 이 들고 있는 것은 TABLE_ID 가 아니라 TABLE_OID 다.
+# (LOCK_ITEM_TYPE, TBS_ID, TABLE_OID, DBF_ID, TRANS_ID, LOCK_DESC,
+#  LOCK_CNT, IS_GRANT)
+  select t.table_name, l.lock_desc
+  from v$lock l, system_.sys_tables_ t
+  where l.table_oid = t.table_oid
+    and t.user_id = user_id()
+    and t.table_name like 'T1%'
+  order by t.table_name, l.lock_desc;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+create index lidx1 on t1(i4) local;
+
+CALL FILL_RANGE_DATA();
+
+##################################
+# SECTOR; EXPLICIT LOCK TABLE
+##################################
+# 논리 테이블에 명시적으로 잠금을 건다.
+#
+# LOCK TABLE 은 자동 커밋 상태에서 쓸 수 없다(ERR-41057). 잠금을 잡자마자
+# 커밋되어 버리면 의미가 없기 때문이다. 이 파일은 잠금을 잡고 V$LOCK 을
+# 들여다보는 것이 목적이므로 여기서부터 자동 커밋을 끈다.
+alter session set autocommit = false;
+
+lock table t1 in share mode;
+CALL SHOW_LOCK();
+commit;
+
+lock table t1 in exclusive mode;
+CALL SHOW_LOCK();
+commit;
+
+lock table t1 in row share mode;
+CALL SHOW_LOCK();
+commit;
+
+lock table t1 in row exclusive mode;
+CALL SHOW_LOCK();
+commit;
+
+##################################
+# SECTOR; LOCK WITH PARTITION
+##################################
+# 파티션 단위 잠금.
+
+lock table t1 partition (p1) in exclusive mode;
+CALL SHOW_LOCK();
+commit;
+
+lock table t1 partition (p2) in share mode;
+CALL SHOW_LOCK();
+commit;
+
+##################################
+# SECTOR; LOCK WAIT OPTION
+##################################
+
+lock table t1 in exclusive mode nowait;
+commit;
+
+lock table t1 in exclusive mode wait 1;
+commit;
+
+##################################
+# SECTOR; SELECT DOES NOT BLOCK
+##################################
+# 일반 조회는 잠금을 거의 잡지 않는다.
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+CALL SHOW_LOCK();
+commit;
+
+##################################
+# SECTOR; SELECT FOR UPDATE
+##################################
+# 글로벌 인덱스로 읽은 로우를 잠근다. 여러 파티션에 걸칠 수 있다.
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 = 5 for update;
+CALL SHOW_LOCK();
+commit;
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 in (5, 105, 205) order by i1 for update;
+CALL SHOW_LOCK();
+commit;
+
+# 파티션을 지정하면 그 파티션만 대상이어야 한다
+select /*+ index(t1, gidx1) */ i1, i2 from t1 partition (p1) where i2 is not null order by i1 for update;
+CALL SHOW_LOCK();
+commit;
+
+##################################
+# SECTOR; DML LOCK
+##################################
+
+update t1 set i4 = i4 + 1 where i2 = 5;
+CALL SHOW_LOCK();
+commit;
+
+delete from t1 where i2 = 6;
+CALL SHOW_LOCK();
+commit;
+
+insert into t1 values (60, 60000, 1, 1);
+CALL SHOW_LOCK();
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; DDL LOCK
+##################################
+# 파티션 집합을 바꾸는 DDL 은 논리 테이블에 강한 잠금이 필요하다.
+# 글로벌 인덱스가 있으면 스캔이 파티션 목록을 보는 중에 그 목록이
+# 바뀌면 안 되기 때문이다.
+
+alter table t1 add partition p4 values less than (400);
+CALL SHOW_LOCK();
+commit;
+
+alter table t1 truncate partition p4;
+commit;
+
+alter table t1 drop partition p4;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; LOCK AND ROLLBACK
+##################################
+
+lock table t1 in exclusive mode;
+update t1 set i4 = i4 + 1 where i1 < 10;
+rollback;
+
+CALL SHOW_LOCK();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; ACCESS OPTION
+##################################
+# 읽기 전용으로 막힌 파티션에 대한 DML 은 실패해야 한다.
+
+alter table t1 alter partition p1 access read only;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 is not null;
+
+update t1 set i4 = i4 + 1 where i1 < 10;
+
+insert into t1 values (10, 70000, 1, 1);
+
+# 다른 파티션은 여전히 갱신 가능해야 한다
+update t1 set i4 = i4 + 1 where i1 >= 200;
+commit;
+
+alter table t1 alter partition p1 access read write;
+
+update t1 set i4 = i4 + 1 where i1 < 10;
+commit;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

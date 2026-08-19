@@ -1,0 +1,173 @@
+###########################################################################
+# TestCase Description = 글로벌 인덱스에 대한 ALTER INDEX ... REBUILD.
+#
+#   이 케이스는 한때 서버를 죽였다. qdx::executeAlterRebuild가 판별자 101을
+#   옛 이분법(!= QCM_NONE_PARTITIONED_INDEX)으로 읽어 로컬 파티션드 인덱스
+#   가지로 보냈고, 파티션 indices[]에서 같은 indexId를 찾는 루프가 반드시
+#   실패해 IDE_ASSERT( sLocalIndex != NULL )에 닿았기 때문이다. 네이티브
+#   글로벌 인덱스는 파티션별 물리 인덱스를 만들지 않는다.
+#
+#   V2 코드 리뷰가 고쳤다. 지금은 재구성 DDL이 쓰는 것과 같은 기계
+#   (qdbAlter::recreateNativeGlobalIndexes)로 DROP INDEX + CREATE INDEX를
+#   하며, 사용자가 이름을 댄 인덱스 하나만 대상이다. 전 파티션 X 잠금도
+#   파티션 DDL과 같은 이유로 함께 잡는다.
+#
+#   기대: 전부 성공. 재구성 후에도 전 파티션 정합과 유일성이 유지되고,
+#         지목하지 않은 다른 글로벌 인덱스는 건드려지지 않는다.
+#
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+INCLUDE ../../include/selectMeta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL FINALIZE_MEM_TBS();
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+CALL PREPARE_MEM_TBS();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; REBUILD MINIMAL
+##################################
+# 가장 작은 형태. 한때 이 문장 하나가 서버를 내렸다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+insert into t1 values (10, 1, 1, 1);
+commit;
+
+alter index gidx1 rebuild;
+
+CALL SELECT_INDEX_META( "t1" );
+
+##################################
+# SECTOR; REBUILD WITH DATA
+##################################
+# 기존 데이터로부터 트리를 새로 구성하므로 다중 파티션 빌드 경로를
+# 다시 탄다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter index gidx1 rebuild;
+
+CALL SELECT_INDEX_META( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; DML AFTER REBUILD
+##################################
+# 재구성된 트리가 이후 DML 을 정상적으로 받는지.
+
+insert into t1 values (50, 5000, 1, 1);
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+update t1 set i2 = i2 + 1 where i1 < 10;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+delete from t1 where i1 > 220;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; REPEATED REBUILD
+##################################
+
+alter index gidx1 rebuild;
+alter index gidx1 rebuild;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; REBUILD UNIQUE INDEX
+##################################
+# 재구성 후에도 파티션 간 유일성이 유지되어야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create unique index t1_uk on t1(i2);
+
+insert into t1 values (10, 1000, 1, 1);
+insert into t1 values (150, 2000, 2, 2);
+insert into t1 values (250, 3000, 3, 3);
+commit;
+
+alter index t1_uk rebuild;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+# 다른 파티션의 값 -> 실패해야 한다
+insert into t1 values (250, 1000, 3, 3);
+
+# 새 값 -> 성공
+insert into t1 values (250, 4000, 3, 3);
+commit;
+
+select i1, i2 from t1 order by i1;
+
+##################################
+# SECTOR; REBUILD PARTITION ON A GLOBAL INDEX
+##################################
+# ALTER INDEX ... REBUILD PARTITION <name> 은 파티션별 물리 인덱스가
+# 있다는 전제 위의 구문이다. 네이티브 글로벌 인덱스에는 그런 것이
+# 없으므로 명시적으로 거부되어야 한다(무시되거나 죽으면 안 된다).
+
+alter index t1_uk rebuild partition p1;
+
+# 로컬 인덱스로는 기존대로 되어야 한다
+create index lidx1 on t1(i3) local;
+alter index lidx1 rebuild partition p1;
+
+CALL SELECT_INDEX_META( "t1" );
+
+##################################
+# SECTOR; REBUILD ON MULTI TABLESPACE
+##################################
+# 파티션이 서로 다른 테이블스페이스에 있는 구성에서 재구성한다.
+# 빌드 경로가 파티션마다 owner 를 제대로 역산하는지가 걸린다.
+
+CALL CREATE_MEM_PART_TABLE_MULTI_TBS( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+CALL FILL_RANGE_DATA();
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+alter index gidx1 rebuild;
+
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

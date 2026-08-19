@@ -1,0 +1,185 @@
+###########################################################################
+# TestCase Description = direct-path(append) 삽입. 일반 삽입과 다른 경로로
+#                        로우를 적재하므로 글로벌 인덱스 유지 훅을 따로
+#                        확인해야 한다.
+#                        구버전 basic/insert_part_range.tc,
+#                        insert_part_list.tc 에 해당한다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+drop table t2;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+
+# 적재 원본
+create table t2( i1 integer, i2 integer, i3 integer, i4 integer )
+tablespace sys_tbs_mem_data;
+
+insert into t2 select level,       level,       level, level from dual connect by level <= 30;
+insert into t2 select level + 100, level + 100, level, level from dual connect by level <= 30;
+insert into t2 select level + 200, level + 200, level, level from dual connect by level <= 30;
+commit;
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; APPEND INSERT INTO EMPTY TABLE
+##################################
+# 빈 테이블에 append 로 적재한다. 전 파티션에 흩어진다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+insert /*+append*/ into t1 select i1, i2, i3, i4 from t2;
+commit;
+
+select count(*) from t1;
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; APPEND INSERT INTO NON-EMPTY TABLE
+##################################
+# 이미 데이터가 있는 테이블에 덧붙인다.
+
+insert /*+append*/ into t1 select i1 + 1000, i2 + 1000, i3, i4 from t2 where i1 <= 10;
+commit;
+
+select count(*) from t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; APPEND AND ROLLBACK
+##################################
+# append 적재를 롤백하면 키가 남으면 안 된다.
+
+insert /*+append*/ into t1 select i1 + 2000, i2 + 2000, i3, i4 from t2;
+rollback;
+
+select count(*) from t1;
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 >= 2000;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; APPEND WITH UNIQUE INDEX
+##################################
+# 적재 데이터 안에 파티션 간 중복이 있으면 실패해야 한다.
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create unique index t1_uk on t1(i2);
+
+# t2 의 i2 는 유일하므로 성공해야 한다
+insert /*+append*/ into t1 select i1, i2, i3, i4 from t2;
+commit;
+
+select count(*) from t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+# 이미 있는 값을 다른 파티션으로 보내는 적재 -> 실패해야 한다
+insert /*+append*/ into t1 select i1 + 200, i2, i3, i4 from t2 where i1 <= 5;
+
+commit;
+select count(*) from t1;
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+##################################
+# SECTOR; APPEND THEN NORMAL DML
+##################################
+# append 로 적재한 뒤 일반 DML 이 정상인지.
+
+update t1 set i2 = i2 + 100000 where i1 < 10;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+delete from t1 where i1 > 220;
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+insert into t1 values (50, 999999, 1, 1);
+commit;
+CALL CHECK_GLOBAL_INDEX( "t1", "t1_uk", "i1, i2", "i2" );
+
+##################################
+# SECTOR; APPEND INTO SPECIFIC PARTITION
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+insert /*+append*/ into t1 partition (p1) select i1, i2, i3, i4 from t2 where i1 < 100;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+insert /*+append*/ into t1 partition (p3) select i1, i2, i3, i4 from t2 where i1 >= 200;
+commit;
+
+CALL CHECK_PARTITION_COUNT( "t1" );
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; APPEND ON LIST PARTITION
+##################################
+
+CALL CREATE_MEM_PART_TABLE( "list", "integer", "integer" );
+
+create index gidx1 on t1(i2);
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t2;
+SKIP END;
+NODISPLAY OFF;
+
+create table t2( i1 integer, i2 integer, i3 integer, i4 integer )
+tablespace sys_tbs_mem_data;
+
+insert into t2 values (100, 1, 1, 1);
+insert into t2 values (100, 2, 2, 2);
+insert into t2 values (200, 3, 3, 3);
+insert into t2 values (300, 4, 4, 4);
+commit;
+
+insert /*+append*/ into t1 select i1, i2, i3, i4 from t2;
+commit;
+
+select i1, i2 from t1 order by i1, i2;
+CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}

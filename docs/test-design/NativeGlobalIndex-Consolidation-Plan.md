@@ -205,7 +205,7 @@ topology, HDB/XDB, WhiteBox, fault injection, external processes" 를 만나면
 | `datatype/variableColumn` | `Memory/DML/` | |
 | `datatype/functionIndex` | `Memory/Unsupported/` | 거절이 기대값이다 |
 | `regress/noGlobalIndexUnchanged` · `propertyRuntimeChange` | `Memory/Regress/` | 신설 영역 |
-| `repl/replicationReject` | `Deferred/Replication` 참조 + `Memory/Unsupported/` | §9.2 |
+| `repl/replicationReject` | ~~`Memory/Unsupported/`~~ → **`Memory/DDL/`** | **Phase B 에서 이탈했다.** 이 케이스가 재는 것은 거절이 아니라 **허용**이다 — 섹터가 `GLOBAL INDEX ON A REPLICATED TABLE IS ALLOWED` · `THE INDEX SURVIVES DROPPING THE REPLICATION` 이다(V3 B-5 가 `ERR-61183` 게이트를 걷은 결과). "허용" 을 재는 케이스를 `Unsupported/` 에 두면 읽는 사람을 영구히 오도한다. 단일 인스턴스에서 도는 **복제 DDL 게이트** 검사이므로 `DDL/` 이 맞다. 두 서버가 필요한 복제 검증은 그대로 `Deferred/Replication`(§9.2·§9.3) |
 
 `.tc` 아닌 잔재 셋도 지도에 넣는다:
 

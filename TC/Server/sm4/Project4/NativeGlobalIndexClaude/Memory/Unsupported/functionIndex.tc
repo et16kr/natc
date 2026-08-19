@@ -1,0 +1,229 @@
+###########################################################################
+# TestCase Description = 함수 기반 인덱스와 그 밖의 키 컬럼 형태.
+#                        구버전 bugs/function_index.tc 에 해당한다.
+#
+#   ★ 이 케이스가 결함을 하나 찾았다. CREATE INDEX ~ ON t( <식> ) 은
+#     문장 하나로 보이지만 두 단계다 -- 식의 값을 담을 숨김 컬럼을
+#     ALTER TABLE ADD COLUMN 으로 먼저 붙이고 그 컬럼에 인덱스를 만든다.
+#     메모리 파티션드 테이블 + 프로퍼티 ON 에서 이 조합이 서버를 내렸다
+#     (smcRecord::insertVersion 의 IDE_ERROR_MSG). 비파티션드에서도,
+#     LOCAL 로도, 프로퍼티 OFF 에서도 멀쩡했으니 네이티브 글로벌 경로
+#     고유였다.
+#
+#     설계가 다룬 적 없는 조합이라 구현이 아니라 거부로 닫혔다.
+#     지금 기대는 **ERR-314AD (UNSUPPORTED_KEY: FUNCTION-BASED key)** 이고,
+#     같은 식을 LOCAL 로 만드는 것은 종전대로 된다.
+#     프로젝트 회귀는 sql-level-check.sh I92~I99 가 고정한다.
+# Project ID           = Native Global Index (memory)
+###########################################################################
+
+INCLUDE ../../include/globalIndexEnv.i;
+INCLUDE ../../include/createMemPartTable.i;
+INCLUDE ../../include/checkGlobalIndex.i;
+INCLUDE ../../include/selectMeta.i;
+
+DEF FINALIZE()
+{
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+CALL DISABLE_GLOBAL_INDEX();
+}
+
+DEF PREPARE()
+{
+CALL FINALIZE();
+CALL ENABLE_GLOBAL_INDEX();
+}
+
+DEF MAIN()
+{
+##################################
+# SECTOR; PREPARATION
+##################################
+
+CALL PREPARE();
+
+##################################
+# SECTOR; FUNCTION BASED GLOBAL INDEX
+##################################
+# 표현식을 키로 하는 글로벌 인덱스.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, c1 varchar(50), d1 date )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+create index gidx1 on t1( i2 * 2 );
+create index gidx2 on t1( upper(c1) );
+create index gidx3 on t1( substr(c1, 1, 3) );
+
+desc t1;
+CALL SELECT_INDEX_META( "t1" );
+
+insert into t1 select level,       level,       'abc' || level, sysdate from dual connect by level <= 30;
+insert into t1 select level + 100, level + 100, 'DEF' || level, sysdate from dual connect by level <= 30;
+insert into t1 select level + 200, level + 200, 'ghi' || level, sysdate from dual connect by level <= 30;
+commit;
+
+##################################
+# SECTOR; QUERY THROUGH FUNCTION INDEX
+##################################
+# 표현식과 정확히 같은 형태로 질의해야 인덱스를 쓸 수 있다.
+
+select /*+ index(t1, gidx1) */ i1, i2 from t1 where i2 * 2 = 10 order by i1;
+select /*+ FULL SCAN(t1) */ i1, i2 from t1 where i2 * 2 = 10 order by i1;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 * 2 > 400;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 * 2 > 400;
+
+select /*+ index(t1, gidx2) */ i1, c1 from t1 where upper(c1) = 'ABC5' order by i1;
+select /*+ FULL SCAN(t1) */ i1, c1 from t1 where upper(c1) = 'ABC5' order by i1;
+
+select /*+ index(t1, gidx3) */ count(*) from t1 where substr(c1, 1, 3) = 'abc';
+select /*+ FULL SCAN(t1) */ count(*) from t1 where substr(c1, 1, 3) = 'abc';
+
+select /*+ index(t1, gidx3) */ count(*) from t1 where substr(c1, 1, 3) = 'DEF';
+select /*+ FULL SCAN(t1) */ count(*) from t1 where substr(c1, 1, 3) = 'DEF';
+
+##################################
+# SECTOR; FUNCTION INDEX AFTER DML
+##################################
+# 기반 컬럼이 바뀌면 표현식 값도 바뀌므로 키가 갱신되어야 한다.
+
+update t1 set i2 = i2 + 1000 where i1 < 10;
+commit;
+
+select /*+ index(t1, gidx1) */ i1, i2, i2 * 2 from t1 where i2 * 2 >= 2000 order by i1;
+select /*+ FULL SCAN(t1) */ i1, i2, i2 * 2 from t1 where i2 * 2 >= 2000 order by i1;
+
+update t1 set c1 = 'zzz' || i1 where i1 >= 200 and i1 < 210;
+commit;
+
+select /*+ index(t1, gidx3) */ count(*) from t1 where substr(c1, 1, 3) = 'zzz';
+select /*+ FULL SCAN(t1) */ count(*) from t1 where substr(c1, 1, 3) = 'zzz';
+
+delete from t1 where i1 between 100 and 110;
+commit;
+
+select /*+ index(t1, gidx1) */ count(*) from t1 where i2 * 2 > 0;
+select /*+ FULL SCAN(t1) */ count(*) from t1 where i2 * 2 > 0;
+
+##################################
+# SECTOR; UNIQUE FUNCTION INDEX
+##################################
+# 표현식 값이 파티션을 넘어 유일해야 한다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, i2 integer, c1 varchar(50) )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+create unique index t1_fuk on t1( upper(c1) );
+
+insert into t1 values (10, 1, 'abc');
+commit;
+
+# 다른 파티션에 대소문자만 다른 값 -> 표현식 값이 같으므로 실패해야 한다
+insert into t1 values (150, 2, 'ABC');
+insert into t1 values (250, 3, 'AbC');
+
+# 다른 값 -> 성공
+insert into t1 values (150, 2, 'xyz');
+commit;
+
+select i1, c1, upper(c1) from t1 order by i1;
+
+##################################
+# SECTOR; DATE AND NUMERIC KEY
+##################################
+# 표현식이 아닌 일반 타입도 함께 확인한다.
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+create table t1( i1 integer, d1 date, n1 numeric(20,5), b1 bigint )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+create index gidx_d on t1(d1);
+create index gidx_n on t1(n1);
+create index gidx_b on t1(b1);
+
+insert into t1 values (10,  to_date('2020-01-01', 'YYYY-MM-DD'), 1.5,      1000000000);
+insert into t1 values (150, to_date('2021-06-15', 'YYYY-MM-DD'), 2.25,     2000000000);
+insert into t1 values (250, to_date('2022-12-31', 'YYYY-MM-DD'), -3.125,   3000000000);
+commit;
+
+select /*+ index(t1, gidx_d) */ i1, d1 from t1 order by d1;
+select /*+ FULL SCAN(t1) */ i1, d1 from t1 order by d1;
+
+select /*+ index(t1, gidx_n) */ i1, n1 from t1 order by n1;
+select /*+ FULL SCAN(t1) */ i1, n1 from t1 order by n1;
+
+select /*+ index(t1, gidx_b) */ i1, b1 from t1 order by b1;
+select /*+ FULL SCAN(t1) */ i1, b1 from t1 order by b1;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx_n", "i1, n1", "n1 is not null" );
+CALL CHECK_INDEX_SCAN( "t1", "gidx_b", "i1, b1", "b1 is not null" );
+
+select /*+ index(t1, gidx_d) */ count(*) from t1
+  where d1 >= to_date('2021-01-01', 'YYYY-MM-DD');
+select /*+ FULL SCAN(t1) */ count(*) from t1
+  where d1 >= to_date('2021-01-01', 'YYYY-MM-DD');
+
+##################################
+# SECTOR; DESCENDING KEY
+##################################
+
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+CALL CREATE_MEM_PART_TABLE( "range", "integer", "integer" );
+
+create index gidx_desc on t1(i2 desc);
+
+CALL FILL_RANGE_DATA();
+
+select /*+ index(t1, gidx_desc) */ i2 from t1 where i2 is not null order by i2 desc;
+select /*+ FULL SCAN(t1) */ i2 from t1 where i2 is not null order by i2 desc;
+
+CALL CHECK_INDEX_SCAN( "t1", "gidx_desc", "i1, i2", "i2 is not null" );
+
+##################################
+# SECTOR; FINALIZATION
+##################################
+
+CALL FINALIZE();
+}
