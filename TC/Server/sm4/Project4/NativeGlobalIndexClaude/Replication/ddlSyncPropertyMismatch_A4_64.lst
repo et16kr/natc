@@ -1,0 +1,274 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = DDL sync 에서 프로퍼티가 어긋난 쌍의 거절 (V4 D-2).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # ★ 이 파일이 **거절을 재는 복제 케이스**의 템플릿이다.
+$T0> #   globalPkRowMovement.tc 가 전량 그린인 반면, 남은 절은 대부분 거절이다.
+$T0> #   이 케이스가 그 셋을 다 보여 준다 -- 오류 전사 · 양쪽 레벨 설정 ·
+$T0> #   SKIP 정리.
+$T0> #
+$T0> # 무엇을 재는가 -- V4 D-2 가 손을 바꾼 자리다
+$T0> #
+$T0> #   V3 B-5 가 `qdx::validate` 의 DDL sync 거부에서 네이티브 팔을 걷으며
+$T0> #   메모를 남겼다: 살아남은 거부는 **`$GIT_` 팔에 얹혀 있었다.** 프로퍼티가
+$T0> #   어긋난 쌍이 거부된 이유는, 0 쪽이 `$GIT_` 인덱스를 지어야 하는데 그쪽의
+$T0> #   거부가 먼저 울렸기 때문이다.
+$T0> #
+$T0> #   V4 D-2(J24)가 `$GIT_` 팔을 걷었으므로 그 논리를 다시 재야 했고,
+$T0> #   **답은 "새 거부가 필요 없다 -- 3 단계 자체가 거부다"** 였다. 0 쪽은
+$T0> #   어떤 종류의 글로벌 인덱스도 못 지으므로 `CREATE INDEX` 에서
+$T0> #   `ERR-314B6` 으로 죽는다. DDL sync 거부보다 **이르고**, 메시지가 진짜
+$T0> #   고칠 것(프로퍼티를 1 로)을 가리킨다.
+$T0> #
+$T0> #   바뀐 것은 **사용자가 보는 오류**이고, 그것을 양방향으로 못박는다:
+$T0> #
+$T0> #     1 <-> 0   상대가 거절하고 마스터가 감싸서 보고     ERR-61186 (불변)
+$T0> #     0 <-> 1   마스터 자신이 거절                        ERR-61183 -> ERR-314B6
+$T0> #     0 <-> 0   마찬가지                                  ERR-61183 -> ERR-314B6
+$T0> #
+$T0> # ★ 규칙 -- globalPkRowMovement.tc 헤더의 셋을 그대로 따른다
+$T0> #   1. 피어당 복제 하나 (ERR-6110C). 이 케이스는 복제를 하나만 건다.
+$T0> #   2. 이 케이스의 접두사는 `NGIRP_SYNC_` 다.
+$T0> #   3. FLUSH 는 긍정 단언 전용. 이 케이스는 **거절**을 재므로 FLUSH 가
+$T0> #      필요 없다 -- 거절은 그 자리에서 문장이 실패하는 것이고 복제를
+$T0> #      건너가지 않는다.
+$T0> #
+$T0> # ★ 프로퍼티는 양쪽에 걸어야 한다
+$T0> #   DDL sync 는 두 인스턴스가 같은 판정을 내려야 성립하므로, 어긋난 쌍을
+$T0> #   만들려면 **각 서버에 따로** ALTER SYSTEM 을 해야 한다. 한쪽만 바꾸고
+$T0> #   재면 무엇을 재는지 알 수 없다.
+$T0> ###########################################################################
+
+$T0> DECLARE SERVER NGI_SERVER1 DB1;
+$T0> DECLARE SERVER NGI_SERVER2 DB2;
+
+$T0> DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+$T0> DECLARE CLIENT DEFAULT C2 ( SERVER = DB2 );
+
+$T0> # 프로퍼티를 되돌린다. 은퇴한 구현을 되살리는 내부 스위치도 함께 끈다 --
+$T0> # 켜져 있으면 0 의 뜻이 "거절" 이 아니라 "$GIT_ 로 만든다" 가 되어
+$T0> # 이 케이스가 다른 것을 잰다.
+
+$T0> ##################################
+$T0> SECTOR 0; PREPARATION
+$T0> ##################################
+
+$T0> THREAD T1 C1
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> THREAD T1 C1 { ALTER REPLICATION NGIRP_SYNC_R START; }
+$T0> JOIN;
+$T0> THREAD T2 C2 { ALTER REPLICATION NGIRP_SYNC_R START; }
+$T0> JOIN;
+
+$T0> # ★ sender 가 설 때까지 기다린다 -- START 직후 바로 DDL 을 치면
+$T0> #   sync 가 아직 붙지 않아 CREATE 가 그냥 로컬에서 성공한다.
+$T0> #   그러면 아래 거절 절들이 "거절이 없다" 를 재게 되어 통째로 항진식이다.
+$T0> #   (처음 이 케이스를 쓸 때 실제로 그렇게 나왔다 -- 2 절이 Create success.)
+$T0> #   삭제될 그물은 양쪽 sender 가 8 표본 연속 보일 때까지 최대 90 초
+$T0> #   기다린다. TC 에서는 고정 정착 + **명시적 전제 단언**으로 대신한다.
+
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 1; 1 -- 못 재는 것을 적어 둔다 (DDL sync 전파)
+$T0> ##################################
+$T0> # 원본 그물의 O4a 는 1 <-> 0 (상대만 0) 이 **상대에게서 거절되어
+$T0> # ERR-61186 으로 감싸 보고된다** 고 재고 있다. 이 케이스는 그것을
+$T0> # **재지 못한다** -- 재보니 마스터에서 그냥 CREATE success 였다.
+$T0> #
+$T0> # 측정한 것:
+$T0> #   REPLICATION_DDL_ENABLE = 1 만 켜면  -> 상대가 인덱스를 받는다(전파됨)
+$T0> #   거기에 _LEVEL = 1 · _SYNC = 1 을 더하면 -> 상대가 받지 않는다
+$T0> #   어느 쪽이든 어긋난 쌍이 마스터에서 거절되지는 않았다
+$T0> #
+$T0> # 즉 이 환경에서 DDL sync 전파의 조건이 그물이 전제한 것과 다르다.
+$T0> # 그물은 O 절 앞에서 repl_quiesce · prop1/2 · ddl2 · sync1/2 를 거치고
+$T0> # sender 가 8 표본 연속 설 때까지 최대 90 초 기다린다. 그 전제 중
+$T0> # 무엇이 빠졌는지는 **이 케이스의 범위 밖**이고, 억지로 기대값을 찍으면
+$T0> # 틀린 것을 굳히게 된다.
+$T0> #
+$T0> # 아래 2·3 절은 그 전제와 무관하다 -- 마스터 자신이 0 이면 집을 나서기
+$T0> # 전에 죽으므로 DDL sync 가 서든 말든 같다. 그것이 V4 D-2 가 바꾼
+$T0> # 자리이고, 이 케이스가 실제로 재는 것이다.
+$T0> #
+$T0> # 남은 것: -Coverage-Gaps.md 의 복제 절에 이 공백을 등록한다.
+
+$T0> ##################################
+$T0> SECTOR 2; 2 -- 0 <-> 1 : 마스터 자신이 거절한다 (ERR-314B6)
+$T0> ##################################
+$T0> THREAD T1 C1 { CALL SET_PROP( 0 ); }
+$T0> JOIN;
+$T0> THREAD T2 C2 { CALL SET_PROP( 1 ); }
+$T0> JOIN;
+
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 3; 3 -- 0 <-> 0 : 마찬가지
+$T0> ##################################
+$T0> THREAD T2 C2 { CALL SET_PROP( 0 ); }
+$T0> JOIN;
+
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> THREAD T1 C1
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T1> SKIP BEGIN;
+$T1> ALTER REPLICATION NGIRP_SYNC_R STOP;
+$T1> DROP REPLICATION NGIRP_SYNC_R;
+$T1> DROP TABLE NGIRP_SYNC_T;
+$T1> SKIP END;
+$T1> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T1> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T1> # DDL sync 는 셋을 다 켜야 선다 -- ENABLE 만으로는 상대가
+$T1> # 재실행하지 않아 어긋난 쌍이 그냥 성공한다(실측).
+$T1> ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 1;
+Alter success.
+$T1> ALTER SYSTEM SET REPLICATION_DDL_ENABLE_LEVEL = 1;
+Alter success.
+$T1> ALTER SYSTEM SET REPLICATION_DDL_SYNC = 1;
+Alter success.
+
+$T1> CREATE TABLE NGIRP_SYNC_T ( I1 INTEGER PRIMARY KEY, I2 INTEGER, I3 INTEGER, I4 INTEGER, I5 INTEGER )
+        PARTITION BY RANGE ( I1 )
+        (
+            PARTITION P1 VALUES LESS THAN ( 100 ),
+            PARTITION PD VALUES DEFAULT
+        ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T1> CREATE REPLICATION NGIRP_SYNC_R
+            WITH '${HOST_IP@DB2}', ${ALTIBASE_REPLICATION_PORT_NO@DB2}
+            FROM SYS.NGIRP_SYNC_T TO SYS.NGIRP_SYNC_T;
+Create success.
+$T1> ALTER REPLICATION NGIRP_SYNC_R START;
+Alter success.
+$T1> SELECT COUNT(*) AS DB1_SENDER_UP
+          FROM V$REPSENDER WHERE REP_NAME = 'NGIRP_SYNC_R';
+DB1_SENDER_UP        
+-----------------------
+1                    
+1 row selected.
+$T1> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T1> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T1> # ★ 여기가 D-2 가 손을 바꾼 자리다.
+$T1> #   종전에는 DDL sync 거부(ERR-61183)가 울렸다. 지금은 마스터가
+$T1> #   집을 나서기도 전에 CREATE INDEX 가 ERR-314B6 으로 죽는다.
+$T1> CREATE INDEX NGIRP_SYNC_G3 ON NGIRP_SYNC_T ( I4 );
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create NGIRP_SYNC_G3.]
+
+$T1> SELECT COUNT(*) AS DB1_KEPT_NOTHING_G3
+          FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGIRP_SYNC_G3';
+DB1_KEPT_NOTHING_G3  
+-----------------------
+0                    
+1 row selected.
+$T1> CREATE INDEX NGIRP_SYNC_G4 ON NGIRP_SYNC_T ( I5 );
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create NGIRP_SYNC_G4.]
+
+$T1> SELECT COUNT(*) AS DB1_KEPT_NOTHING_G4
+          FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGIRP_SYNC_G4';
+DB1_KEPT_NOTHING_G4  
+-----------------------
+0                    
+1 row selected.
+$T1> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T1> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T1> ALTER SYSTEM SET REPLICATION_DDL_SYNC = 0;
+Alter success.
+$T1> ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 0;
+Alter success.
+$T1> SKIP BEGIN;
+$T1> ALTER REPLICATION NGIRP_SYNC_R STOP;
+$T1> SKIP END;
+$T1> DROP REPLICATION NGIRP_SYNC_R;
+Drop success.
+$T1> DROP TABLE NGIRP_SYNC_T;
+Drop success.
+$T2> SKIP BEGIN;
+$T2> ALTER REPLICATION NGIRP_SYNC_R STOP;
+$T2> DROP REPLICATION NGIRP_SYNC_R;
+$T2> DROP TABLE NGIRP_SYNC_T;
+$T2> SKIP END;
+$T2> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T2> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T2> # DDL sync 는 셋을 다 켜야 선다 -- ENABLE 만으로는 상대가
+$T2> # 재실행하지 않아 어긋난 쌍이 그냥 성공한다(실측).
+$T2> ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 1;
+Alter success.
+$T2> ALTER SYSTEM SET REPLICATION_DDL_ENABLE_LEVEL = 1;
+Alter success.
+$T2> ALTER SYSTEM SET REPLICATION_DDL_SYNC = 1;
+Alter success.
+
+$T2> CREATE TABLE NGIRP_SYNC_T ( I1 INTEGER PRIMARY KEY, I2 INTEGER, I3 INTEGER, I4 INTEGER, I5 INTEGER )
+        PARTITION BY RANGE ( I1 )
+        (
+            PARTITION P1 VALUES LESS THAN ( 100 ),
+            PARTITION PD VALUES DEFAULT
+        ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T2> CREATE REPLICATION NGIRP_SYNC_R
+            WITH '${HOST_IP@DB1}', ${ALTIBASE_REPLICATION_PORT_NO@DB1}
+            FROM SYS.NGIRP_SYNC_T TO SYS.NGIRP_SYNC_T;
+Create success.
+$T2> ALTER REPLICATION NGIRP_SYNC_R START;
+Alter success.
+$T2> SELECT COUNT(*) AS DB2_SENDER_UP
+          FROM V$REPSENDER WHERE REP_NAME = 'NGIRP_SYNC_R';
+DB2_SENDER_UP        
+-----------------------
+1                    
+1 row selected.
+$T2> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T2> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T2> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T2> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T2> ALTER SYSTEM SET __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T2> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T2> ALTER SYSTEM SET REPLICATION_DDL_SYNC = 0;
+Alter success.
+$T2> ALTER SYSTEM SET REPLICATION_DDL_ENABLE = 0;
+Alter success.
+$T2> SKIP BEGIN;
+$T2> ALTER REPLICATION NGIRP_SYNC_R STOP;
+$T2> SKIP END;
+$T2> DROP REPLICATION NGIRP_SYNC_R;
+Drop success.
+$T2> DROP TABLE NGIRP_SYNC_T;
+Drop success.
+

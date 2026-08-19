@@ -41,6 +41,30 @@ $T0> #       수신 측을 읽기 전의 동기화 배리어. 이것 없이 읽�
 $T0> #   - JOIN;  스레드 배리어.
 $T0> #   - .lst 는 T0 에 제어 흐름만, 그다음 스레드별로 묶여 전사된다.
 $T0> #     시간순 인터리브가 아니라서 결정적이다.
+$T0> #
+$T0> # ★ 규칙 셋 -- 둘째 케이스를 쓰기 전에 반드시 읽을 것
+$T0> #
+$T0> #   1. **피어 호스트·포트당 복제 객체는 하나뿐이다** (ERR-6110C).
+$T0> #      같은 상대에게 둘째를 걸면 무엇을 복제하든 거절된다. 그래서
+$T0> #      표 단위와 파티션 단위를 **한 케이스 안에서 공존**시킬 수 없고,
+$T0> #      먼저 것을 DROP 한 뒤에 다음을 건다. 삭제될 그물이 이 규칙 때문에
+$T0> #      검사 순서를 재배열하면서 "Dropping first keeps M68 measuring the
+$T0> #      partition unit rather than the host rule" 라고 적어 두었다.
+$T0> #      아래 CLEAN() 이 그 규칙을 지키고 있으나, **우연이 아니라 규칙이다.**
+$T0> #
+$T0> #   2. **케이스마다 객체 이름 접두사를 다르게 준다.** 이 케이스는
+$T0> #      `NGIRP_PKMV_` 다. 고정 이름(NGIRP_PKMV_R)을 쓰면 케이스가 늘 때 서로
+$T0> #      충돌하거나 앞 케이스의 잔재를 본다. 복제 객체는 인스턴스 단위라
+$T0> #      테이블보다 충돌이 쉽다.
+$T0> #
+$T0> #   3. **FLUSH 가 덮는 범위.** FLUSH 는 "보낸 것이 반영될 때까지" 의
+$T0> #      배리어이므로 **긍정 단언**(도착했는가)에만 쓸 수 있다.
+$T0> #      **부정 단언**(도착하지 **않는가**)에는 못 쓴다 -- 안 보낸 것을
+$T0> #      flush 해도 아무 일이 없으므로 항진식이 된다. 삭제될 그물은
+$T0> #      FLUSH 를 **한 번도 쓰지 않고**(0 회) 폴링(expect_arrive, 30 초)과
+$T0> #      정착 대기(expect_stays)를 따로 만들면서 "도착하지 않음은 공정한
+$T0> #      기회를 준 뒤에만 증명된다" 고 적었다. 부정 단언이 필요한 케이스는
+$T0> #      SLEEP 으로 정착시킨 뒤 값을 읽는 형태를 써야 한다.
 $T0> ###########################################################################
 
 $T0> DECLARE SERVER NGI_SERVER1 DB1;
@@ -95,14 +119,14 @@ $T0> THREAD T1 C1
 $T0> THREAD T2 C2
 $T0> JOIN;
 $T1> SKIP BEGIN;
-$T1> ALTER REPLICATION NGI_REP STOP;
-$T1> DROP REPLICATION NGI_REP;
-$T1> DROP TABLE NGI_RP_PK;
+$T1> ALTER REPLICATION NGIRP_PKMV_R STOP;
+$T1> DROP REPLICATION NGIRP_PKMV_R;
+$T1> DROP TABLE NGIRP_PKMV_T;
 $T1> SKIP END;
 
 $T1> # 파티션 키는 P, PK 는 K -- PK 가 파티션 키를 **포함하지 않으므로**
 $T1> # 이 PK 는 글로벌이다. 그것이 ERR-314B4 가 겨누던 모양이다.
-$T1> CREATE TABLE NGI_RP_PK
+$T1> CREATE TABLE NGIRP_PKMV_T
         (
             P INTEGER,
             K INTEGER PRIMARY KEY,
@@ -116,7 +140,7 @@ $T1> CREATE TABLE NGI_RP_PK
         ) TABLESPACE SYS_TBS_DISK_DATA;
 Create success.
 
-$T1> ALTER TABLE NGI_RP_PK ENABLE ROW MOVEMENT;
+$T1> ALTER TABLE NGIRP_PKMV_T ENABLE ROW MOVEMENT;
 Alter success.
 
 $T1> # 그 PK 가 정말 네이티브 글로벌인가 (판별자 101 · 숨김 테이블 없음)
@@ -125,39 +149,39 @@ $T1> SELECT COUNT(*) AS PK_IS_NATIVE_GLOBAL
          WHERE PI.INDEX_ID = I.INDEX_ID
            AND PI.PARTITION_TYPE = 101
            AND I.TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
-                               WHERE TABLE_NAME = 'NGI_RP_PK' );
+                               WHERE TABLE_NAME = 'NGIRP_PKMV_T' );
 PK_IS_NATIVE_GLOBAL  
 -----------------------
 1                    
 1 row selected.
 
 $T1> # ★ 여기가 ERR-314B4 가 나던 자리다. 지금은 서야 한다.
-$T1> CREATE REPLICATION NGI_REP
+$T1> CREATE REPLICATION NGIRP_PKMV_R
             WITH '${HOST_IP@DB2}', ${ALTIBASE_REPLICATION_PORT_NO@DB2}
-            FROM SYS.NGI_RP_PK TO SYS.NGI_RP_PK;
+            FROM SYS.NGIRP_PKMV_T TO SYS.NGIRP_PKMV_T;
 Create success.
-$T1> ALTER REPLICATION NGI_REP START;
+$T1> ALTER REPLICATION NGIRP_PKMV_R START;
 Alter success.
 
-$T1> INSERT INTO NGI_RP_PK VALUES ( 1,  101, 'A' );
+$T1> INSERT INTO NGIRP_PKMV_T VALUES ( 1,  101, 'A' );
 1 row inserted.
-$T1> INSERT INTO NGI_RP_PK VALUES ( 11, 102, 'B' );
+$T1> INSERT INTO NGIRP_PKMV_T VALUES ( 11, 102, 'B' );
 1 row inserted.
-$T1> INSERT INTO NGI_RP_PK VALUES ( 21, 103, 'C' );
+$T1> INSERT INTO NGIRP_PKMV_T VALUES ( 21, 103, 'C' );
 1 row inserted.
 $T1> COMMIT;
 Commit success.
 
-$T1> ALTER REPLICATION NGI_REP FLUSH;
+$T1> ALTER REPLICATION NGIRP_PKMV_R FLUSH;
 Alter success.
 $T1> # P 를 1 -> 15 로 바꾸면 로우가 P1 에서 P2 로 옮겨 간다.
 $T1> # 송신 측에서 이 한 문장은 DELETE + INSERT 로 갈린다.
-$T1> UPDATE NGI_RP_PK SET P = 15, V = 'A-MOVED' WHERE K = 101;
+$T1> UPDATE NGIRP_PKMV_T SET P = 15, V = 'A-MOVED' WHERE K = 101;
 1 row updated.
 $T1> COMMIT;
 Commit success.
 
-$T1> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+$T1> SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
 P           K           V                 
 ----------------------------------------------
 15          101         A-MOVED           
@@ -165,27 +189,27 @@ P           K           V
 21          103         C                 
 3 rows selected.
 
-$T1> ALTER REPLICATION NGI_REP FLUSH;
+$T1> ALTER REPLICATION NGIRP_PKMV_R FLUSH;
 Alter success.
-$T1> UPDATE NGI_RP_PK SET P = P + 10 WHERE K IN ( 102, 103 );
+$T1> UPDATE NGIRP_PKMV_T SET P = P + 10 WHERE K IN ( 102, 103 );
 2 rows updated.
 $T1> COMMIT;
 Commit success.
-$T1> ALTER REPLICATION NGI_REP FLUSH;
+$T1> ALTER REPLICATION NGIRP_PKMV_R FLUSH;
 Alter success.
-$T1> ALTER REPLICATION NGI_REP STOP;
+$T1> ALTER REPLICATION NGIRP_PKMV_R STOP;
 Alter success.
-$T1> DROP REPLICATION NGI_REP;
+$T1> DROP REPLICATION NGIRP_PKMV_R;
 Drop success.
-$T1> DROP TABLE NGI_RP_PK;
+$T1> DROP TABLE NGIRP_PKMV_T;
 Drop success.
 $T2> SKIP BEGIN;
-$T2> ALTER REPLICATION NGI_REP STOP;
-$T2> DROP REPLICATION NGI_REP;
-$T2> DROP TABLE NGI_RP_PK;
+$T2> ALTER REPLICATION NGIRP_PKMV_R STOP;
+$T2> DROP REPLICATION NGIRP_PKMV_R;
+$T2> DROP TABLE NGIRP_PKMV_T;
 $T2> SKIP END;
 
-$T2> CREATE TABLE NGI_RP_PK
+$T2> CREATE TABLE NGIRP_PKMV_T
         (
             P INTEGER,
             K INTEGER PRIMARY KEY,
@@ -199,21 +223,21 @@ $T2> CREATE TABLE NGI_RP_PK
         ) TABLESPACE SYS_TBS_DISK_DATA;
 Create success.
 
-$T2> ALTER TABLE NGI_RP_PK ENABLE ROW MOVEMENT;
+$T2> ALTER TABLE NGIRP_PKMV_T ENABLE ROW MOVEMENT;
 Alter success.
 
-$T2> CREATE REPLICATION NGI_REP
+$T2> CREATE REPLICATION NGIRP_PKMV_R
             WITH '${HOST_IP@DB1}', ${ALTIBASE_REPLICATION_PORT_NO@DB1}
-            FROM SYS.NGI_RP_PK TO SYS.NGI_RP_PK;
+            FROM SYS.NGIRP_PKMV_T TO SYS.NGIRP_PKMV_T;
 Create success.
-$T2> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+$T2> SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
 P           K           V                 
 ----------------------------------------------
 1           101         A                 
 11          102         B                 
 21          103         C                 
 3 rows selected.
-$T2> SELECT COUNT(*) AS RECEIVED_ROWS FROM NGI_RP_PK;
+$T2> SELECT COUNT(*) AS RECEIVED_ROWS FROM NGIRP_PKMV_T;
 RECEIVED_ROWS        
 -----------------------
 3                    
@@ -221,55 +245,55 @@ RECEIVED_ROWS
 $T2> # ★ 여기가 이 케이스의 핵심이다.
 $T2> #   K = 101 이 **한 행**이어야 하고 P 가 15 여야 한다.
 $T2> #   갈린 채로 반영되면 두 행이 되거나 사라진다.
-$T2> SELECT COUNT(*) AS K101_ROW_COUNT FROM NGI_RP_PK WHERE K = 101;
+$T2> SELECT COUNT(*) AS K101_ROW_COUNT FROM NGIRP_PKMV_T WHERE K = 101;
 K101_ROW_COUNT       
 -----------------------
 1                    
 1 row selected.
-$T2> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+$T2> SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
 P           K           V                 
 ----------------------------------------------
 15          101         A-MOVED           
 11          102         B                 
 21          103         C                 
 3 rows selected.
-$T2> SELECT COUNT(*) AS TOTAL_AFTER_MOVE FROM NGI_RP_PK;
+$T2> SELECT COUNT(*) AS TOTAL_AFTER_MOVE FROM NGIRP_PKMV_T;
 TOTAL_AFTER_MOVE     
 -----------------------
 3                    
 1 row selected.
-$T2> SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+$T2> SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
 P           K           V                 
 ----------------------------------------------
 15          101         A-MOVED           
 21          102         B                 
 31          103         C                 
 3 rows selected.
-$T2> SELECT COUNT(*) AS TOTAL_AFTER_BULK FROM NGI_RP_PK;
+$T2> SELECT COUNT(*) AS TOTAL_AFTER_BULK FROM NGIRP_PKMV_T;
 TOTAL_AFTER_BULK     
 -----------------------
 3                    
 1 row selected.
-$T2> SELECT REP_NAME, INSERT_SUCCESS_COUNT FROM X$REPRECEIVER;
+$T2> SELECT REP_NAME, INSERT_SUCCESS_COUNT FROM X$REPRECEIVER WHERE REP_NAME = 'NGIRP_PKMV_R';
 REP_NAME                                  INSERT_SUCCESS_COUNT 
 ------------------------------------------------------------------
-NGI_REP                                   5                    
+NGIRP_PKMV_R                              5                    
 1 row selected.
-$T2> SELECT REP_NAME, DELETE_SUCCESS_COUNT FROM X$REPRECEIVER;
+$T2> SELECT REP_NAME, DELETE_SUCCESS_COUNT FROM X$REPRECEIVER WHERE REP_NAME = 'NGIRP_PKMV_R';
 REP_NAME                                  DELETE_SUCCESS_COUNT 
 ------------------------------------------------------------------
-NGI_REP                                   2                    
+NGIRP_PKMV_R                              2                    
 1 row selected.
-$T2> SELECT REP_NAME, UPDATE_SUCCESS_COUNT FROM X$REPRECEIVER;
+$T2> SELECT REP_NAME, UPDATE_SUCCESS_COUNT FROM X$REPRECEIVER WHERE REP_NAME = 'NGIRP_PKMV_R';
 REP_NAME                                  UPDATE_SUCCESS_COUNT 
 ------------------------------------------------------------------
-NGI_REP                                   1                    
+NGIRP_PKMV_R                              1                    
 1 row selected.
 $T2> SKIP BEGIN;
-$T2> ALTER REPLICATION NGI_REP STOP;
+$T2> ALTER REPLICATION NGIRP_PKMV_R STOP;
 $T2> SKIP END;
-$T2> DROP REPLICATION NGI_REP;
+$T2> DROP REPLICATION NGIRP_PKMV_R;
 Drop success.
-$T2> DROP TABLE NGI_RP_PK;
+$T2> DROP TABLE NGIRP_PKMV_T;
 Drop success.
 

@@ -10,5 +10,6 @@ TestSuiteDescription  = Native Global Index - Replication
 #
 initialize.tc                           # 두 인스턴스를 세운다 (템플릿)
 globalPkRowMovement.tc                  # 글로벌 PK + row movement 복제 (V4 C 트랙, 템플릿)
+ddlSyncPropertyMismatch.tc              # 프로퍼티 어긋난 쌍의 거절 (V4 D-2, 거절 템플릿)
 finalize.tc                             # 두 인스턴스를 내린다
 -------------------------------------------------------------------------------

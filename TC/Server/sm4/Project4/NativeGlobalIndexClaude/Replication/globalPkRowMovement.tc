@@ -33,6 +33,30 @@
 #   - JOIN;  스레드 배리어.
 #   - .lst 는 T0 에 제어 흐름만, 그다음 스레드별로 묶여 전사된다.
 #     시간순 인터리브가 아니라서 결정적이다.
+#
+# ★ 규칙 셋 -- 둘째 케이스를 쓰기 전에 반드시 읽을 것
+#
+#   1. **피어 호스트·포트당 복제 객체는 하나뿐이다** (ERR-6110C).
+#      같은 상대에게 둘째를 걸면 무엇을 복제하든 거절된다. 그래서
+#      표 단위와 파티션 단위를 **한 케이스 안에서 공존**시킬 수 없고,
+#      먼저 것을 DROP 한 뒤에 다음을 건다. 삭제될 그물이 이 규칙 때문에
+#      검사 순서를 재배열하면서 "Dropping first keeps M68 measuring the
+#      partition unit rather than the host rule" 라고 적어 두었다.
+#      아래 CLEAN() 이 그 규칙을 지키고 있으나, **우연이 아니라 규칙이다.**
+#
+#   2. **케이스마다 객체 이름 접두사를 다르게 준다.** 이 케이스는
+#      `NGIRP_PKMV_` 다. 고정 이름(NGIRP_PKMV_R)을 쓰면 케이스가 늘 때 서로
+#      충돌하거나 앞 케이스의 잔재를 본다. 복제 객체는 인스턴스 단위라
+#      테이블보다 충돌이 쉽다.
+#
+#   3. **FLUSH 가 덮는 범위.** FLUSH 는 "보낸 것이 반영될 때까지" 의
+#      배리어이므로 **긍정 단언**(도착했는가)에만 쓸 수 있다.
+#      **부정 단언**(도착하지 **않는가**)에는 못 쓴다 -- 안 보낸 것을
+#      flush 해도 아무 일이 없으므로 항진식이 된다. 삭제될 그물은
+#      FLUSH 를 **한 번도 쓰지 않고**(0 회) 폴링(expect_arrive, 30 초)과
+#      정착 대기(expect_stays)를 따로 만들면서 "도착하지 않음은 공정한
+#      기회를 준 뒤에만 증명된다" 고 적었다. 부정 단언이 필요한 케이스는
+#      SLEEP 으로 정착시킨 뒤 값을 읽는 형태를 써야 한다.
 ###########################################################################
 
 INCLUDE stdFunc.i;
@@ -46,9 +70,9 @@ DECLARE CLIENT DEFAULT C2 ( SERVER = DB2 );
 DEF CLEAN()
 {
     SKIP BEGIN;
-    ALTER REPLICATION NGI_REP STOP;
-    DROP REPLICATION NGI_REP;
-    DROP TABLE NGI_RP_PK;
+    ALTER REPLICATION NGIRP_PKMV_R STOP;
+    DROP REPLICATION NGIRP_PKMV_R;
+    DROP TABLE NGIRP_PKMV_T;
     SKIP END;
 }
 
@@ -64,7 +88,7 @@ SECTOR; PREPARATION
 
         # 파티션 키는 P, PK 는 K -- PK 가 파티션 키를 **포함하지 않으므로**
         # 이 PK 는 글로벌이다. 그것이 ERR-314B4 가 겨누던 모양이다.
-        CREATE TABLE NGI_RP_PK
+        CREATE TABLE NGIRP_PKMV_T
         (
             P INTEGER,
             K INTEGER PRIMARY KEY,
@@ -77,7 +101,7 @@ SECTOR; PREPARATION
             PARTITION PD VALUES DEFAULT
         ) TABLESPACE SYS_TBS_DISK_DATA;
 
-        ALTER TABLE NGI_RP_PK ENABLE ROW MOVEMENT;
+        ALTER TABLE NGIRP_PKMV_T ENABLE ROW MOVEMENT;
 
         # 그 PK 가 정말 네이티브 글로벌인가 (판별자 101 · 숨김 테이블 없음)
         SELECT COUNT(*) AS PK_IS_NATIVE_GLOBAL
@@ -85,18 +109,18 @@ SECTOR; PREPARATION
          WHERE PI.INDEX_ID = I.INDEX_ID
            AND PI.PARTITION_TYPE = 101
            AND I.TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
-                               WHERE TABLE_NAME = 'NGI_RP_PK' );
+                               WHERE TABLE_NAME = 'NGIRP_PKMV_T' );
 
         # ★ 여기가 ERR-314B4 가 나던 자리다. 지금은 서야 한다.
-        CREATE REPLICATION NGI_REP
+        CREATE REPLICATION NGIRP_PKMV_R
             WITH '${HOST_IP@DB2}', ${ALTIBASE_REPLICATION_PORT_NO@DB2}
-            FROM SYS.NGI_RP_PK TO SYS.NGI_RP_PK;
+            FROM SYS.NGIRP_PKMV_T TO SYS.NGIRP_PKMV_T;
     }
     THREAD T2 C2
     {
         CALL CLEAN();
 
-        CREATE TABLE NGI_RP_PK
+        CREATE TABLE NGIRP_PKMV_T
         (
             P INTEGER,
             K INTEGER PRIMARY KEY,
@@ -109,11 +133,11 @@ SECTOR; PREPARATION
             PARTITION PD VALUES DEFAULT
         ) TABLESPACE SYS_TBS_DISK_DATA;
 
-        ALTER TABLE NGI_RP_PK ENABLE ROW MOVEMENT;
+        ALTER TABLE NGIRP_PKMV_T ENABLE ROW MOVEMENT;
 
-        CREATE REPLICATION NGI_REP
+        CREATE REPLICATION NGIRP_PKMV_R
             WITH '${HOST_IP@DB1}', ${ALTIBASE_REPLICATION_PORT_NO@DB1}
-            FROM SYS.NGI_RP_PK TO SYS.NGI_RP_PK;
+            FROM SYS.NGIRP_PKMV_T TO SYS.NGIRP_PKMV_T;
     }
     JOIN;
 
@@ -123,21 +147,21 @@ SECTOR; 1 -- 기본 DML 이 반영된다
 
     THREAD T1 C1
     {
-        ALTER REPLICATION NGI_REP START;
+        ALTER REPLICATION NGIRP_PKMV_R START;
 
-        INSERT INTO NGI_RP_PK VALUES ( 1,  101, 'A' );
-        INSERT INTO NGI_RP_PK VALUES ( 11, 102, 'B' );
-        INSERT INTO NGI_RP_PK VALUES ( 21, 103, 'C' );
+        INSERT INTO NGIRP_PKMV_T VALUES ( 1,  101, 'A' );
+        INSERT INTO NGIRP_PKMV_T VALUES ( 11, 102, 'B' );
+        INSERT INTO NGIRP_PKMV_T VALUES ( 21, 103, 'C' );
         COMMIT;
 
-        ALTER REPLICATION NGI_REP FLUSH;
+        ALTER REPLICATION NGIRP_PKMV_R FLUSH;
     }
     JOIN;
 
     THREAD T2 C2
     {
-        SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
-        SELECT COUNT(*) AS RECEIVED_ROWS FROM NGI_RP_PK;
+        SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
+        SELECT COUNT(*) AS RECEIVED_ROWS FROM NGIRP_PKMV_T;
     }
     JOIN;
 
@@ -149,12 +173,12 @@ SECTOR; 2 -- row movement 가 한 행으로 반영된다
     {
         # P 를 1 -> 15 로 바꾸면 로우가 P1 에서 P2 로 옮겨 간다.
         # 송신 측에서 이 한 문장은 DELETE + INSERT 로 갈린다.
-        UPDATE NGI_RP_PK SET P = 15, V = 'A-MOVED' WHERE K = 101;
+        UPDATE NGIRP_PKMV_T SET P = 15, V = 'A-MOVED' WHERE K = 101;
         COMMIT;
 
-        SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
+        SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
 
-        ALTER REPLICATION NGI_REP FLUSH;
+        ALTER REPLICATION NGIRP_PKMV_R FLUSH;
     }
     JOIN;
 
@@ -163,9 +187,9 @@ SECTOR; 2 -- row movement 가 한 행으로 반영된다
         # ★ 여기가 이 케이스의 핵심이다.
         #   K = 101 이 **한 행**이어야 하고 P 가 15 여야 한다.
         #   갈린 채로 반영되면 두 행이 되거나 사라진다.
-        SELECT COUNT(*) AS K101_ROW_COUNT FROM NGI_RP_PK WHERE K = 101;
-        SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
-        SELECT COUNT(*) AS TOTAL_AFTER_MOVE FROM NGI_RP_PK;
+        SELECT COUNT(*) AS K101_ROW_COUNT FROM NGIRP_PKMV_T WHERE K = 101;
+        SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
+        SELECT COUNT(*) AS TOTAL_AFTER_MOVE FROM NGIRP_PKMV_T;
     }
     JOIN;
 
@@ -175,19 +199,19 @@ SECTOR; 3 -- 여러 건을 옮겨도 같다
 
     THREAD T1 C1
     {
-        UPDATE NGI_RP_PK SET P = P + 10 WHERE K IN ( 102, 103 );
+        UPDATE NGIRP_PKMV_T SET P = P + 10 WHERE K IN ( 102, 103 );
         COMMIT;
-        ALTER REPLICATION NGI_REP FLUSH;
+        ALTER REPLICATION NGIRP_PKMV_R FLUSH;
     }
     JOIN;
 
     THREAD T2 C2
     {
-        SELECT P, K, V FROM NGI_RP_PK ORDER BY K;
-        SELECT COUNT(*) AS TOTAL_AFTER_BULK FROM NGI_RP_PK;
-        SELECT REP_NAME, INSERT_SUCCESS_COUNT FROM X$REPRECEIVER;
-        SELECT REP_NAME, DELETE_SUCCESS_COUNT FROM X$REPRECEIVER;
-        SELECT REP_NAME, UPDATE_SUCCESS_COUNT FROM X$REPRECEIVER;
+        SELECT P, K, V FROM NGIRP_PKMV_T ORDER BY K;
+        SELECT COUNT(*) AS TOTAL_AFTER_BULK FROM NGIRP_PKMV_T;
+        SELECT REP_NAME, INSERT_SUCCESS_COUNT FROM X$REPRECEIVER WHERE REP_NAME = 'NGIRP_PKMV_R';
+        SELECT REP_NAME, DELETE_SUCCESS_COUNT FROM X$REPRECEIVER WHERE REP_NAME = 'NGIRP_PKMV_R';
+        SELECT REP_NAME, UPDATE_SUCCESS_COUNT FROM X$REPRECEIVER WHERE REP_NAME = 'NGIRP_PKMV_R';
     }
     JOIN;
 
@@ -197,17 +221,17 @@ SECTOR; FINALIZATION
 
     THREAD T1 C1
     {
-        ALTER REPLICATION NGI_REP STOP;
-        DROP REPLICATION NGI_REP;
-        DROP TABLE NGI_RP_PK;
+        ALTER REPLICATION NGIRP_PKMV_R STOP;
+        DROP REPLICATION NGIRP_PKMV_R;
+        DROP TABLE NGIRP_PKMV_T;
     }
     THREAD T2 C2
     {
         SKIP BEGIN;
-        ALTER REPLICATION NGI_REP STOP;
+        ALTER REPLICATION NGIRP_PKMV_R STOP;
         SKIP END;
-        DROP REPLICATION NGI_REP;
-        DROP TABLE NGI_RP_PK;
+        DROP REPLICATION NGIRP_PKMV_R;
+        DROP TABLE NGIRP_PKMV_T;
     }
     JOIN;
 }
