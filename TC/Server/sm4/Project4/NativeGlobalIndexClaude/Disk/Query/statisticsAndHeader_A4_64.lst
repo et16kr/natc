@@ -1,0 +1,217 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 글로벌 인덱스의 통계 · V$DISK_BTREE_HEADER · 커버링 스캔 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = altibase/scripts/global-index/disk-planstat-check.sh
+$T0> #                        (삭제 예정인 그물에서 건짐 -- 통합 Phase E)
+$T0> #
+$T0> # 무엇을 재는가 -- 세 축 모두 통합 스위트에 없던 것이다
+$T0> #
+$T0> #   1. 통계가 글로벌 인덱스에 도달하는가.
+$T0> #      로컬 파티션드 인덱스는 파티션마다 b-tree 가 따로라 distinct 를
+$T0> #      합산하지만, 글로벌은 트리가 하나다. 그래서 **distinct 는 합이
+$T0> #      아니라 전체값**이어야 한다 -- 파티션 셋에 같은 키가 흩어져 있으면
+$T0> #      합산값(270)은 전체(90)보다 크고, 그 값을 선택도에 넣으면 글로벌을
+$T0> #      실제보다 선택적인 것으로 과대평가한다.
+$T0> #
+$T0> #   2. V$DISK_BTREE_HEADER 가 멤버 디렉터리를 내놓는가.
+$T0> #      멤버 디렉터리는 **디스크만 영속한다**. 메모리 쪽에는 대응이 없다.
+$T0> #
+$T0> #   3. 커버링(index-only) 스캔.
+$T0> #      **디스크만 할 수 있다** -- 메모리 키는 로우 포인터를 담고 디스크 키는
+$T0> #      컬럼 값을 담는다. 그래서 이 케이스의 매체는 디스크다.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGD_STAT_SPLIT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGD_STAT_SPLIT ( I1 INTEGER, I2 INTEGER, V1 VARCHAR(20) )
+    PARTITION BY RANGE ( I1 )
+    (
+        PARTITION P1 VALUES LESS THAN ( 100 ),
+        PARTITION P2 VALUES LESS THAN ( 200 ),
+        PARTITION P3 VALUES LESS THAN ( 300 )
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> # 같은 i2 값이 세 파티션에 흩어진다 -- 합산과 전체값이 갈리는 픽스처.
+$T0> INSERT INTO NGD_STAT_SPLIT SELECT       LEVEL, LEVEL, 'V' || LEVEL FROM DUAL CONNECT BY LEVEL <= 90;
+90 rows inserted.
+$T0> INSERT INTO NGD_STAT_SPLIT SELECT 100 + LEVEL, LEVEL, 'V' || LEVEL FROM DUAL CONNECT BY LEVEL <= 90;
+90 rows inserted.
+$T0> INSERT INTO NGD_STAT_SPLIT SELECT 200 + LEVEL, LEVEL, 'V' || LEVEL FROM DUAL CONNECT BY LEVEL <= 90;
+90 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE INDEX NGD_STAT_SPLIT_G ON NGD_STAT_SPLIT ( I2, V1 );
+Create success.
+
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_STAT_SPLIT_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 플랜은 단일 글로벌 SCAN 이다
+$T0> ##################################
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ INDEX( NGD_STAT_SPLIT, NGD_STAT_SPLIT_G ) */ COUNT(*)
+      FROM NGD_STAT_SPLIT WHERE I2 = 7;
+COUNT                
+-----------------------
+3                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.NGD_STAT_SPLIT, INDEX: SYS.NGD_STAT_SPLIT_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 통계가 글로벌 인덱스에 도달한다
+$T0> ##################################
+$T0> # 수집 전: 통계가 없다
+$T0> EXEC DBMS_STATS.DELETE_INDEX_STATS( 'SYS', 'NGD_STAT_SPLIT_G' );
+Execute success.
+$T0> SELECT COUNT(*) AS STATS_BEFORE
+      FROM X$DBMS_STATS
+     WHERE TYPE = 'I'
+       AND TARGET_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                          WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G' );
+STATS_BEFORE         
+-----------------------
+0                    
+1 row selected.
+
+$T0> EXEC DBMS_STATS.GATHER_TABLE_STATS( 'SYS', 'NGD_STAT_SPLIT', NULL, 100 );
+Execute success.
+
+$T0> # 키 개수는 270 -- 세 파티션의 로우 전부가 한 트리에 있다
+$T0> SELECT NUM_ROW AS KEY_COUNT
+      FROM X$DBMS_STATS
+     WHERE TYPE = 'I'
+       AND TARGET_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                          WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G' );
+KEY_COUNT            
+-----------------------
+270                  
+1 row selected.
+
+$T0> # ★ distinct 는 90 이어야 한다. 파티션별 합산이면 270 이 된다.
+$T0> SELECT NUM_DIST AS GLOBAL_DISTINCT
+      FROM X$DBMS_STATS
+     WHERE TYPE = 'I'
+       AND TARGET_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                          WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G' );
+GLOBAL_DISTINCT      
+-----------------------
+90                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- V$DISK_BTREE_HEADER 의 멤버 디렉터리
+$T0> ##################################
+$T0> SELECT DECODE( IS_GLOBAL, 'T', 1, 0 ) AS IS_GLOBAL_FLAG
+      FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G';
+IS_GLOBAL_FLAG 
+-----------------
+1           
+1 row selected.
+$T0> SELECT MEMBER_COUNT        FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G';
+MEMBER_COUNT 
+---------------
+4           
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G';
+ACTIVE_MEMBER_COUNT 
+----------------------
+4           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 커버링(index-only) 스캔
+$T0> ##################################
+$T0> # 키가 (I2, V1) 이므로 그 둘만 읽는 질의는 힙을 안 본다.
+$T0> SELECT /*+ INDEX( NGD_STAT_SPLIT, NGD_STAT_SPLIT_G ) */ COUNT(*) AS COVERING_ALL
+      FROM NGD_STAT_SPLIT WHERE I2 >= 0;
+COVERING_ALL         
+-----------------------
+270                  
+1 row selected.
+
+$T0> # 커버링과 힙 경유가 같은 값을 낸다 -- 0 이어야 정상(차집합)
+$T0> SELECT COUNT(*) AS COVERING_MINUS_HEAP FROM (
+        SELECT /*+ INDEX( NGD_STAT_SPLIT, NGD_STAT_SPLIT_G ) */ I2, V1
+          FROM NGD_STAT_SPLIT WHERE I2 >= 0
+        MINUS
+        SELECT /*+ FULL SCAN( NGD_STAT_SPLIT ) */ I2, V1
+          FROM NGD_STAT_SPLIT WHERE I2 >= 0 );
+COVERING_MINUS_HEAP  
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 파티션 하나를 지우면 커버링 스캔이 그만큼만 줄어든다
+$T0> ALTER TABLE NGD_STAT_SPLIT DROP PARTITION P3;
+Alter success.
+$T0> SELECT /*+ INDEX( NGD_STAT_SPLIT, NGD_STAT_SPLIT_G ) */ COUNT(*) AS COVERING_AFTER_DROP
+      FROM NGD_STAT_SPLIT WHERE I2 >= 0;
+COVERING_AFTER_DROP  
+-----------------------
+180                  
+1 row selected.
+$T0> SELECT /*+ FULL SCAN( NGD_STAT_SPLIT ) */ COUNT(*) AS FULLSCAN_AFTER_DROP
+      FROM NGD_STAT_SPLIT WHERE I2 >= 0;
+FULLSCAN_AFTER_DROP  
+-----------------------
+180                  
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT AS ACTIVE_AFTER_DROP
+      FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_STAT_SPLIT_G';
+ACTIVE_AFTER_DROP 
+--------------------
+3           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> DROP TABLE NGD_STAT_SPLIT;
+Drop success.
+
