@@ -1,0 +1,158 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Refuse a preserved tempfile path until an explicit REUSE authorizes it.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 3.4 (a matching identity is a classification, not an authorization),
+$T0> #                        design 6.5 binding modes and design 9.5 `INCLUDING CONTENTS` versus
+$T0> #                        `INCLUDING CONTENTS AND DATAFILES` unlink behavior.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteBinding.cpp, src/sm/sdp/sdpte/sdpteCreate.cpp
+$T0> #                        src/sm/sdp/sdpte/sdpteDropTableSpace.cpp touch-mode unlink
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_RU_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_ru_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_ru_02.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_RU_TS
+        TEMPFILE 'sdptec_ru_01.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_ru_02.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; DROP WITHOUT DATAFILES KEEPS THE INODES
+$T0> ##################################
+$T0> DROP TABLESPACE SDPTEC_RU_TS INCLUDING CONTENTS;
+Drop success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_DEFINITION_DROPPED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_RU_TS';
+PASS_DEFINITION_DROPPED 
+--------------------------
+1           
+1 row selected.
+
+$T0> PASS_FILE_01_PRESERVED
+
+$T0> PASS_FILE_02_PRESERVED
+
+$T0> ##################################
+$T0> SECTOR 3; A PRESERVED PATH IS NOT AN AUTHORIZATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_RU_TS
+        TEMPFILE 'sdptec_ru_01.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_ru_02.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdptec_ru_02.dbf )]
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NON_REUSE_CREATE_REFUSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_RU_TS';
+PASS_NON_REUSE_CREATE_REFUSED 
+--------------------------------
+1           
+1 row selected.
+
+$T0> # A partially authorized statement is still refused as a whole.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_RU_TS
+        TEMPFILE 'sdptec_ru_01.dbf' SIZE 4M REUSE AUTOEXTEND OFF,
+                 'sdptec_ru_02.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+[ERR-11034 : Data file node not found ( /home/et16/work/altidev4/altibase_home/dbs/sdptec_ru_02.dbf )]
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_PARTIAL_REUSE_REFUSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_RU_TS';
+PASS_PARTIAL_REUSE_REFUSED 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; EXPLICIT REUSE ADOPTS BOTH INODES
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_RU_TS
+        TEMPFILE 'sdptec_ru_01.dbf' SIZE 8M REUSE AUTOEXTEND OFF,
+                 'sdptec_ru_02.dbf' SIZE 2M REUSE AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = 1280
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 19
+                AND F.TOTAL_CURRENT = 1280
+                AND F.OPENED_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_EXPLICIT_REUSE_ADOPTED
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.OPENED = 1 THEN 1 ELSE 0 END) AS OPENED_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_RU_TS' ) F
+     WHERE T.NAME = 'SDPTEC_RU_TS';
+PASS_EXPLICIT_REUSE_ADOPTED 
+------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; DROP WITH DATAFILES UNLINKS THEM
+$T0> ##################################
+$T0> DROP TABLESPACE SDPTEC_RU_TS INCLUDING CONTENTS AND DATAFILES;
+Drop success.
+
+$T0> PASS_FILE_01_UNLINKED
+
+$T0> PASS_FILE_02_UNLINKED
+
+$T0> # The freed paths are now available without REUSE.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_RU_TS
+        TEMPFILE 'sdptec_ru_01.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 1
+                AND TOTAL_PAGE_COUNT = 256
+               THEN 1 ELSE 0
+           END AS PASS_FREED_PATH_REUSABLE
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_RU_TS';
+PASS_FREED_PATH_REUSABLE 
+---------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_RU_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

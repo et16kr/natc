@@ -1,6 +1,10 @@
 TestSuiteDescription = TEMP tablespace ALTER SIZE and AUTOEXTEND cases
 ###############################################################################
 alter_size_autoextend_logging.tc
+autoextendConfiguredSurvivesAtMax.tc
+autoextendEligibleFileOnly.tc
+autoextendMaxBelowRuntimeReject.tc
+autoextendSameValueNoopAfterRuntime.tc
 autoextend_max_128m.tc
 autoextend_max_16m.tc
 autoextend_next_normalize.tc
@@ -10,11 +14,16 @@ autoextend_reject_equal_max.tc
 autoextend_same_value.tc
 autoextend_unlimited.tc
 resize_equal_image.tc
+resizeExtendRecordWithPhysicalShrink.tc
+resizeGrowAboveRuntimeThenRestart.tc
 resize_growth_commit.tc
 resize_grow_16m.tc
 resize_grow_then_shrink.tc
 resize_same_size.tc
+resizeNoopKeepsSiblings.tc
+resizeShrinkBelowInitAfterRuntime.tc
 resize_shrink_1m.tc
 resize_shrink_2m.tc
 resize_shrink_4m.tc
+resizeZeroDiffShrinkToBaseline.tc
 -------------------------------------------------------------------------------

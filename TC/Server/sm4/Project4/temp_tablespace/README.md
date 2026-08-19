@@ -2,7 +2,9 @@
 
 This directory contains the NATC replacement surface for the Simple TEMP
 tablespace feature. The root suite registers one `.ts` per top-level role; the
-nested role suites contain 79 executable test cases in total.
+nested role suites contain 115 executable test cases in total. The former
+`temp_tablespace_claude` gap suite is merged into these role folders rather than
+being maintained as a second top-level suite.
 
 ## Directory roles
 
@@ -15,6 +17,7 @@ nested role suites contain 79 executable test cases in total.
 - `safety/path`: path revalidation when the registered pathname is substituted
 - `runtime/spill`: real sort/hash work-area spills, runtime growth, extent shapes, multi-file I/O
 - `runtime/concurrency`: concurrent spill and AUTOEXTEND serialization
+- `runtime/fileset`: runtime allocation preservation across file-set DDL
 - `recovery/restart`: ordinary restart and missing-file reconstruction
 - `recovery/reconcile`: committed definition versus runtime size and foreign-header rejection
 - `recovery/crash`: abrupt restart with a grown TEMP runtime
@@ -29,12 +32,12 @@ register their child role suites, while the root
 
 ## Oracle status
 
-The current executable suite has 79 matching `_A4_64.lst` files for 79 cases.
+The current executable suite has 115 matching `_A4_64.lst` files for 115 cases.
 `runtime/spill/spill.ts` comments out the three intentional future definitions:
 `extent38Spill`, `extent67Spill`, and `variableExtentSpill`. Their non-64-page
 runtime support is outside the current server capability and was explicitly
-excluded from this fix. The `.tc` definitions remain, without promoted oracles,
-so their expected future behavior is not silently removed.
+excluded from this fix. The `.tc` definitions remain but are not registered as
+executable cases, so their expected future behavior is not silently removed.
 
 The original 77-case oracle audit is retained as a historical snapshot in
 [ORACLE_REVIEW_20260818.md](ORACLE_REVIEW_20260818.md). Subsequent focused
@@ -44,6 +47,15 @@ diagnosis and verified oracle promotion are recorded in
 than a handwritten or guessed oracle. Helper `process.out` files are execution
 logs, not case oracles.
 
+## Known execution issues (2026-08-19)
+
+The integration run exposed the following server/runtime results. They are
+recorded separately and were not converted into passing oracles or fixed as
+part of this suite-layout change.
+
+- [concurrentSpillWithShrink FATAL](CONCURRENT_SPILL_WITH_SHRINK_ISSUE_20260819.md)
+- [runtimeSortHashMatrix FATAL](RUNTIME_SORT_HASH_MATRIX_ISSUE_20260819.md)
+- [safety binding error-code differences](SAFETY_BINDING_ISSUES_20260819.md)
 
 ## References used for SQL and iSQL behavior
 
@@ -58,6 +70,16 @@ repository has no mirrored 7.1 SQL/Admin manuals, so the exact-version local
 manual tree above supplied those references.
 CONTROL tests follow the established `stdFunc.i` sysdba process pattern and do
 not introduce external shell scripts.
+
+The 7.1 SQL Reference `DROP TABLESPACE` section states that
+`INCLUDING CONTENTS AND DATAFILES` physically removes every file belonging to a
+disk tablespace. This also applies to user disk TEMP tablespaces: a live
+2026-08-19 check created `CODEX_DROP_TEMP_VERIFY`, dropped it with that clause,
+observed its catalog count change from one to zero, and confirmed that its
+tempfile no longer existed. Cleanup therefore uses this single statement for
+files still owned by the tablespace. An explicit `RM -f` remains appropriate
+only for a file detached earlier by `DROP TEMPFILE`, or for a failed/foreign
+target that never became part of the tablespace definition.
 
 ## Deliberate NATC boundary
 

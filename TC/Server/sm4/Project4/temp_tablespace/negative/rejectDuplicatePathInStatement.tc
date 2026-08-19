@@ -1,0 +1,147 @@
+###########################################################################
+# TestCase Description = Refuse duplicated and already-registered tempfile paths inside one statement.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = design 6.4 path/identity safety and design 9.2/9.3 all-or-nothing multi-file
+#                        publication: a refused statement leaves no partial definition and no file.
+# Product Reference    = src/sm/sdp/sdpte/sdpteBinding.cpp, src/sm/sdp/sdpte/sdpteCreate.cpp
+#                        src/sm/sdp/sdpte/sdpteAddTempFile.cpp
+#                        src/qp/qdt/qdtCreate.cpp validateDiskTemporaryTBS
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTEC_DUP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_DUP_TWIN INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_DUP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_dup_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_dup_02.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_dup_twin.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTEC_DUP_DATA
+        DATAFILE 'sdptec_dup_data.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_DUP_TS
+        TEMPFILE 'sdptec_dup_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+##################################
+SECTOR; DUPLICATED PATH INSIDE ONE STATEMENT
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTEC_DUP_TWIN
+        TEMPFILE 'sdptec_dup_twin.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_dup_twin.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    ALTER TABLESPACE SDPTEC_DUP_TS ADD TEMPFILE
+        'sdptec_dup_02.dbf' SIZE 4M AUTOEXTEND OFF,
+        'sdptec_dup_02.dbf' SIZE 4M AUTOEXTEND OFF;
+
+##################################
+SECTOR; ALREADY REGISTERED PATHS
+##################################
+    ALTER TABLESPACE SDPTEC_DUP_TS ADD TEMPFILE
+        'sdptec_dup_01.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    ALTER TABLESPACE SDPTEC_DUP_TS ADD TEMPFILE
+        'sdptec_dup_data.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    CREATE TEMPORARY TABLESPACE SDPTEC_DUP_TWIN
+        TEMPFILE 'sdptec_dup_01.dbf' SIZE 4M REUSE AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+##################################
+SECTOR; VERIFY NO PARTIAL DEFINITION
+##################################
+    SELECT CASE
+               WHEN COUNT(*) = 0
+               THEN 1 ELSE 0
+           END AS PASS_TWIN_NEVER_CREATED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_DUP_TWIN';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 512
+                AND T.NEXT_FILE_ID = 1
+                AND F.FILE_COUNT = 1
+               THEN 1 ELSE 0
+           END AS PASS_TEMP_DEFINITION_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_DUP_TS' ) F
+     WHERE T.NAME = 'SDPTEC_DUP_TS';
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND F.FILE_COUNT = 1
+                AND F.TOTAL_CURRENT = 512
+               THEN 1 ELSE 0
+           END AS PASS_DATA_TABLESPACE_UNCHANGED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_DUP_DATA' ) F
+     WHERE T.NAME = 'SDPTEC_DUP_DATA';
+
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdptec_dup_twin.dbf" )
+    {
+        PRINT "FAIL_REFUSED_TWIN_FILE_LEFT";
+    }
+    ELSE
+    {
+        PRINT "PASS_REFUSED_TWIN_FILE_ABSENT";
+    }
+
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdptec_dup_02.dbf" )
+    {
+        PRINT "FAIL_REFUSED_ADD_FILE_LEFT";
+    }
+    ELSE
+    {
+        PRINT "PASS_REFUSED_ADD_FILE_ABSENT";
+    }
+
+##################################
+SECTOR; THE SURVIVING DEFINITION STILL ACCEPTS A VALID ADD
+##################################
+    ALTER TABLESPACE SDPTEC_DUP_TS ADD TEMPFILE
+        'sdptec_dup_02.dbf' SIZE 2M AUTOEXTEND OFF;
+
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = 768
+                AND T.NEXT_FILE_ID = 2
+               THEN 1 ELSE 0
+           END AS PASS_VALID_ADD_ACCEPTED
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_DUP_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTEC_DUP_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_DUP_TWIN INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTEC_DUP_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    # A refused duplicate CREATE has no definition that can own this path.
+    RM -f "${ALTIBASE_HOME}/dbs/sdptec_dup_twin.dbf";
+}

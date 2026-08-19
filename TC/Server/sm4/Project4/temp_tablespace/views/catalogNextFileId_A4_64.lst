@@ -1,0 +1,157 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep the TEMP next-file-ID cursor monotonic across ADD and DROP TEMPFILE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 3.4 committed file IDs are never reused; design 3.1 the TEMP
+$T0> #                        definition uses the existing Log Anchor `mNewFileID`; design 15.1 exposes
+$T0> #                        it through the existing NEXT_FILE_ID column.
+$T0> # Product Reference    = src/sm/sct/sctFT.cpp sctFT::getDiskTBSInfo mNewFileID
+$T0> #                        src/sm/sdp/sdpte/sdpteAddTempFile.cpp, sdpteDropTempFile.cpp
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_NF_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_nf_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_nf_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_nf_03.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_nf_04.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_NF_TS
+        TEMPFILE 'sdptec_nf_01.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K
+        SEGMENT MANAGEMENT AUTO;
+Create success.
+
+$T0> SELECT CASE
+               WHEN TYPE = 6
+                AND STATE = 2
+                AND NEXT_FILE_ID = 1
+                AND DATAFILE_COUNT = 1
+                AND EXTENT_MANAGEMENT = 'BITMAP'
+                AND SEGMENT_MANAGEMENT = 'AUTO'
+                AND EXTENT_PAGE_COUNT = 64
+                AND PAGE_SIZE = 8192
+                AND ATTR_LOG_COMPRESS = 1
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_CATALOG
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_NF_TS';
+PASS_CREATE_CATALOG 
+----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; ADD, DROP AND ADD AGAIN
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_NF_TS ADD TEMPFILE
+        'sdptec_nf_02.dbf' SIZE 2M AUTOEXTEND OFF,
+        'sdptec_nf_03.dbf' SIZE 2M AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN NEXT_FILE_ID = 3
+                AND DATAFILE_COUNT = 3
+               THEN 1 ELSE 0
+           END AS PASS_ADD_ADVANCES_CURSOR
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_NF_TS';
+PASS_ADD_ADVANCES_CURSOR 
+---------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTEC_NF_TS
+        DROP TEMPFILE 'sdptec_nf_02.dbf', 'sdptec_nf_03.dbf';
+Alter success.
+
+$T0> SELECT CASE
+               WHEN NEXT_FILE_ID = 3
+                AND DATAFILE_COUNT = 1
+               THEN 1 ELSE 0
+           END AS PASS_DROP_KEEPS_CURSOR
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_NF_TS';
+PASS_DROP_KEEPS_CURSOR 
+-------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTEC_NF_TS ADD TEMPFILE
+        'sdptec_nf_04.dbf' SIZE 2M AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.NEXT_FILE_ID = 4
+                AND T.DATAFILE_COUNT = 2
+                AND F.MAX_ID = 3
+                AND F.MIN_ID = 0
+               THEN 1 ELSE 0
+           END AS PASS_READD_TAKES_FRESH_ID
+      FROM V$TABLESPACES T,
+           ( SELECT MAX(D.ID) AS MAX_ID, MIN(D.ID) AS MIN_ID
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_NF_TS' ) F
+     WHERE T.NAME = 'SDPTEC_NF_TS';
+PASS_READD_TAKES_FRESH_ID 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; THE CURSOR IS DURABLE
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.NEXT_FILE_ID = 4
+                AND T.DATAFILE_COUNT = 2
+                AND T.SEGMENT_MANAGEMENT = 'AUTO'
+                AND T.EXTENT_PAGE_COUNT = 64
+                AND F.MAX_ID = 3
+               THEN 1 ELSE 0
+           END AS PASS_CURSOR_SURVIVES_RESTART
+      FROM V$TABLESPACES T,
+           ( SELECT MAX(D.ID) AS MAX_ID
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_NF_TS' ) F
+     WHERE T.NAME = 'SDPTEC_NF_TS';
+PASS_CURSOR_SURVIVES_RESTART 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_NF_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> # DROP TEMPFILE intentionally detached these files without unlinking them.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_nf_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_nf_03.dbf";
+

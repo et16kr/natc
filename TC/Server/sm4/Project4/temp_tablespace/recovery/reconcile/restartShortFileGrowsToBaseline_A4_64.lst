@@ -1,0 +1,152 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Extend a short but identity-valid tempfile back to its committed baseline.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 8.3: a valid matching file with `P < D` is grown to `D` with a
+$T0> #                        no-sync extend and re-stat, and design 11.3 gives that repair to the
+$T0> #                        post-recovery reconcile rather than to the pre-recovery identify pass.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteReconcile.cpp, src/sm/sdp/sdpte/sdpteStartup.cpp
+$T0> #                        src/sm/sdd/sddDiskMgr.cpp doActIdentifyAllDBFiles TEMP defer
+$T0> # Method Note          = The short file is a byte copy of the same inode taken while `D` was still
+$T0> #                        4M, so its identity header matches and only its length is behind.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_SF_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_sf_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_sf_01.short";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_SF_TS
+        TEMPFILE 'sdptec_sf_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+                AND T.TOTAL_PAGE_COUNT = 512
+               THEN 1 ELSE 0
+           END AS PASS_CREATE_BASELINE
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SF_TS';
+PASS_CREATE_BASELINE 
+-----------------------
+1           
+1 row selected.
+
+$T0> # Keep a byte copy of this inode while D is still 4M.
+
+$T0> CP "${ALTIBASE_HOME}/dbs/sdptec_sf_01.dbf" "${ALTIBASE_HOME}/dbs/sdptec_sf_01.short";
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ##################################
+$T0> SECTOR 2; COMMIT A LARGER BASELINE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_SF_TS
+        ALTER TEMPFILE 'sdptec_sf_01.dbf' SIZE 12M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 512
+                AND D.CURRSIZE = 1536
+                AND T.TOTAL_PAGE_COUNT = 1536
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 23
+               THEN 1 ELSE 0
+           END AS PASS_COMMITTED_GROW
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SF_TS';
+PASS_COMMITTED_GROW 
+----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; RESTART OVER A SHORT VALID FILE
+$T0> ##################################
+
+$T0> # Put the 4M image back at the registered path. The identity header is the
+$T0> # same inode's, so the file is valid and only its length is behind D.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_sf_01.dbf";
+$T0> CP "${ALTIBASE_HOME}/dbs/sdptec_sf_01.short" "${ALTIBASE_HOME}/dbs/sdptec_sf_01.dbf";
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 512
+                AND D.CURRSIZE = 1536
+                AND D.AUTOEXTEND = 0
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 1536
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 23
+               THEN 1 ELSE 0
+           END AS PASS_SHORT_FILE_GROWN_TO_D
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SF_TS';
+PASS_SHORT_FILE_GROWN_TO_D 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; THE REPAIR IS IDEMPOTENT
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 1536
+                AND T.TOTAL_PAGE_COUNT = 1536
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_REPAIR_IDEMPOTENT
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_SF_TS';
+PASS_REPAIR_IDEMPOTENT 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_SF_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> # The saved byte copy is not a member of the tablespace definition.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_sf_01.short";
+

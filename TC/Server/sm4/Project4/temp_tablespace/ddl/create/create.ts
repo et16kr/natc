@@ -2,7 +2,9 @@ TestSuiteDescription = TEMP tablespace CREATE definition cases
 ###############################################################################
 create_autoextend_next_4m.tc
 create_autoextend_unlimited.tc
+createBoundaryValidation.tc
 create_catalog.tc
+createDiskTemporaryForm.tc
 create_extent_1m.tc
 create_extent_256k.tc
 create_logging_transition.tc

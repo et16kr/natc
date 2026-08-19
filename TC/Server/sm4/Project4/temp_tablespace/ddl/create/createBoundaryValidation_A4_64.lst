@@ -1,0 +1,131 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Refuse impossible TEMP geometry at CREATE without leaving a file behind.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 2.4: the safety checks `sdpte` duplicates are page/byte overflow, a
+$T0> #                        representable header page and body offset, `extentPages > 0` with a
+$T0> #                        computable complete extent, OS/page-ID limits, and design 12 requires a
+$T0> #                        refused CREATE to publish nothing and to own no leftover file.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteCreate.cpp, src/sm/sdp/sdpte/sdpteFile.cpp
+$T0> #                        smERR_ABORT_FILE_IS_TOO_SMALL, smERR_ABORT_InitSizeExceedMaxSize,
+$T0> #                        smERR_ABORT_InvalidAutoExtFileSize
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_BV_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_BV_OK INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_bv_bad.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_bv_ok.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+
+$T0> ##################################
+$T0> SECTOR 2; REFUSED GEOMETRY
+$T0> ##################################
+$T0> # MAXSIZE below the initial size.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_BV_TS
+        TEMPFILE 'sdptec_bv_bad.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 4M
+        EXTENTSIZE 512K;
+[ERR-11150 : The INITSIZE of the data file exceeds the MAXSIZE of the data file.]
+
+$T0> # An extent larger than the whole file leaves no complete extent.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_BV_TS
+        TEMPFILE 'sdptec_bv_bad.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 8M;
+[ERR-11124 : Not even one extent can be created. ( Request Init Size : 512 pages, Minimum File Size : 1024 pages )]
+
+$T0> # AUTOEXTEND ON with a zero NEXT can never make progress.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_BV_TS
+        TEMPFILE 'sdptec_bv_bad.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 0M MAXSIZE 32M
+        EXTENTSIZE 512K;
+[ERR-311E8 : Invalid NEXT SIZE value.]
+
+$T0> # A file smaller than one header page plus one extent.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_BV_TS
+        TEMPFILE 'sdptec_bv_bad.dbf' SIZE 8K AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+[ERR-11124 : Not even one extent can be created. ( Request Init Size : 1 pages, Minimum File Size : 64 pages )]
+
+$T0> # A zero extent size has no complete extent to compute.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_BV_TS
+        TEMPFILE 'sdptec_bv_bad.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 0K;
+[ERR-31200 : The extent size EXTENTSIZE must be greater than PAGESIZE * 2.]
+
+$T0> ##################################
+$T0> SECTOR 3; VERIFY NOTHING WAS PUBLISHED
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NO_DEFINITION_PUBLISHED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTEC_BV_TS';
+PASS_NO_DEFINITION_PUBLISHED 
+-------------------------------
+1           
+1 row selected.
+
+$T0> PASS_REFUSED_CREATE_LEFT_NO_FILE
+
+$T0> ##################################
+$T0> SECTOR 4; A VALID GEOMETRY IS STILL ACCEPTED
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_BV_OK
+        TEMPFILE 'sdptec_bv_ok.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 32M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 512
+                AND T.EXTENT_PAGE_COUNT = 64
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 7
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 4096
+                AND D.AUTOEXTEND = 1
+                AND D.OPENED = 0
+               THEN 1 ELSE 0
+           END AS PASS_VALID_GEOMETRY_ACCEPTED
+      FROM V$TABLESPACES T, V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTEC_BV_OK';
+PASS_VALID_GEOMETRY_ACCEPTED 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_BV_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_BV_OK INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> # A refused CREATE is outside any definition if a regression leaves it behind.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_bv_bad.dbf";
+

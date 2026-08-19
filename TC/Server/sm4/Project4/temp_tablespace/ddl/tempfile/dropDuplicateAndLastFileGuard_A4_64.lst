@@ -1,0 +1,103 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject duplicate DROP TEMPFILE targets without weakening the last-file guard.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 9.4 validates a unique target set before applying the minimum-file guard.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteDropTempFile.cpp
+$T0> #                        sdpteDropTempFileValidateTargets SDPTE_DROP_TEMPFILE_LAST_FILE
+$T0> #                        sdpteDropTempFileBuildAfterImage
+$T0> # Review Note          = A duplicate target is an invalid statement, not a second removal of the
+$T0> #                        same file. Both duplicate shapes below must be rejected atomically.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_DD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_dd_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_dd_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_dd_03.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_DD_TS
+        TEMPFILE 'sdptec_dd_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdptec_dd_02.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_dd_03.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; TARGET COUNT REACHES THE FILE COUNT
+$T0> ##################################
+$T0> # Three targets against a three-file definition. The guard refuses the
+$T0> # statement even though only two distinct files are named.
+$T0> ALTER TABLESPACE SDPTEC_DD_TS
+        DROP TEMPFILE 'sdptec_dd_02.dbf',
+                      'sdptec_dd_02.dbf',
+                      'sdptec_dd_03.dbf';
+[ERR-11036 : The data file is in use.]
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = 2048
+               THEN 1 ELSE 0
+           END AS PASS_LAST_FILE_GUARD_KEPT_ALL
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_DD_TS';
+PASS_LAST_FILE_GUARD_KEPT_ALL 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; DUPLICATE TARGET IS REJECTED
+$T0> ##################################
+$T0> # Two targets naming the same file are invalid even though removing that
+$T0> # one distinct file would leave two files behind.
+$T0> ALTER TABLESPACE SDPTEC_DD_TS
+        DROP TEMPFILE 'sdptec_dd_02.dbf', 'sdptec_dd_02.dbf';
+[ERR-11036 : The data file is in use.]
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = 2048
+                AND F.FILE_COUNT = 3
+                AND F.TOTAL_CURRENT = 2048
+               THEN 1 ELSE 0
+           END AS PASS_DUPLICATE_TARGET_REJECTED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2,
+                    V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_DD_TS' ) F
+     WHERE T.NAME = 'SDPTEC_DD_TS';
+PASS_DUPLICATE_TARGET_REJECTED 
+---------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_DD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

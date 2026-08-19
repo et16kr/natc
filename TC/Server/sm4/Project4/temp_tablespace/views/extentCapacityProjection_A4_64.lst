@@ -1,0 +1,192 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Project TEMP extent capacity and free extents from the runtime current.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = design 6.1 `extent capacity = floor(runtimeLogicalPages / extentPages)`
+$T0> #                        with the header page and the sub-extent tail excluded, and design 15.1
+$T0> #                        publishing the free/allocated extent counts through the existing columns.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteExtent.cpp sdpteExtent::getSpaceStats
+$T0> #                        src/sm/sdp/sdpte/sdpteHandler.cpp sdpteHandlerGetCachedFreeExtCount
+$T0> #                        src/sm/sct/sctFT.cpp CACHED_FREE_EXTENT_COUNT / ALLOCATED_PAGE_COUNT
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_XC_EVEN INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_XC_TAIL INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_xc_even_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_xc_even_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_xc_even_03.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_xc_tail_01.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> # 64-page extents divide 1024, 512 and 256 logical pages exactly:
+$T0> # 16 + 8 + 4 = 28 complete extents. File ID 0 reserves its first extent
+$T0> # because its first page would otherwise encode the null page ID, so 27
+$T0> # extents are usable.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_XC_EVEN
+        TEMPFILE 'sdptec_xc_even_01.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdptec_xc_even_02.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdptec_xc_even_03.dbf' SIZE 2M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> # 38-page extents leave a 36-page tail inside a 1024-page file:
+$T0> # floor(1024 / 38) = 26 complete extents, 25 of them usable after the
+$T0> # file-ID-0 null-page reservation.
+$T0> CREATE TEMPORARY TABLESPACE SDPTEC_XC_TAIL
+        TEMPFILE 'sdptec_xc_tail_01.dbf' SIZE 8M AUTOEXTEND OFF
+        EXTENTSIZE 304K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; EXACT DIVISION
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN T.EXTENT_PAGE_COUNT = 64
+                AND T.PAGE_SIZE = 8192
+                AND T.DATAFILE_COUNT = 3
+                AND T.TOTAL_PAGE_COUNT = 1792
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 27
+                AND F.TOTAL_CURRENT = 1792
+               THEN 1 ELSE 0
+           END AS PASS_EXACT_EXTENT_CAPACITY
+      FROM V$TABLESPACES T,
+           ( SELECT SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTEC_XC_EVEN' ) F
+     WHERE T.NAME = 'SDPTEC_XC_EVEN';
+PASS_EXACT_EXTENT_CAPACITY 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; SUB EXTENT TAIL IS NOT CAPACITY
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN T.EXTENT_PAGE_COUNT = 38
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 25
+               THEN 1 ELSE 0
+           END AS PASS_TAIL_EXCLUDED_FROM_CAPACITY
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_XC_TAIL';
+PASS_TAIL_EXCLUDED_FROM_CAPACITY 
+-----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; CAPACITY FOLLOWS AN EXPLICIT RESIZE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTEC_XC_EVEN
+        ALTER TEMPFILE 'sdptec_xc_even_03.dbf' SIZE 6M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = 2304
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 35
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_CAPACITY_AFTER_GROW
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_XC_EVEN';
+PASS_CAPACITY_AFTER_GROW 
+---------------------------
+1           
+1 row selected.
+
+$T0> ALTER TABLESPACE SDPTEC_XC_EVEN
+        DROP TEMPFILE 'sdptec_xc_even_02.dbf';
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.TOTAL_PAGE_COUNT = 1792
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 27
+               THEN 1 ELSE 0
+           END AS PASS_CAPACITY_AFTER_DROP
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_XC_EVEN';
+PASS_CAPACITY_AFTER_DROP 
+---------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; RESTART REBUILDS THE SAME CAPACITY
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = 1792
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 27
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_CAPACITY_AFTER_RESTART
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_XC_EVEN';
+PASS_CAPACITY_AFTER_RESTART 
+------------------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = 1024
+                AND ( SELECT X.CACHED_FREE_EXTENT_COUNT
+                        FROM X$TABLESPACES X
+                       WHERE X.ID = T.ID ) = 25
+               THEN 1 ELSE 0
+           END AS PASS_TAIL_CAPACITY_AFTER_RESTART
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTEC_XC_TAIL';
+PASS_TAIL_CAPACITY_AFTER_RESTART 
+-----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTEC_XC_EVEN INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTEC_XC_TAIL INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> # DROP TEMPFILE intentionally detached this file without unlinking it.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdptec_xc_even_02.dbf";
+
