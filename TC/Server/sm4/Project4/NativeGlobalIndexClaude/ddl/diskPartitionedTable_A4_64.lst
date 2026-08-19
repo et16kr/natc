@@ -96,6 +96,25 @@ $T0> #   구분점:
 $T0> #     네이티브  : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
 $T0> #     구버전    : SYS_PART_INDICES_ 행 없음, INDEX_TABLE_ID != 0
 $T0> #
+$T0> #   ★ 전제는 2026-08-19 에 세 번째로 뒤집혔다 (V4 D-2, GR-14 3단계).
+$T0> #
+$T0> #   디스크 off 의 뜻이 바뀌었다. "그 문장을 종전 구현($GIT_)으로
+$T0> #   성공시킨다" 는 이제 참이 아니다 -- $GIT_ 생성 경로가 닫혔고
+$T0> #   프로퍼티 0 은 ERR-314B6 으로 **실패**한다. 두 매체의 off 가 같은
+$T0> #   뜻이 된 것이다(메모리 0 = ERR-313D0, 디스크 0 = ERR-314B6).
+$T0> #
+$T0> #   그래서 앞쪽 네 섹터는 프로퍼티만으로는 자기가 재려던 $GIT_ 를 더
+$T0> #   이상 만들지 못한다. 은퇴한 구현을 재현하는 내부 스위치
+$T0> #   __DISK_GLOBAL_INDEX_LEGACY_CREATE 를 이름 대고 부르게 했고,
+$T0> #   그것을 DISABLE_DISK_GLOBAL_INDEX() 안에 넣었다 -- 그 DEF 의
+$T0> #   호출자가 전부 "$GIT_ 를 재는 섹터" 이기 때문이다. 반대 짝인
+$T0> #   ENABLE_DISK_GLOBAL_INDEX() 는 그 스위치를 끈다.
+$T0> #
+$T0> #   그리고 마지막에 섹터 하나가 붙었다(GIT RETIRED): 프로퍼티 0 만으로
+$T0> #   $GIT_ 를 만들려는 다섯 문장이 전부 ERR-314B6 이고, LOCAL 과
+$T0> #   네이티브는 그대로라는 것. 판정은
+$T0> #   docs/analysis/claude-global-index/v4-git-retirement.md.
+$T0> #
 $T0> #   ★ 전제는 2026-08-06 에 한 번 더 뒤집혔다 (V3 D-4).
 $T0> #
 $T0> #   두 프로퍼티의 파일 기본값이 개발 기간 동안 **둘 다 1** 이 됐다
@@ -132,6 +151,17 @@ $T0> # (disk-natc.md 4 가 같은 이유로 피한 자리다).
 $T0> #
 $T0> # 세운 값을 곧바로 읽는 것이 요점이다: 전사 자체가 자기 전제를 적게 된다.
 $T0> #
+$T0> # V4 D-2 (GR-14 3단계) 뒤로는 프로퍼티 0 만으로 $GIT_ 가 만들어지지
+$T0> # 않는다(ERR-314B6). 이 DEF 의 호출자는 전부 "$GIT_ 를 재는 섹터" 이므로
+$T0> # 은퇴한 구현을 재현하는 내부 스위치를 함께 세운다.
+$T0> #
+$T0> # 그 스위치는 __ 로 시작하는 내부 프로퍼티라 v$property 에 나오지 않는다.
+$T0> # 그래서 값을 되읽어 전사에 남기는 것은 DISK_GLOBAL_INDEX_ENABLE 쪽뿐이고,
+$T0> # 내부 스위치가 실제로 섰는지는 바로 뒤 섹터의 INDEX_TABLE_ID 가 말한다
+$T0> # (NONZERO 면 $GIT_ 다) -- 못 섰다면 그 자리가 ERR-314B6 으로 붉어진다.
+
+$T0> # 3단계 자체를 재는 섹터가 쓰는 짝. 프로퍼티만 0 이고 내부 스위치는 0 --
+$T0> # 즉 오늘의 사용자가 보는 그대로다.
 
 $T0> #
 $T0> # 디스크 파티션드 테이블. 파티션 키는 i1.
@@ -147,6 +177,8 @@ $T0> drop table t2;
 $T0> SKIP END;
 $T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
 Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
 
 $T0> # 앞쪽 네 섹터(PROPERTY OFF / PROPERTY ON / PK / UK)의 전제.
 $T0> # 그것들이 재는 것은 $GIT_ 구현이고, 그 구현은 이 값이 0 일 때만
@@ -154,6 +186,8 @@ $T0> # 만들어진다. 파일 기본값은 1 이므로 여기서 세우지 않�
 $T0> # 이름과 다른 것(네이티브)을 재게 된다 -- 실제로 그랬다.
 $T0> # 뒤쪽 DISK NATIVE 섹터들이 각자 1 로 다시 세운다.
 $T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
 Alter success.
 $T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
 NAME                                                                                                                                                                                                                                                              
@@ -803,6 +837,8 @@ $T0> #   기대 출력이 서버가 아니라 클라이언트를 시험하게 �
 
 $T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
 Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
 $T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
 NAME                                                                                                                                                                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -943,6 +979,8 @@ $T0> # 것이 네이티브이므로 자기가 세운다.
 
 $T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
 Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
 $T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
 NAME                                                                                                                                                                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1078,6 +1116,8 @@ $T0> # 가르는 진짜 필드는 INDEX_TABLE_ID 이므로 그것을 본다.
 
 $T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
 Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
+Alter success.
 $T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
 NAME                                                                                                                                                                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1103,6 +1143,8 @@ $T0> create index gidx_old on t1(i2);
 Create success.
 
 $T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
 Alter success.
 $T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
 NAME                                                                                                                                                                                                                                                              
@@ -1200,6 +1242,189 @@ I1
 1 row selected.
 
 $T0> ##################################
+$T0> # SECTOR; GIT RETIRED - DISK_GLOBAL_INDEX_ENABLE = 0 (V4 D-2)
+$T0> ##################################
+$T0> # GR-14 3단계. 위 섹터들은 전부 내부 스위치로 은퇴한 구현을 재현해서
+$T0> # $GIT_ 를 만들었다. 이 섹터는 그 스위치 없이, 오늘의 사용자가 보는
+$T0> # 그대로를 잰다: 프로퍼티 0 은 $GIT_ 를 만들지 않고 ERR-314B6 이다.
+$T0> #
+$T0> # 다섯 문장을 전부 친다 -- CREATE INDEX, CREATE UNIQUE INDEX,
+$T0> # ADD CONSTRAINT UNIQUE, ADD CONSTRAINT PRIMARY KEY, 그리고 CREATE TABLE
+$T0> # 의 제약. 마지막 것이 있는 이유는 세 코드 자리가 ALTER 뿐 아니라
+$T0> # CREATE TABLE 도 덮는다는 사실이 이 파일에는 아직 없었기 때문이다.
+$T0> #
+$T0> # 그리고 거절이 넓지 않다는 것을 같은 자리에서 잰다: LOCAL 은 그대로
+$T0> # 만들어지고, 프로퍼티를 1 로 올리면 같은 문장이 네이티브를 만든다.
+
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+0                                                                                                                                                                                                                                                                 
+1 row selected.
+
+
+$T0> create table t1( i1 integer, i2 integer, i3 integer, i4 integer )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # 다섯 문장. 전부 ERR-314B6.
+$T0> create index gidx1 on t1(i2);
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create GIDX1.]
+$T0> create unique index gidx2 on t1(i2);
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create GIDX2.]
+$T0> alter table t1 add constraint t1_uk unique (i2);
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create T1_UK.]
+$T0> alter table t1 add constraint t1_pk primary key (i2);
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create T1_PK.]
+
+$T0> create table t2( i1 integer, i2 integer,
+                 constraint t2_pk primary key (i2) )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values default
+)
+tablespace sys_tbs_disk_data;
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create T2_PK.]
+
+$T0> # 거절이 아무것도 남기지 않는다.
+$T0> select i.index_name,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TABLE_ID_KIND  
+-----------------------
+No rows selected.
+$T0> select t.table_name
+  from system_.sys_tables_ t
+  where t.table_name = upper('t2')
+    and t.user_id = user_id();
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_type = 'G'
+    and t.user_id = u.user_id
+  order by t.table_name;
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+TABLE_TYPE  
+--------------
+No rows selected.
+
+$T0> # 거절은 넓지 않다. LOCAL 은 그대로다.
+$T0> create index lidx1 on t1(i2) local;
+Create success.
+$T0> drop index lidx1;
+Drop success.
+
+$T0> # 파티션 키를 포함한 PK 는 로컬이므로 거절되지 않는다.
+$T0> alter table t1 add constraint t1_lpk primary key (i1);
+Alter success.
+$T0> alter table t1 drop constraint t1_lpk;
+Alter success.
+
+$T0> # 프로퍼티를 1 로 올리면 같은 문장이 네이티브를 만든다.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> create index gidx1 on t1(i2);
+Create success.
+
+$T0> select i.index_name,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TABLE_ID_KIND  
+-----------------------
+GIDX1                                                                                                                             
+ZERO     
+1 row selected.
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+GIDX1                                                                                                                             
+101         
+1 row selected.
+
+$T0> # 그리고 그 네이티브 인덱스의 REBUILD 는 프로퍼티 0 에서도 그대로 돈다 --
+$T0> # 3단계가 막는 것은 $GIT_ 를 만드는 자리이지 리빌드 자체가 아니다.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+0                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> alter index gidx1 rebuild;
+Alter success.
+
+$T0> select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('t1')
+    and t.user_id = user_id()
+  order by i.index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+PARTITION_TYPE 
+-----------------
+GIDX1                                                                                                                             
+101         
+1 row selected.
+
+$T0> ##################################
 $T0> # SECTOR; FINALIZATION
 $T0> ##################################
 $T0> # 파일 기본값 1 로 되돌린다. 이 케이스는 0 을 여러 번 세우고 끝나므로,
@@ -1207,6 +1432,8 @@ $T0> # 되돌리지 않으면 같은 인스턴스에서 이어 도는 다음 케
 $T0> # 받는다 -- 옛 코드가 정확히 그렇게 끝나고 있었다(마지막 문장이 0).
 
 $T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
 Alter success.
 $T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
 NAME                                                                                                                                                                                                                                                              
@@ -1222,5 +1449,7 @@ $T0> drop table t1;
 $T0> drop table t2;
 $T0> SKIP END;
 $T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
 Alter success.
 

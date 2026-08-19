@@ -828,7 +828,18 @@ ORDER BY A.TABLE_ID;
 --##############################
 --+SECTOR; SYS_INDEX_PARTITIONS_
 --##############################
-SELECT A.*
+--###########################################################################
+--# PORT EDIT: the original is SELECT A.*, and SYS_INDEX_PARTITIONS_ ends in
+--# CREATED and LAST_DDL_TIME -- wall-clock columns. That made the expectation
+--# valid on its recording day and no other: it was recorded 18-AUG-2026 and
+--# went red on the 19th, for a reason that has nothing to do with what this
+--# sector measures. The original suite has the same hole; a port cannot
+--# inherit an expectation that can never be re-verified. Every other column
+--# of A is kept, in the original order. It is the only DATE the 208 carried.
+--###########################################################################
+SELECT A.USER_ID, A.TABLE_ID, A.INDEX_ID, A.TABLE_PARTITION_ID,
+       A.INDEX_PARTITION_ID, A.INDEX_PARTITION_NAME,
+       A.PARTITION_MIN_VALUE, A.PARTITION_MAX_VALUE, A.TBS_ID
 FROM SYSTEM_.SYS_INDEX_PARTITIONS_ A, 
      SYSTEM_.SYS_INDICES_ B, 
      SYSTEM_.SYS_TABLES_ C
@@ -836,6 +847,9 @@ WHERE A.TABLE_ID = B.TABLE_ID
     AND B.TABLE_ID = C.TABLE_ID
     AND C.TABLE_NAME='T1'
 ORDER BY B.TABLE_ID, A.TABLE_PARTITION_ID;
+--###########################################################################
+--# PORT EDIT END
+--###########################################################################
 
 --##############################
 --+SECTOR; SYS_PART_KEY_COLUMNS_
