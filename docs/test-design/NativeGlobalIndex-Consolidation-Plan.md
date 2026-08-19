@@ -4,7 +4,11 @@
 - 흡수: `NativeGlobalIndexPort1624` 전량 + `NativeGlobalIndexCodex` **선별** +
   제품 저장소 밖 그물(`altibase/scripts/global-index/`)에서 **건질 수 있는 것**
 - 실측 기준: 2026-08-19
-- 상태: **계획 — 착수 전.** 선행 조건은 §2, 남은 결정은 §10
+- 상태: **집행 중** — Phase A~D 완료(판정표는 `-Dedup.md`, Codex 흡수는
+  ~30 이 아니라 **11** 로 확정), Phase E 진행 중(분해표는 `-Salvage-Map.md`,
+  의존 없는 11 중 3 이식됨). **부족 TC 판정은 `-Coverage-Gaps.md`** —
+  특히 §6(O-8 수정 · V4 코드 리뷰가 만든 새 공백)과 §7(이 계획의 지도에
+  축 자체가 없던 종류 — 키 길이 경계 · iloader · 권한 · 런타임 멤버 뷰)
 
 ---
 
@@ -106,15 +110,28 @@ NativeGlobalIndexClaude/
     Port1624/                         ← 계보 보존, 재배치 금지
         basic/ pdt/ design/ bugs/ tool/ DDL/ meta/ qc/
         MANIFEST                      ← 208 대조 (§8.4)
+    Replication/                      ← [2026-08-19 신설] 두 서버 레인 (§9.4)
+        initialize.tc  <본문>.tc  finalize.tc
     Deferred/
         README.md                     ← 레인 · 계약 · 상태 · 여는 조건
 ```
+
+`Replication/` 이 `Deferred/` **밖** 최상위인 것은 의도다 — 보류가 풀렸으니
+보류 목록에 둘 수 없고, 매체(`Disk`/`Memory`)로도 갈리지 않는다. 두 서버가
+전제인 레인이라 자기 축이다. 다만 **루트 `.ts` 배선이 아직 없다**(§9.4 결함 ①).
 
 영역 10 개는 Codex 가 이미 쓰는 것을 그대로 가져온다(`Concurrency`·
 `Lifecycle` 은 Codex 에서도 비어 있다 — 다중 세션·재기동 계약이 필요한
 자리로 예약돼 있다). **`Regress` 만 신설**한다 — Claude 의
 `regress/noGlobalIndexUnchanged`·`propertyRuntimeChange` 가 영역이 아니라
 게이트라서 8 개 영역 어디에도 안 들어간다.
+
+> **[2026-08-19 추가] 이 지도에 유틸리티 축의 자리가 없다.** aexport 는
+> `Port1624/tool/` 의 계보로 들어왔지만, 그 서브트리는 MANIFEST 로
+> 동결되므로(§8.4) **신규 유틸 케이스의 목적지가 없다** — iloader 는
+> 스위트·그물 어디에도 없는 것이 실측됐다(`-Coverage-Gaps.md` §7 N14).
+> `Regress` 와 같은 이유(영역이 아니라 접점)로 최상위 **`Tool/`** 신설을
+> 제안한다 — §7.4 참조. 착수 전 결정 사항이다.
 
 ### 3.2 매체가 1급 축인 이유 — 성격이 다르다
 
@@ -549,7 +566,7 @@ NATC 로 옮길 수 없고 스크립트와 함께 사라진다. 조용히 넘기
 
 | 레인 | 출처 | 필요한 계약 | 상태 |
 |---|---|---|---|
-| Replication | Port1624 `repl/` 4 · Claude `repl/` 1 · 삭제될 `replication-check`(427 검사) | `server.conf` 에 우리 서버 블록 둘 (§9.3) | **ConfigPending** ← `EnvironmentBlocked` 에서 내렸다 |
+| Replication | Port1624 `repl/` 4 · Claude `repl/` 1 · 삭제될 `replication-check` | `server.conf` 에 우리 서버 블록 둘 (§9.3) | **열렸다 (2026-08-19, `43d4f6d`)** ← `ConfigPending` ← `EnvironmentBlocked`. 잔여는 §9.4 |
 | AdminTool | Codex Deferred | 격리 admin 계정 · 파일 정책 | EnvironmentBlocked |
 | Performance | Codex Deferred · 삭제될 벤치 10 | 교정된 하드웨어 · 비교 기준선 | EnvironmentBlocked |
 | Restart / Crash | Claude `deferred/README` · 삭제될 8 | FIT 레인 계약(`docs/FIT_GUIDE.md`) | 계약 있음, 미착수 |
@@ -638,6 +655,94 @@ delete+insert 로 갈려도, 수신 측 행 수와 값이 송신과 같으면 �
 
 **보류는 이름과 여는 조건을 갖는다.** 조건 없는 보류는 만들지 않는다.
 
+### 9.4 복제 레인 — 열렸다 (2026-08-19, `43d4f6d`). 확인과 잔여
+
+§9.3 의 진단이 **맞았다.** 막고 있던 것은 프레임워크가 아니라
+`conf/server.conf` 의 블록 부재였고, 그것을 더하자 레인이 섰다.
+
+| 확인한 것 | 결과 |
+|---|---|
+| 블록 이름 | **`[NGI_SERVER1]` / `[NGI_SERVER2]`** — `PROJ_1624_SERVER1/2` 가 아니다. `ALTIBASE_HOME` 이 `…/NativeGlobalIndexClaude/Replication/db1`·`db2` 를 가리키고, 자리표시자(`%PORT_NO8` 등)는 PROJ-2429 와 공유한다(같은 시점에 돌지 않는 블록끼리 공유하는 이 파일의 관례) |
+| 기계 독립성 | **성립.** 세 `.lst` 어디에도 IP·경로·시각·포트가 없다(실측: 전량 grep 0). `${HOST_IP@DB2}` 가 전개되지 않은 원문으로 찍히는 §9.3 의 관용구가 그대로 작동한다 |
+| 자기 전제 | `PARTITION_TYPE = 101` 판별자를 케이스가 **직접 SELECT** 한다 — 프로퍼티를 못박는 대신 네이티브임을 잰다. 신선한 db1/db2 가 설치본 `altibase.properties`(기본 1)를 복사해 뜨므로 전제가 서고, 어긋나면 그 카운트가 0 으로 붉어진다. §8.5 규약 ② 의 **허용되는 변형**으로 기록한다 |
+| 오라클 | receiver 카운터가 **이동과 제자리 갱신을 가른다** — insert 5 / delete 2 / update 1. 초기 3 + 파티션을 넘은 이동 둘(각각 delete+insert) + 파티션 안에 머문 갱신 하나. 계수 장치 없이 값만으로 선다는 §9.3 의 판단이 실측으로 확인됐다 |
+
+**잔여 — 이 레인은 아직 한 케이스다.**
+
+| 잔여 | 상태 |
+|---|---|
+| Port1624 `repl/` **4** | **이제 막는 것이 없다.** MANIFEST 의 보류 사유("`PROJ_1624_SERVER1/2` 블록이 없다 — ConfigPending")는 **낡았다** — 블록은 `NGI_SERVER1/2` 라는 이름으로 존재한다. 이식하면 208 이 **207 ported / 1 held** 가 된다. MANIFEST 의 사유 문단을 같은 커밋에서 고칠 것 |
+| 삭제될 `replication-check` | 미착수. **단언 수를 재확인해야 한다** — §10.1 은 427 이라 적었으나 Salvage-Map §1 의 계수 방식(`expect_ok`·`expect_err`·`expect_val`·`ok `·`fail `)으로 다시 세면 **255** 이고, 이 스크립트가 쓰는 `expect_*` 헬퍼 일곱 종을 전부 세면 **345** 다. 셋 중 어느 것이 맞는지 정하고 표를 통일할 것 |
+| Claude `repl/` 1 | `Memory/DDL/replicationReject.tc` 로 이미 이관됨(§4.1) — 단일 인스턴스 DDL 게이트라 이 레인의 몫이 아니다 |
+
+**이 레인에 남은 결함 둘** (케이스가 아니라 배선·규약의 문제다):
+
+1. **★ 루트 `.ts` 가 이 레인을 부르지 않는다.** `NativeGlobalIndex.ts` 는
+   `Port1624`·`Memory`·`Disk` 셋만 나열하고, `Replication/Replication.ts` 를
+   **참조하는 파일이 저장소에 하나도 없다**(실측). 전체 실행이 이 레인을
+   영영 밟지 않는다는 뜻이고, §12 완료 조건 ②("루트 `.ts` 하나로 전량이
+   돈다")와 어긋난다. 서버를 띄우고 죽이는 레인이라 기본 실행에서 빼는
+   판단은 **정당할 수 있으나, 어디에도 적혀 있지 않다** — 배선하든 빼든
+   루트 `.ts` 에 그 사실과 실행 방법을 적어야 한다. Port1624 가 MANIFEST 로
+   막으려 한 "조용히 빠지는" 사고가 레인 통째로 일어나는 자리다.
+2. **`X$REPRECEIVER` 조회가 자기 객체로 범위를 좁히지 않는다.**
+   `SELECT REP_NAME, INSERT_SUCCESS_COUNT FROM X$REPRECEIVER;` 에 `WHERE
+   REP_NAME = 'NGI_REP'` 도 `ORDER BY` 도 없다. 지금은 복제가 하나뿐이라
+   한 행이지만, 이 파일은 **"복제 본문 TC 의 템플릿"** 을 자칭하므로 그
+   모양이 다음 케이스마다 복제된다 — 활성 복제가 둘이 되는 순간 행 수와
+   순서가 갈려 깜빡인다. §8.5 규약 ①(카탈로그·고정 뷰 나열은 자기 객체로
+   범위를 좁힌다)이 정확히 이것을 겨눈 규약이고, 이 스위트는 같은 종류의
+   사고(절대 카탈로그 id 로 네 케이스가 실행 순서에 묶인 것)를 이미 한 번
+   겪었다. **템플릿이 굳기 전에 고치는 것이 싸다.**
+
+### 9.5 복제 케이스를 더 쓰려면 — 템플릿이 주는 것과 주지 않는 것
+
+`globalPkRowMovement.tc` 는 자신을 "복제 본문 TC 의 템플릿" 이라 적었다.
+**참고 자료로 충분한지**를 삭제될 `replication-check.sh` 의 실제 검증 면과
+대조해 판정한다. 그 스크립트는 절 **A~O 열다섯**을 갖는다.
+
+**판정: 뼈대로는 충분하다. 본문으로는 열다섯 중 J 하나를 덮는다.**
+
+#### 충분한 것 — 그대로 복사해 쓰면 되는 것
+
+두 인스턴스 세우기(`$ALTIBASE_HOME_C0` · `RM -rf`/`MKDIR`/`CP` · `stdServerKill`
+→ `stdClean` → `stdServerStart`), `DECLARE SERVER`/`CLIENT`, `THREAD`/`JOIN`
+배리어, `initialize`→본문→`finalize` 의 `.ts` 순서, `${HOST_IP@DB2}` 로
+기계 독립성 유지, `CLEAN()` 의 `SKIP BEGIN/END`, 판별자(`PARTITION_TYPE=101`)로
+전제를 재는 법. **이 축은 다시 설계할 필요가 없다.**
+
+#### 다음 케이스를 쓰다 반드시 부딪히는 것 — 템플릿이 말하지 않는다
+
+| # | 무엇 | 근거 |
+|---|---|---|
+| 1 | **피어 호스트·포트당 복제 객체는 하나다.** 둘째를 만들면 무엇을 복제하든 `ERR-6110C` | 그물이 그 때문에 표를 재배열했다 — *"a second replication to the same peer host/port is ERR-6110C no matter what it replicates. Dropping first keeps M68 measuring the partition unit rather than the host rule."* 템플릿의 `CLEAN()` 이 우연히 이 규칙을 지키고 있을 뿐, **규칙을 적지 않았다.** 복제 둘이 필요한 검증(표 단위 + 파티션 단위 공존)은 그대로는 못 쓴다 |
+| 2 | **객체 이름 규약이 없다** — `NGI_REP`·`NGI_RP_PK` 고정 | 케이스가 늘면 앞 케이스의 잔재를 보거나 충돌한다. §9.4 결함 ②(`X$REPRECEIVER` 무범위)와 같은 가족이다. **케이스별 접두사 규약을 템플릿에 박을 것** |
+
+#### 남은 절이 요구하는데 예시가 없는 관용구
+
+| # | 없는 것 | 어느 절이 요구하나 |
+|---|---|---|
+| 3 | **부정 단언** — "도착하지 **않아야** 한다" 를 쓸 방법 | 그물은 `FLUSH` 를 **한 번도 쓰지 않는다(0 회)**. 대신 폴링(`expect_arrive`, 기본 30 초)과 정착 대기(`expect_stays`)를 따로 만들고 *"There is no way to prove that except to give replication a fair chance first"* 라고 적었다. 템플릿의 배리어는 `FLUSH` 하나뿐이고, **그것이 부정 단언에도 충분한지 아무도 확인하지 않았다.** E·F·K 절이 전부 이 모양이다 |
+| 4 | **송신 측 관측**(`V$REPSENDER`)과 기동 경주 | 그물은 양쪽 sender 가 1 이 되고 **8 표본 연속 유지**될 때까지(최대 90 초) 기다린다. 템플릿은 `START` 직후 바로 `INSERT` 한다 — 두 번 그린이었으므로 `FLUSH` 가 그 경주를 흡수한다는 뜻이지만, **주장으로 적혀 있지 않다.** 확인해서 템플릿에 한 줄로 박을 것 |
+| 5 | **오류 기대값 예시 0** | 남은 절은 대부분 거절이다 — `ERR-61183`→`ERR-314B6`(O 절 게이트) · `ERR-610D8`(유니크 인덱스 수 불일치) · `ERR-6117F`(DROP PARTITION 은 레벨 ≥ 1) · `ERR-61186`/`ERR-61187`(피어가 거절, 중계) · `ERR-6209B`(피어 sender 가 "메타가 다르다" 며 정지). `.tc` 에선 그냥 실행해 전사하면 되지만 **템플릿이 한 번도 보여 주지 않는다** |
+| 6 | **DDL 복제 축 통째** | `REPLICATION_DDL_ENABLE_LEVEL` 0/1/2 · `REPLICATION_SQL_APPLY_ENABLE` · `REPLICATION_DDL_SYNC`. 함정 둘이 실측돼 있다 — **시스템 레벨이어야 하고**(세션 `ALTER` 로는 부족, `ERR-61184`) **양쪽에 걸어야 한다**(피어가 `ERR-61187` 로 거절). §9.3 이 "글로벌 인덱스 DDL 케이스는 0/1 두 축으로 갈라 잰다" 고 못박은 그 축이고, O 절(GR-07)이 통째로 여기 있다 |
+| 7 | **매체가 하나** — `SYS_TBS_DISK_DATA` 뿐 | 그물 M 절이 *"the same six questions asked of the DISK native global index"* 다 — 메모리가 나머지 반쪽이라는 뜻이다. 스위트의 1 급 축이 매체인데(§3.2) 이 레인엔 메모리 픽스처 예시가 없다 |
+| 8 | **파티션 단위 복제**(`FROM t PARTITION p TO t PARTITION p`)와 **`ALTER REPLICATION … SYNC`** | 각각 C·D 절. SYNC 는 끝난 뒤에도 sender 가 돌므로 **`STOP` 없이 `DROP` 하면 `ERR-610FE`** 다 |
+| 9 | 재기동 결합(부팅 순서 리빌드) | G 절. **이 레인의 계약 밖**이다 — `Lifecycle/` 로 이름 붙여 넘길 것(§3.3) |
+
+#### 그래서 무엇을 하면 충분해지는가
+
+템플릿을 다시 쓸 필요는 없다. **헤더에 규칙 셋을 더하고, 본문 케이스를
+하나 더 쓰면 참고 자료로 선다.**
+
+1. `globalPkRowMovement.tc` 헤더에 — 피어당 복제 하나(`ERR-6110C`), 케이스별
+   객체 이름 접두사 규약, `FLUSH` 가 덮는 범위(그리고 부정 단언은 무엇을
+   쓰는지)를 적는다. 셋 다 한 줄씩이다.
+2. `X$REPRECEIVER` 조회에 `WHERE REP_NAME = …` 을 넣는다 (§9.4 결함 ②).
+3. **둘째 본문 케이스로 거절 하나를 쓴다** — O 절의 `ERR-314B6` 게이트가
+   맞다. 오류 전사·`REPLICATION_DDL_ENABLE_LEVEL` 양쪽 설정·`SKIP` 정리까지
+   한 케이스가 다 보여 주므로, 그것이 서면 나머지 열셋은 기계적이다.
+
 ---
 
 ## 10. 결정 — 넷 다 정해졌다
@@ -674,6 +779,13 @@ ALTIBASE_HOME = $ATC_HOME/TC/Server/sm4/Project4/NativeGlobalIndexClaude/db1
 그다음은 `PROJ-1624-QC/repl/initialize.tc` 를 복사해 서버 이름과 경로만
 바꾸는 일이다. 이것으로 `Replication` 레인의 `ConfigPending` 이 사라지고
 **427 검사 + 5 케이스**가 보류에서 풀린다.
+
+> **[2026-08-19 결과] 그대로 됐다 — 다만 회계는 정정한다.** 블록 이름은
+> `PROJ_1624_SERVER1/2` 가 아니라 **`NGI_SERVER1/2`** 로 갔고(우리 레인이
+> 원본 이식만 받는 것이 아니므로 맞는 선택이다), 실제로 풀린 것은
+> **본문 케이스 1 + 뼈대 2** 다. 예고한 "427 검사 + 5 케이스" 중
+> **Port1624 `repl/` 4 와 그물 쪽 검사 전량은 아직 미착수**이고, 427 이라는
+> 수 자체도 재확인이 필요하다. → §9.4
 
 **남은 단서 둘**:
 - 두 체크아웃 모두 **부분**이다(`TC/Server/repl4` 추적 37 개). 공식 트리의
@@ -779,7 +891,8 @@ V4 종결(J25)이 남긴 것 중 **통합의 몫이 아닌 것**이다. 조용�
 
 | 항목 | 무엇 | 왜 여기가 아닌가 |
 |---|---|---|
-| **O-8** | 멀티테이블 `UPDATE` 의 row movement 가 **`ERR-91015` 로 서버를 죽인다.** J25 가 08-19 HEAD 에서 재현을 재확인했고 **담당 잡이 없다** | 죽는 결함은 일반 `.tc` 로 담을 수 없다. 세 스위트 어디에도 커버가 없다. **제품 별건으로 열어야 한다** — 고쳐진 뒤에 케이스가 붙는다 |
+| **O-8** | 멀티테이블 `UPDATE` 의 row movement 가 **`ERR-91015` 로 서버를 죽인다.** J25 가 08-19 HEAD 에서 재현을 재확인했고 **담당 잡이 없다** | ~~죽는 결함은 일반 `.tc` 로 담을 수 없다 … 고쳐진 뒤에 케이스가 붙는다~~ → **고쳐졌다** (같은 날, altibase `5504aad9e` — `v4-multitable-rowmove.md`). 조건이 성립했으므로 **케이스 몫이 통합으로 돌아왔다** — `-Coverage-Gaps.md` §6 의 N8. 그물 쪽 감시자(`rowmovement-order-check` J 절, 177→247)도 삭제 대상이라 건지기 우선순위가 맨 앞으로 올라갔다 |
+| **V4 코드 리뷰 감시자** | 리뷰(`v4-code-review.md`, `3092935e0`)가 확정 10 건을 냈고 §3·§4·§6·§7 의 수정이 진행 중이다 | 제품 수정 자체는 이 계획 밖. 다만 리뷰의 마감 조건("발견마다 감시자를 세울 것")의 **감시자 자리가 이 스위트**다 — `-Coverage-Gaps.md` §6 의 N9~N12 로 받았다. 케이스를 못 세우는 발견(§7·§8·§9·§10)은 같은 절 6.2 에 사유와 함께 적었다 |
 | **GR-11 프루닝 칸** | 비용 모델의 재료 교체(`qmgPartition::reviseAccessMethodsCost` 의 네이티브 글로벌 분기 → `mPrePruningPartRef`). J25 기록: *"판정·좌표·수용 기준이 다 있었는데 `jobs.tsv` 에 행이 없어 아무도 받지 않았다"* | 제품 코드 변경이다. 수용 기준이 `stat-bias-sweep` 24 칸 — 그 스윕도 삭제될 그물에 있으므로 **그물이 사라지기 전에** 처리해야 한다 |
 | `Concurrency/` · `Lifecycle/` | 세 스위트 모두 **0**. 계획서가 "계약이 필요한 레인" 으로 예약해 둔 자리 | 계약(다중 세션·재기동)이 서면 그때 채운다. §3.3 이 어느 브리프를 따를지 적어 두었다 |
 

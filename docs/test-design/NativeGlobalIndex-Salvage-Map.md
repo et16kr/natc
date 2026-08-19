@@ -193,7 +193,7 @@ R 만 켜져 있고 F·C·G 가 꺼진 것들이다. **재기동 절을 `Disk/Li
 | `empty-table-ddl-check` | 57 | |
 | `reorg-ddl-check` | 112 | 멤버 집합 생존 |
 | `tbsonline-check` | 86 | |
-| `rowmovement-order-check` | 23 | |
+| `rowmovement-order-check` | ~~23~~ **자랐다** | ★ 같은 날 altibase `5504aad9e`(O-8 수정)가 **J 절**(멀티테이블 문장 축)을 더해 177 → 247 검사. 이제 **O-8 의 유일한 감시자**다. J 절은 재기동(I 절)과 무관 — **절 분리만으로 오늘 건질 수 있고, 우선순위 맨 앞**이다 (`-Coverage-Gaps.md` §6.2) |
 | `sm-matrix-check` | 157 | §계획 8.2.1 의 9 절 분해와 겹친다 |
 | `media-recovery-check` | 61 | 미디어 복구 — 본디 `Lifecycle/` |
 | `memberoverflow-check` | 22 | |
