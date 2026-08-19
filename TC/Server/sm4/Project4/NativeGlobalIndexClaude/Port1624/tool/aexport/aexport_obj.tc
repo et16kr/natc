@@ -1,4 +1,151 @@
 ###########################################################################
+# NativeGlobalIndexPort1624 - 전제와 판별자
+#
+# 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+# 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+# 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+#
+#   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+#   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+#
+# ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+#   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+#   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+#   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+#   어긋났었다(disk-natc.md 6).
+#
+# ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+#   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+#   복원이 유일한 방벽이다.
+###########################################################################
+
+#
+# 전제를 세우고, 세운 값을 전사에 남긴다.
+# 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+#
+DEF PIN_DISK_NATIVE()
+{
+  set linesize 200;
+  alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+  select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+###########################################################################
+# NativeGlobalIndexPort1624 - DESC_INDEX 의 네이티브 재정의 (배치 5)
+#
+# 원본 DDL/desc_global_index.i 를 대신한다. 원본과 **같은 이름, 같은 인자**
+# 의 DEF DESC_INDEX( @aName ) 하나만 정의하므로, 이 배치 22 개 케이스의
+# CALL DESC_INDEX( ... ) 자리는 원본과 바이트 동일하게 남는다.
+# (checkFunctionIndex.i 가 배치 4 에서 쓴 것과 같은 수법이다.)
+#
+# ---------------------------------------------------------------------
+# ★ 원본이 무엇을 하고 있었나
+# ---------------------------------------------------------------------
+#   desc "$GIT_@{aName}";                    -- 숨김 테이블의 모양
+#   create table "$_TEMP" as select * from "$GIT_@{aName}";
+#   update "$_TEMP" set "$GIT_OID"=0, "$GIT_RID"=0;
+#   select * from "$_TEMP";                  -- 숨김 테이블의 내용
+#
+# 즉 "인덱스를 담은 테이블을 서술하고 그 안을 들여다본다" 이다. 네이티브
+# 에는 그 테이블이 없다. 없는 것을 "에러가 난다" 로 굳히면 이유가 달라져도
+# 초록이 되므로(v3-natc-port.md 6.1), 없음을 **값 0** 으로 적고 인덱스
+# 자신의 서술은 네이티브 카탈로그와 런타임 헤더에서 가져온다.
+#
+# ---------------------------------------------------------------------
+# ★ 네 겹
+# ---------------------------------------------------------------------
+#   겹 0  숨김 테이블이 없다. 이 이름의 것(THIS_GIT_TABLE)과 이 사용자의
+#         어느 것이든(ANY_GIT_TABLE) 둘 다 센다. 0 만 적으면 조회가 깨져도
+#         0 이므로, 프로퍼티 0 에서 1 이 되는 자리를 이빨로 남긴다.
+#   겹 1  인덱스의 정체 -- 판별자(SYS_PART_INDICES_.PARTITION_TYPE = 101),
+#         유니크, 인덱스 테이블스페이스. 인덱스가 없으면 No rows selected 다
+#         (원본의 ERR-91014 자리). 인덱스 테이블스페이스는 원본이
+#         desc "$GIT_X" 의 [ TABLESPACE : ... ] 줄로 재던 것과 같은 것을
+#         재며, using index tablespace 절이 있는 섹터가 그것을 쓴다.
+#   겹 2  글로벌의 구조 -- 인덱스 파티션 수(글로벌이면 0), 런타임 헤더
+#         X$DISK_BTREE_HEADER 의 IS_GLOBAL / MEMBER_COUNT /
+#         ACTIVE_MEMBER_COUNT. 카탈로그가 아니라 **도는 서버의 헤더**이므로
+#         파티션 DDL 직후 카탈로그와 어긋나면 여기가 운다. DROP PARTITION 이
+#         지나가면 MEMBER_COUNT 와 ACTIVE_MEMBER_COUNT 가 갈라진다.
+#   겹 3  키 컬럼과 정렬 순서 -- 원본 desc 의 [ INDEX ] 절이 재던 것.
+#
+# ★ 페이지 ID·인덱스 ID·OID 는 한 줄도 내지 않는다. 인스턴스가 여태
+#   만든 객체 수의 함수라 실행마다 달라진다(NEEDS_FRESH_INSTANCE).
+#   같은 이유로 런타임 헤더는 INDEX_NAME 으로만 걸러 세고, 로컬 인덱스의
+#   파티션 헤더 이름(__SYS_PART_IDX_ID_<n>)은 쳐다보지 않는다.
+#
+# ---------------------------------------------------------------------
+# ★ 원본에 있고 여기 없는 것 -- 엔트리 목록
+# ---------------------------------------------------------------------
+# 원본의 넷째 줄(select * from "$_TEMP")은 인덱스가 담은 키를 줄 단위로
+# 찍었다. 네이티브 b-tree 의 내용은 SQL 로 볼 수 없고, 내용을 재는 유일한
+# 건전한 방법은 **힌트로 그 인덱스를 태운 스캔과 풀스캔의 차집합 + 플랜
+# 증거**다(include/checkGlobalIndex.i 의 세 겹). 그것은 테이블 이름과
+# 술어를 알아야 하는데 DESC_INDEX 는 인덱스 이름 하나만 받는다.
+# 그래서 내용 검사는 원본이 그것을 두었던 자리에 그대로 둔다 --
+# 이 배치의 파티션 DDL 여섯 케이스가 INCLUDE 하는 check_global_index.i 다
+# (원본의 그 검사는 _PROWID 때문에 한 번도 돈 적이 없다. 이식본은 돈다).
+# 수와 판정은 v4-natc-port-3.md 3.4.
+###########################################################################
+
+DEF DESC_INDEX( @aName )
+{
+  # 겹 0 -- 숨김 테이블 없음
+  select count(case when table_name = '$GIT_@{aName}' then 1 end) this_git_table,
+         count(*) any_git_table
+  from system_.sys_tables_
+  where table_name like '$GIT!_%' escape '!'
+    and user_id = user_id();
+
+  # 겹 1 -- 인덱스의 정체
+  select cast(i.index_name as varchar(41)) index_name,
+         cast(t.table_name as varchar(10)) table_name,
+         cast( case when i.index_table_id != 0          then 'GIT-HIDDEN-TABLE'
+                    when i.is_partitioned = 'T'         then 'LOCAL'
+                    when nvl(p.partition_type,-1) = 101 then 'NATIVE-GLOBAL'
+                    else 'UNKNOWN' end as varchar(16) ) kind,
+         cast(i.is_unique as varchar(1)) uq,
+         cast(s.name as varchar(20)) index_tbs
+  from system_.sys_indices_ i,
+       system_.sys_tables_ t,
+       v$tablespaces s,
+       ( select index_id, max(partition_type) partition_type
+         from system_.sys_part_indices_ group by index_id ) p
+  where i.index_name = '@{aName}'
+    and i.user_id = user_id()
+    and i.table_id = t.table_id
+    and i.tbs_id = s.id
+    and i.index_id = p.index_id(+);
+
+  # 겹 2 -- 글로벌의 구조 (카탈로그 + 도는 서버의 헤더)
+  select cast( ( select count(*) from system_.sys_index_partitions_ ip
+                 where ip.index_id = i.index_id ) as integer ) index_partitions,
+         cast( ( select count(*) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) hdr_rows,
+         cast( ( select max(h.is_global) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as varchar(1) ) hdr_global,
+         cast( ( select max(h.member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) member_cnt,
+         cast( ( select max(h.active_member_count) from X$DISK_BTREE_HEADER h
+                 where h.index_name = i.index_name ) as integer ) active_member_cnt
+  from system_.sys_indices_ i
+  where i.index_name = '@{aName}'
+    and i.user_id = user_id();
+
+  # 겹 3 -- 키 컬럼
+  select ic.index_col_order ord,
+         cast(c.column_name as varchar(20)) column_name,
+         cast(ic.sort_order as varchar(1)) sort_order
+  from system_.sys_indices_ i,
+       system_.sys_index_columns_ ic,
+       system_.sys_columns_ c
+  where i.index_name = '@{aName}'
+    and i.user_id = user_id()
+    and ic.index_id = i.index_id
+    and ic.column_id = c.column_id
+  order by 1;
+}
+###########################################################################
 # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/tool/aexport/aexport_obj.tc
 #
 # Body below is byte-identical to the original. What this port adds is the
@@ -8,8 +155,6 @@
 #
 # Project ID           = Native Global Index (disk) - PROJ-1624 port
 ###########################################################################
-INCLUDE ../../include/globalIndexEnv.i;
-INCLUDE ../../include/descIndex.i;
 
 ###########################################################################
 # Set Null Test

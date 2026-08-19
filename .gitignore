@@ -35,3 +35,6 @@ TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/db1/
 TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/db2/
 TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/Altibase.log
 TC/Server/sm4/Project4/NativeGlobalIndexClaude/Replication/process.out
+
+# ATAF 가 EXEC PROC1 실행 시 케이스 디렉터리에 남기는 산출물
+TC/Server/sm4/Project4/NativeGlobalIndexClaude/**/process.out

@@ -1,14 +1,218 @@
 ###########################################################################
+# Native Global Index - environment helpers
+#
+# 네이티브 글로벌 인덱스는 프로퍼티로 게이트된다.
+# 이름은 MEM_GLOBAL_INDEX_ENABLE 로 확정됐다(idpDescResource.cpp).
+#
+# ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 으로 바꾼 값은 재기동하면
+#   파일 값(기본 0)으로 돌아간다. 그래서 각 케이스가 자기 PREPARE 에서
+#   켜야 하고, FINALIZE 에서 꺼서 다음 케이스에 새지 않게 해야 한다.
+###########################################################################
+
+#
+# 네이티브 글로벌 인덱스 생성을 허용한다.
+#
+DEF ENABLE_GLOBAL_INDEX()
+{
+  alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+}
+#
+# 네이티브 글로벌 인덱스 생성을 막는다(기존 동작).
+# off 상태에서 메모리 파티션드 테이블의 non-partitioned index는
+# 기존과 동일하게 거부되어야 한다.
+#
+DEF DISABLE_GLOBAL_INDEX()
+{
+  alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
+}
+###########################################################################
+# Native Global Index - memory partitioned table helpers
+#
+# 구버전(PROJ-1624) 테스트는 파티션드 테이블을 전부 디스크
+# (tablespace sys_tbs_disk_data)에 만들었다. 당시 서버가 메모리 파티션드
+# 테이블의 글로벌 인덱스를 전면 금지했기 때문이다.
+#
+# 이 스위트가 검증하는 것은 그 반대다. 여기서 만드는 테이블은 전부
+# 메모리 테이블스페이스에 있다.
+###########################################################################
+
+#
+# 단일 메모리 테이블스페이스에 파티션 3개를 만든다.
+#
+# @aPartType : range | hash | list
+# @aKeyType  : 파티션 키 컬럼 타입
+# @aColType  : 나머지 컬럼 타입
+#
+# 컬럼 구성: i1(파티션 키), i2, i3, i4
+#
+DEF CREATE_MEM_PART_TABLE( @aPartType, @aKeyType, @aColType )
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+if ( @aPartType == 'range' )
+{
+
+create table t1( i1 @{aKeyType}, i2 @{aColType}, i3 @{aColType}, i4 @{aColType} )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+}
+elsif ( @aPartType == 'hash' )
+{
+
+create table t1( i1 @{aKeyType}, i2 @{aColType}, i3 @{aColType}, i4 @{aColType} )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_mem_data;
+
+}
+elsif ( @aPartType == 'list' )
+{
+
+create table t1( i1 @{aKeyType}, i2 @{aColType}, i3 @{aColType}, i4 @{aColType} )
+partition by list(i1)
+(
+  partition p1 values (100),
+  partition p2 values (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+}
+else
+{
+  print "error: unknown partition type @{aPartType}";
+}
+
+}
+#
+# 파티션별 행 수의 합이 전체와 같은지 확인한다.
+# 파티션 3개 + default 구성(p1,p2,p3)을 전제한다.
+#
+DEF CHECK_PARTITION_COUNT( @aTable )
+{
+  select count(*) total_cnt from @{aTable};
+
+  select 'P1' part_name, count(*) part_cnt from @{aTable} partition (p1)
+  union all
+  select 'P2', count(*) from @{aTable} partition (p2)
+  union all
+  select 'P3', count(*) from @{aTable} partition (p3)
+  order by 1;
+}
+###########################################################################
+# Native Global Index - catalog inspection helpers
+#
+# 구버전(PROJ-1624)의 meta 테스트는 "숨김 객체가 이렇게 보인다"를
+# 검증했다. 네이티브에서는 검증 방향이 정반대다: 숨김 객체가
+# 생기지 않아야 하고, 대신 SYS_PART_INDICES_ 에 판별자 행이 하나 있어야
+# 한다.
+###########################################################################
+
+#
+# 숨김 글로벌 인덱스 객체가 하나도 없어야 한다.
+# 구버전은 여기서 $GIT_/$GIK_/$GIR_ 가 줄줄이 나왔다.
+#
+DEF CHECK_NO_HIDDEN_OBJECT()
+{
+  # 숨김 인덱스 테이블 ($GIT_) - 없어야 정상
+  select u.user_name, t.table_name, t.table_type
+  from system_.sys_tables_ t, system_.sys_users_ u
+  where t.table_name like '$GIT[_]%' escape '['
+    and t.user_id = u.user_id
+  order by t.table_name;
+
+  # 숨김 인덱스 테이블의 인덱스 ($GIK_, $GIR_) - 없어야 정상
+  select u.user_name, i.index_name
+  from system_.sys_indices_ i, system_.sys_users_ u
+  where ( i.index_name like '$GIK[_]%' escape '['
+       or i.index_name like '$GIR[_]%' escape '[' )
+    and i.user_id = u.user_id
+  order by i.index_name;
+}
+#
+# SYS_INDICES_ 에서 본 글로벌 인덱스의 모습.
+#
+# 네이티브 글로벌 인덱스는 숨김 방식과 마찬가지로 IS_PARTITIONED = 'F'
+# 이지만, INDEX_TABLE_ID 가 0 이어야 한다(숨김 테이블이 없으므로).
+# 숨김 방식은 INDEX_TABLE_ID 가 0 이 아니다. 이것이 두 방식의
+# 카탈로그 상 구분점이다.
+#
+DEF SELECT_SYS_INDICES( @aTable )
+{
+  select i.index_name,
+         i.is_unique,
+         i.is_partitioned,
+         decode(i.index_table_id, 0, 'ZERO', 'NONZERO') index_table_id_kind
+  from system_.sys_indices_ i, system_.sys_tables_ t
+  where i.table_id = t.table_id
+    and t.table_name = upper('@{aTable}')
+    and t.user_id = user_id()
+  order by i.index_name;
+}
+#
+# SYS_PART_INDICES_ 의 판별자 행.
+#
+# 네이티브 글로벌 인덱스는 여기에 행을 하나 남긴다. 캐시 로더가
+# IS_PARTITIONED='F' 를 보고 무조건 non-partitioned 로 하드코딩하기
+# 때문에, 재기동 후에도 네이티브임을 알아보려면 이 행이 필요하다.
+# 숨김 방식은 이 행을 만들지 않는다.
+#
+DEF SELECT_SYS_PART_INDICES( @aTable )
+{
+  select i.index_name, p.partition_type
+  from system_.sys_part_indices_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('@{aTable}')
+    and t.user_id = user_id()
+  order by i.index_name;
+}
+#
+# SYS_INDEX_PARTITIONS_ 에는 행이 없어야 한다.
+# 물리 인덱스가 파티션별로 존재하지 않는 것이 로컬 인덱스와의 구분점이다.
+#
+DEF SELECT_SYS_INDEX_PARTITIONS( @aTable )
+{
+  select i.index_name, count(*) part_index_cnt
+  from system_.sys_index_partitions_ p, system_.sys_indices_ i, system_.sys_tables_ t
+  where p.index_id = i.index_id
+    and i.table_id = t.table_id
+    and t.table_name = upper('@{aTable}')
+    and t.user_id = user_id()
+  group by i.index_name
+  order by i.index_name;
+}
+#
+# 한 테이블의 인덱스 카탈로그 전경.
+#
+DEF SELECT_INDEX_META( @aTable )
+{
+  CALL SELECT_SYS_INDICES( "@{aTable}" );
+  CALL SELECT_SYS_PART_INDICES( "@{aTable}" );
+  CALL SELECT_SYS_INDEX_PARTITIONS( "@{aTable}" );
+  CALL CHECK_NO_HIDDEN_OBJECT();
+}
+###########################################################################
 # TestCase Description = 메모리 파티션드 테이블에 파티션 키를 포함하지 않는
 #                        PRIMARY KEY 를 만든다. 구버전에서는 서버가 막고
 #                        있던 조합이며, 이 프로젝트의 대표 성과다.
 # Project ID           = Native Global Index (memory)
 ###########################################################################
 
-INCLUDE ../../include/globalIndexEnv.i;
-INCLUDE ../../include/createMemPartTable.i;
-INCLUDE ../../include/checkGlobalIndex.i;
-INCLUDE ../../include/selectMeta.i;
 
 DEF FINALIZE()
 {

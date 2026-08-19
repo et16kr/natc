@@ -1,4 +1,123 @@
 ###########################################################################
+# Native Global Index - environment helpers
+#
+# 네이티브 글로벌 인덱스는 프로퍼티로 게이트된다.
+# 이름은 MEM_GLOBAL_INDEX_ENABLE 로 확정됐다(idpDescResource.cpp).
+#
+# ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 으로 바꾼 값은 재기동하면
+#   파일 값(기본 0)으로 돌아간다. 그래서 각 케이스가 자기 PREPARE 에서
+#   켜야 하고, FINALIZE 에서 꺼서 다음 케이스에 새지 않게 해야 한다.
+###########################################################################
+
+#
+# 네이티브 글로벌 인덱스 생성을 허용한다.
+#
+DEF ENABLE_GLOBAL_INDEX()
+{
+  alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+}
+#
+# 네이티브 글로벌 인덱스 생성을 막는다(기존 동작).
+# off 상태에서 메모리 파티션드 테이블의 non-partitioned index는
+# 기존과 동일하게 거부되어야 한다.
+#
+DEF DISABLE_GLOBAL_INDEX()
+{
+  alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
+}
+###########################################################################
+# Native Global Index - memory partitioned table helpers
+#
+# 구버전(PROJ-1624) 테스트는 파티션드 테이블을 전부 디스크
+# (tablespace sys_tbs_disk_data)에 만들었다. 당시 서버가 메모리 파티션드
+# 테이블의 글로벌 인덱스를 전면 금지했기 때문이다.
+#
+# 이 스위트가 검증하는 것은 그 반대다. 여기서 만드는 테이블은 전부
+# 메모리 테이블스페이스에 있다.
+###########################################################################
+
+#
+# 단일 메모리 테이블스페이스에 파티션 3개를 만든다.
+#
+# @aPartType : range | hash | list
+# @aKeyType  : 파티션 키 컬럼 타입
+# @aColType  : 나머지 컬럼 타입
+#
+# 컬럼 구성: i1(파티션 키), i2, i3, i4
+#
+DEF CREATE_MEM_PART_TABLE( @aPartType, @aKeyType, @aColType )
+{
+NODISPLAY ON;
+SKIP BEGIN;
+drop table t1;
+SKIP END;
+NODISPLAY OFF;
+
+if ( @aPartType == 'range' )
+{
+
+create table t1( i1 @{aKeyType}, i2 @{aColType}, i3 @{aColType}, i4 @{aColType} )
+partition by range(i1)
+(
+  partition p1 values less than (100),
+  partition p2 values less than (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+}
+elsif ( @aPartType == 'hash' )
+{
+
+create table t1( i1 @{aKeyType}, i2 @{aColType}, i3 @{aColType}, i4 @{aColType} )
+partition by hash(i1)
+(
+  partition p1,
+  partition p2,
+  partition p3
+)
+tablespace sys_tbs_mem_data;
+
+}
+elsif ( @aPartType == 'list' )
+{
+
+create table t1( i1 @{aKeyType}, i2 @{aColType}, i3 @{aColType}, i4 @{aColType} )
+partition by list(i1)
+(
+  partition p1 values (100),
+  partition p2 values (200),
+  partition p3 values default
+)
+tablespace sys_tbs_mem_data;
+
+}
+else
+{
+  print "error: unknown partition type @{aPartType}";
+}
+
+}
+#
+# 다중 TBS 테스트용 메모리 테이블스페이스를 만든다.
+#
+DEF PREPARE_MEM_TBS()
+{
+CALL FINALIZE_MEM_TBS();
+
+create memory tablespace mem1 size 32M autoextend on checkpoint path 'dbs';
+create memory tablespace mem2 size 32M autoextend on checkpoint path 'dbs';
+create memory tablespace mem3 size 32M autoextend on checkpoint path 'dbs';
+}
+DEF FINALIZE_MEM_TBS()
+{
+SKIP BEGIN;
+drop tablespace mem1 including contents and datafiles;
+drop tablespace mem2 including contents and datafiles;
+drop tablespace mem3 including contents and datafiles;
+SKIP END;
+}
+###########################################################################
 # TestCase Description = 네이티브 글로벌 인덱스 생성이 거부되어야 하는
 #                        조합들. 각 항목은 서버가 "명시적 에러"로 막기로 한
 #                        지점이다.
@@ -25,8 +144,6 @@
 # Project ID           = Native Global Index (memory)
 ###########################################################################
 
-INCLUDE ../../include/globalIndexEnv.i;
-INCLUDE ../../include/createMemPartTable.i;
 
 DEF FINALIZE()
 {

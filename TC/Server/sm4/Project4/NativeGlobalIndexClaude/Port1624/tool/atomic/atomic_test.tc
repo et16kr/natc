@@ -1,4 +1,36 @@
 ###########################################################################
+# NativeGlobalIndexPort1624 - 전제와 판별자
+#
+# 이 스위트의 전 케이스가 재는 것은 **디스크 파티션드 테이블 위의 네이티브
+# 글로벌 인덱스**다. 원본(qp4/Project3/PROJ-1624-GlobalIndex)이 같은 문장으로
+# 재던 것은 숨김 테이블 $GIT_ 였다. 갈림길은 프로퍼티 하나다:
+#
+#   DISK_GLOBAL_INDEX_ENABLE = 1  -> 네이티브 (이 스위트)
+#   DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_    (원본 스위트)
+#
+# ★ 그래서 케이스마다 자기 전제를 세운다(F07 규약).
+#   파일 기본값은 2026-08-06 부터 1 이지만, 기본값에 기대면 그 값이 움직이는
+#   날 이 스위트는 "네이티브를 잰다"고 적어 놓고 $GIT_ 를 재게 된다 --
+#   원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc 가 실제로 그렇게
+#   어긋났었다(disk-natc.md 6).
+#
+# ★ 이 프로퍼티는 비영속이다. ALTER SYSTEM 값은 재기동하면 파일 값으로
+#   돌아간다. 한 인스턴스 위에서 스위트가 이어 도는 동안은 FINALIZE 의
+#   복원이 유일한 방벽이다.
+###########################################################################
+
+#
+# 전제를 세우고, 세운 값을 전사에 남긴다.
+# 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
+#
+DEF PIN_DISK_NATIVE()
+{
+  set linesize 200;
+  alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+  select cast(value1 as varchar(10)) disk_global_index_enable from v$property
+  where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+###########################################################################
 # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/tool/atomic/atomic_test.tc
 #
 # Body below is byte-identical to the original. What this port adds is the
@@ -8,7 +40,6 @@
 #
 # Project ID           = Native Global Index (disk) - PROJ-1624 port
 ###########################################################################
-INCLUDE ../../include/globalIndexEnv.i;
 
 ###########################################################################
 # Merge Query Test
