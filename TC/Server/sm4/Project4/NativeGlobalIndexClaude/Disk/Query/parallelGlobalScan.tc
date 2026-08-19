@@ -1,0 +1,112 @@
+###########################################################################
+# TestCase Description = 병렬 글로벌 스캔의 답이 직렬과 같다 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = altibase/scripts/global-index/parallel-answer-check.sh
+#                        (삭제 예정인 그물에서 건짐 -- 통합 Phase E)
+#
+# 무엇을 재는가
+#   GR-04(V4 A 트랙)가 연 병렬 글로벌 스캔이다. PSCRD 가 b-tree 를 슬라이스로
+#   갈라 워커에게 나눠 주므로, 답이 직렬과 한 자리라도 다르면 그것은 놓친
+#   최적화가 아니라 **틀린 행**이다.
+#
+# ★ 슬라이스 분배를 기대값에 담는다 -- 재실행으로 확인한 뒤에
+#   이식할 때는 "워커별 행 수는 실행마다 갈리니 박지 말자" 고 보았으나,
+#   같은 픽스처로 두 번 돌려 **출력이 바이트 동일**함을 확인했다. 슬라이스
+#   경계가 b-tree 의 분리키에서 유도되고 데이터가 결정적이라 그렇다(J07).
+#   그래서 플랜을 통째로 담는다 -- PARALLEL-SCAN-COORDINATOR 아래 큐 넷과
+#   각 워커의 GLOBAL-INDEX RANGE SCAN 까지.
+#
+#   다만 이 값은 **트리 모양에 매달린다**. 페이지 크기가 바뀌면(4K 축)
+#   분리키가 달라져 분배도 달라진다. 이 기대값은 A4_64 의 것이다.
+#
+#   답 쪽은 별개다. J08b 가 찾은 결함이 "병렬 경로가 인덱스 밖 술어에서
+#   **비결정적** 오답을 낸다" 였으므로, 같은 질의를 세 번 돌려 세 번 다
+#   직렬과 같은 값이 나오는 것을 담는다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_PAR_ANS;
+    DROP TABLE NGD_PAR_SUB;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGD_PAR_ANS ( P INTEGER, K INTEGER, A INTEGER, B INTEGER )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION D1 VALUES LESS THAN ( 10000 ),
+        PARTITION D2 VALUES LESS THAN ( 20000 ),
+        PARTITION D3 VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_PAR_ANS
+      SELECT LEVEL-1, MOD( (LEVEL-1) * 7919, 30000 ), LEVEL-1, MOD(LEVEL-1, 1000)
+        FROM DUAL CONNECT BY LEVEL <= 30000;
+    COMMIT;
+
+    CREATE INDEX NGD_PAR_ANS_G ON NGD_PAR_ANS ( K, A );
+
+    CREATE TABLE NGD_PAR_SUB ( V INTEGER ) TABLESPACE SYS_TBS_DISK_DATA;
+    INSERT INTO NGD_PAR_SUB VALUES (1000);
+    COMMIT;
+
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_PAR_ANS_G';
+
+##################################
+SECTOR; A0 -- 병렬 플랜이 실제로 서는가
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+    SELECT /*+ PARALLEL(NGD_PAR_ANS, 4) */ COUNT(*)
+      FROM NGD_PAR_ANS WHERE K BETWEEN 500 AND 25000 AND B > 500;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; 1 -- 인덱스 밖 술어, 직렬 대 병렬 (3 회)
+##################################
+    SELECT /*+ NO_PARALLEL(NGD_PAR_ANS) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS SERIAL_ANSWER
+      FROM NGD_PAR_ANS WHERE K BETWEEN 500 AND 25000 AND B > 500;
+    SELECT /*+ PARALLEL(NGD_PAR_ANS, 4) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS PARALLEL_1
+      FROM NGD_PAR_ANS WHERE K BETWEEN 500 AND 25000 AND B > 500;
+    SELECT /*+ PARALLEL(NGD_PAR_ANS, 4) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS PARALLEL_2
+      FROM NGD_PAR_ANS WHERE K BETWEEN 500 AND 25000 AND B > 500;
+    SELECT /*+ PARALLEL(NGD_PAR_ANS, 4) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS PARALLEL_3
+      FROM NGD_PAR_ANS WHERE K BETWEEN 500 AND 25000 AND B > 500;
+
+##################################
+SECTOR; 2 -- 서브쿼리 술어
+##################################
+    SELECT /*+ NO_PARALLEL(NGD_PAR_ANS) */
+           SUM(K)||'/'||COUNT(*) AS SERIAL_SUBQ
+      FROM NGD_PAR_ANS
+     WHERE K BETWEEN 500 AND 25000 AND A > (SELECT MIN(V) FROM NGD_PAR_SUB);
+    SELECT /*+ PARALLEL(NGD_PAR_ANS, 4) */
+           SUM(K)||'/'||COUNT(*) AS PARALLEL_SUBQ
+      FROM NGD_PAR_ANS
+     WHERE K BETWEEN 500 AND 25000 AND A > (SELECT MIN(V) FROM NGD_PAR_SUB);
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    DROP TABLE NGD_PAR_ANS;
+    DROP TABLE NGD_PAR_SUB;
+}

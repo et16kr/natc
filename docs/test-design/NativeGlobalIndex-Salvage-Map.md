@@ -84,7 +84,14 @@
 
 ## 2. 건지는 11 — 레인 배치와 변환 모양
 
-전부 디스크 축이다(그물이 디스크 위에서 섰다).
+> **정정**: 처음에 "전부 디스크 축" 이라고 적었으나 **틀렸다.** 스크립트마다
+> 세어 보면 메모리 6 · 디스크 4 · 양쪽/불명 1 이다.
+>
+> | 매체 | 스크립트 |
+> |---|---|
+> | Memory | `cost-model` · `dml-handoff` · `fk-routing` · `partition-filter` · `select-plan` · `uncommitted` |
+> | Disk | `disk-planstat` · `fk-restrict` · `global-partfilter` · `parallel-answer` |
+> | 불명 | `partition-ddl` (프로퍼티·테이블스페이스를 안 적는다 — 읽어서 정한다) |
 
 | 스크립트 | 단언 | 목적지 | 변환 |
 |---|---:|---|---|
@@ -122,6 +129,43 @@ expect_val "... still builds a $GIT_ table"   1        "<SELECT>"
 
 세 헬퍼가 전체 단언의 대부분이므로, **11 개 중 대부분은 기계적 이식에
 가깝다.** 공수는 §3 의 예외에 몰려 있다.
+
+---
+
+## 2.2 ★ 첫 이식 실측 — `parallel-answer-check` → `Disk/Query/parallelGlobalScan.tc`
+
+건지기의 첫 케이스를 실제로 옮겼다. 그 과정에서 이 표의 전제 하나가
+뒤집혔다.
+
+**왜 이것을 먼저 골랐나**: 통합 스위트 251 개에 **병렬 커버리지가 사실상
+0** 이다(`PARALLEL` 이 나오는 자리는 `buildModes` 의 `NOLOGGING` 거절과
+Port1624 `create_index` 뿐). V4 A 트랙 전체 — GR-04 병렬 글로벌 스캔 —
+가 NATC 에 없다. `MERGE INTO`(§Dedup 6)와 같은 종류의 공백이다.
+
+**뒤집힌 전제**: §3 이 "병렬은 실스레드 수가 실행마다 갈리니 체크섬만
+박는다" 고 적었다. 케이스에도 그렇게 주석을 달았다. 그런데 같은 픽스처로
+**두 번 돌리니 출력이 바이트 동일**했다 —
+
+```
+PARALLEL-SCAN-COORDINATOR ( TABLE: SYS.NGD_PAR_ANS, ACCESS: 12224 )
+ PARALLEL-QUEUE ( TID: BLOCKED )
+  SCAN ( ... GLOBAL-INDEX, RANGE SCAN, ACCESS: 6181, ... )
+ PARALLEL-QUEUE ( TID: BLOCKED )
+  SCAN ( ... GLOBAL-INDEX, RANGE SCAN, ACCESS: 6288, ... )
+ ... 큐 4 개
+```
+
+슬라이스 경계가 **b-tree 의 분리키에서 유도되고**(J07) 데이터가 결정적이라
+분배도 결정적이다. `TID` 는 애초에 `BLOCKED` 로 가려진다. 그래서 플랜을
+통째로 담았다 — 워커별 행 수까지.
+
+**대신 새 의존이 생긴다**: 그 값은 트리 모양에 매달리므로 **페이지 크기가
+바뀌면(4K 축) 달라진다.** 기대값은 `A4_64` 의 것이고 케이스 주석에 적었다.
+
+**§3 의 "병렬" 행을 이렇게 고친다** — "체크섬만 박는다" 가 아니라
+**"재실행으로 결정성을 확인한 뒤 담는다"** 다. 확인 없이 담으면 깜빡이는
+케이스가 되고, 확인 없이 빼면 플랜이 정말 병렬로 섰는지 아무도 모르는
+항진식 케이스가 된다(원본 스크립트의 A0 절이 정확히 그 경고였다).
 
 ---
 
