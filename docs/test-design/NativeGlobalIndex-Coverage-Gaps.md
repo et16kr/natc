@@ -131,11 +131,26 @@ O(1)화, 슬라이스 경계, DML handoff, `$GIT_` 전환, 4K 축 — 은 원본
 
 | 빈 항목 | 어디에 있나 | 그 스크립트 상태 |
 |---|---|---|
-| **`MERGE INTO`** | `sql-level-check` K 절 · `parallel-scan-check` | 재기동·FIT 혼합 구간 |
-| **트리거** | **`dml-handoff-check`** · `rowmovement-order-check` | **의존 없는 11 에 있다** ← 가장 가깝다 |
-| **PSM** | `parallelbuild-check` · `disk-matrix-check` | 소스 grep 하나만 걸림 |
+| ~~**`MERGE INTO`**~~ → **새로 썼다** | `sql-level-check` K 절 · `parallel-scan-check` | **★ 정정: 이식이 가깝지 않다.** 실측하면 `sql-level-check` 는 `ngi_cli` 의존 **9** + 재기동 1, `parallel-scan-check` 는 FIT 의존 — **둘 다 가장 어려운 묶음**이다. → `Memory/DML/mergeInto.tc` |
+| ~~**트리거**~~ → **새로 썼다** | `dml-handoff-check` · `rowmovement-order-check` | 이식도 가깝지만, 리뷰 §2 가 요구한 **분화 레이아웃 × `:OLD`** 는 어느 스크립트도 재지 않는다 → `Memory/DML/triggerRowMovement.tc` |
+| ~~**PSM**~~ → **새로 썼다** | `parallelbuild-check` · `disk-matrix-check` | **★ 정정: 둘 다 근거가 못 된다.** `parallelbuild-check` 는 PSM 을 **데이터 채우개로만** 쓴다(`ngi_pb_fill`) — 이식해도 PSM 축이 안 닫힌다. 진짜 PSM 축(`d19_walk` 계열)은 `disk-matrix-check` 에 있는데 그것은 **골든 2 + 재기동 1** 이다. "소스 grep 하나만 걸림" 은 틀렸다 → `Memory/Query/psmGlobalAccess.tc` |
 | 함수 기반 인덱스 | `sql-level-check`(4) · `disk-catalog-check`(1) | 재기동 구간 |
 | `ERR-61183` · `ERR-313D9` · `ERR-31481` 등 20 개 | 여러 검사 스크립트 | 구간별 |
+
+> **★ 이 분류가 기대던 전제가 약하다.** (ㄱ) 은 "건지기(Phase E)가
+> 진행되면 따라 들어온다" 를 전제한다. 그런데 오늘까지 이식된 것은
+> **의존 없는 11 중 3** 이고, 위 세 항목을 담은 스크립트는 전부 **그 11
+> 밖의 어려운 묶음**에 있다. 담당도 없다. 그러므로 "곧 채워진다" 가
+> 아니라 **"채워질지 모른다"** 이고, 그 사이 스위트는 0 으로 남는다.
+>
+> 그리고 **서버를 쓸 수 없는 동안에는 이식이 싸지도 않다** — (ㄱ)/(ㄴ)
+> 을 가른 근거(§4)가 "이식은 `.lst` 를 받아 적으면 된다" 인데, 받아 적을
+> 서버가 없으면 둘 다 `.tc` 만 나온다. 그래서 셋을 새로 썼다.
+>
+> **중복 관리**: 새로 쓴 셋은 케이스 첫 주석에 "나중에 그 절이 이식되면
+> 중복 판정 대상" 이라고 적어 두었다. 이식하는 사람이 그 표지를 보고
+> 견주면 된다 — §1 ①(같은 기능을 세 뿌리가 따로 검증)을 되풀이하지
+> 않는 방법이 그것이다.
 
 **→ 우선순위 조정**: `dml-handoff-check` 를 건지기 목록의 **맨 앞으로** 올린다.
 종전에는 "두 세션 절 때문에 분할 필요" 로 미뤄 두었으나, **트리거 축을 품고
@@ -148,13 +163,13 @@ O(1)화, 슬라이스 경계, DML handoff, `$GIT_` 전환, 4K 축 — 은 원본
 
 | # | 항목 | 오늘 | 왜 위험한가 |
 |---|---|---|---|
-| **N1** | **`EXCHANGE PARTITION` 정합성** | 스위트 1 · 그물 **0** | **GR-10(B-4/J14)이 멤버 리매핑을 넣은 자리**다. 재는 곳이 `exchange-remap-bench.sh` 뿐이고 그것은 **시간·바이트를 재지 정합성을 재지 않는다** |
+| **N1** | ~~`EXCHANGE PARTITION` 정합성~~ → **`REPLACE PARTITION` 리매핑 정합성** | 스위트 **0** · 그물 **0** | **GR-10(B-4/J14)이 멤버 리매핑을 넣은 자리**다. 재는 곳이 `exchange-remap-bench.sh` 뿐이고 그것은 **시간·바이트를 재지 정합성을 재지 않는다**. **★ 정정: Altibase 에 `EXCHANGE PARTITION` 은 없다**(`qcply.y` 에 EXCHANGE 토큰 자체가 없다) — §1.3 이 센 "1" 은 `splitMergeReplace.tc` 의 **"그 구문은 없다" 는 주석**이었다. 실제 구문은 `ALTER TABLE t REPLACE s PARTITION p` 이고 벤치도 제목에 "REPLACE PARTITION (EXCHANGE)" 라 적었다. 그러므로 그물 대비 스위트 계수는 1 이 아니라 **0** 이다 → **케이스 작성됨**: `Disk/DDL/replacePartitionRemap.tc` |
 | **N2** | **`RANGE USING HASH`** | **0 · 0** | `qmoPartition::rangeUsinghashPartitionPruningWithKeyRange` 전용 분기가 있는데 아무도 안 밟는다 |
 | **N3** | **`NVARCHAR` 키** | 1 · 0 | 가변 키 컬럼의 colSpace 경로(J11/GR-08)가 `VARCHAR` 로만 검증됐다 |
 | **N4** | `CREATE SEQUENCE` 기본값 | 0 · 0 | 시퀀스가 채우는 키 컬럼 |
 | **N5** | `SYNONYM` 경유 DML | 0 · 0 | 이름 해석이 글로벌 인덱스 경로를 타는가 |
 | **N6** | `TEMPORARY TABLE` | 0 · 0 | 파티션드가 아니므로 **거절**이 기대값일 가능성 — 확인 필요 |
-| **N7** | 격리 수준 매트릭스 | `SET TRANSACTION` 3 | **R1 게이트가 `REPEATABLE READ` 에 달려 있다**(J06). 세 수준 × 글로벌 스캔이 없다 |
+| **N7** | ~~격리 수준 매트릭스~~ → **격리 × 병렬(R1 게이트)** | `SET TRANSACTION` 3 | **★ 정정: 세 수준 × 글로벌 스캔은 이미 덮여 있다.** `Memory/Transaction/isolation.tc` 가 `DEF RUN_AT_ISOLATION( @aLevel )` 하나를 세 수준 이름으로 **여섯 번** 부른다 — 문자열로 세면 헬퍼 뒤의 호출이 안 보여 3 으로 과소 계수됐다(§8 의 교훈). **덮이지 않은 것은 격리 × 병렬**이다: 명세 §4.3 R1 이 *"REPEATABLE READ 격리의 평범한 SELECT 는 오늘 어떤 병렬 배제 규칙에도 걸리지 않는 구멍"* 이라 적은 자리 → **케이스 작성됨**: `Disk/Query/parallelIsolationGate.tc` |
 
 ### (ㄷ) 구조적으로 NATC 밖 — 옮길 수도 새로 쓸 수도 없다
 
@@ -304,7 +319,7 @@ GR-10 은 재구성 DDL 의 비용을 O(1) 로 만들면서 **memberNo 회수의
 
 | # | 항목 | 오늘 | 왜 |
 |---|---|---|---|
-| **N13** | **키 최대 길이 경계** | 스위트 **0** · 그물 **0** | 제품에 네이티브 전용 한계 분기가 실재한다 — `smiGetIndexKeySizeLimit( aTableType, aIndexType, **aIsNativeGlobalIndex** )` (qdx.cpp 의 `ERR_MAXIMUM_KEY_SIZE_EXCEED` 검사). 그 셋째 인자를 밟는 검사가 어디에도 없다. 디스크는 가변 컬럼의 `smiGetVariableColumnSize4DiskIndex` 경로까지 갈린다. **경계 바로 아래 통과 / 바로 위 거절** 을 매체별로 — 그리고 그 한계는 페이지 크기에 매달리므로 **4K 축과 정면으로 겹친다**(기대값 `A4_64` 명시). → `*/Boundary/` |
+| **N13** | **키 최대 길이 경계** | 스위트 **0** · 그물 **0** | 제품에 네이티브 전용 한계 분기가 실재한다 — `smiGetIndexKeySizeLimit( aTableType, aIndexType, **aIsNativeGlobalIndex** )`. **구현을 읽어 축을 좁혔다**(`smiMisc.cpp`): 갈리는 조건이 **디스크 + 네이티브 글로벌**뿐이고, 그때만 `smnManager::getGlobalIndexKeySizeLimit()`(= `sdnbBTree::getMaxKeySize(ID_TRUE)`)로 간다. 이유는 주석이 적어 두었다 — **키 헤더가 memberNo 2 바이트만큼 길다**(설계 §13.1). 따라서 **메모리는 대상이 아니고**, 재야 할 것은 "같은 컬럼이 LOCAL 로는 서고 글로벌로는 거절되는 폭이 실재하는가" 다. 절대값은 페이지 크기의 함수라 박지 않는다(`A4_64` 명시) → **케이스 작성됨**: `Disk/Boundary/keySizeLimit.tc` |
 | **N14** | **iloader 왕복** | 스위트 0 · 그물 0 | `Port1624/tool/` 은 aexport·isql·atomic 뿐 — **iloader 가 계보에 없고** 그물에도 없다. 글로벌 인덱스가 선 파티션드 테이블의 out → in 왕복(유니크 충돌 행 거절 포함), direct-path 모드가 있으면 그 축까지. `dpathInsert.tc`(APPEND 힌트)와는 **클라이언트 경로가 다르다** |
 | **N15** | **권한 · 교차 스키마** | 네이티브 시대 **0** (레거시 `pdt/Bugs/BUG-27` 하나) | 남의 스키마 테이블에 글로벌 인덱스 생성(권한 유·무), 비소유자의 ALTER/DROP/REBUILD(전환 포함 — 전환 DDL 의 권한 검사는 J23 이후 생긴 경로다), 시노님 경유(N5 와 픽스처 공유). → `Memory/Catalog/` 또는 `Unsupported/` |
 | **N16** | **런타임 멤버 뷰 관측** | 스위트: `IS_GLOBAL` 1 (`statisticsAndHeader`) · **`X$DISK_BTREE_GLOBAL_MEMBER` 0** / 그물: 10+ 스크립트가 오라클로 쓴다 | 구현이 만든 관측 표면 — `X$DISK_BTREE_GLOBAL_MEMBER`(멤버 격자), `X$MEM/DISK_BTREE_HEADER` 의 `IS_GLOBAL`·`MEMBER_PARTITION_COUNT`, 세대 토큰(smnFT) — 을 스위트가 거의 안 본다. **멤버 수 == 파티션 수, 파티션 DDL 후 멤버 집합 변화** 를 이 뷰로 재는 케이스가 없다(N1 EXCHANGE 케이스의 오라클로도 이 뷰가 정답이다). 일부는 건지기(`disk-planstat`·`cost-model`)를 따라 들어오니 **그 이식이 끝난 뒤 잔여분만** 새로 쓴다. 메모리 쪽은 통째로 0 |
@@ -399,3 +414,199 @@ N14 가 드러낸 구조 문제다. 계획 §3.1 의 지도에 **유틸리티 �
 
 그물 `replication-check.sh` 는 단언 **255** 개다. 이 레인이 그중 덮는 것은
 어림 **20** 개 안팎이다.
+---
+
+## 9. 신규 케이스 — 열넷 (2026-08-19~20). **10 커밋 · 4 보류**
+
+`.tc` 를 먼저 쓰고(서버 없이), 서버가 준비된 뒤 **실제 실행으로 기대값을
+찍었다.** 지어낸 값은 하나도 없다. 13 건이 두 번째 실행에서 PASS 로
+확정됐고, **1 건(`iloaderRoundTrip`)은 일부러 찍지 않았다** — 왕복이
+0 행이라 찍으면 항진식이 되기 때문이다(§9.6).
+
+**커밋한 것은 10 건이다.** 나머지 넷은 `.lst` 를 찍었거나 찍지 못했으되
+**기대값으로 굳히면 안 되는 것**이라 커밋하지 않았다 (§9.9).
+
+> **실행 환경 메모**: `ataf start` 뒤 `atsclnt <영역>.ts`. 이 기계의
+> altibase 서버는 `altibase.properties` 의 `PORT_NO`(20300)가 아니라
+> **20104** 로 떠 있었다 — 환경의 `ALTIBASE_PORT_NO` 를 그것에 맞춰야
+> 접속된다. 맞추기 전에는 모든 케이스가 `Can't connect to Server` 로
+> FATAL 이다.
+
+### 9.1 (ㄴ) 목록을 닫은 것
+
+| 케이스 | 공백 | 무엇을 주장하나 |
+|---|---|---|
+| `Disk/DDL/replacePartitionRemap.tc` | N1 | `GLOBAL_INDEX_EXCHANGE_REMAP` 이 고르는 **두 경로(remap / rebuild)의 관측 결과가 같아야 한다.** A·B 절이 같은 픽스처에 같은 질의를 던지므로 두 블록이 갈리면 그것이 결함이다. 벤치가 못 재던 정합성이 이것이다 |
+| `Memory/Query/rangeUsingHashPruning.tc` | N2 | 넷째 파티션 방법 위에서 **전용 프루닝 분기**가 도는가. 구문은 밑줄 한 낱말 `RANGE_USING_HASH`, DEFAULT 파티션이 정확히 하나(문법에서 확인) |
+| `Memory/DML/nvarcharKey.tc` | N3 | 가변 키의 colSpace 경로가 `VARCHAR` 로만 검증됐다. NVARCHAR 는 문자 하나가 여러 바이트라 길이 계산이 다르다. 얇은 타입(DATE·NUMERIC·BIGINT)과 복합 키까지 함께 세운다 |
+| `Memory/Create/surroundingObjects.tc` | N4·N5·N6 + QUEUE | 시퀀스가 채운 글로벌 유일 키 · 시노님 경유 DML · 임시/큐 거절. **옳음을 미리 주장하지 않고 기준선을 만든다** |
+| `Disk/Query/parallelIsolationGate.tc` | N7(정정) | **R1** — `REPEATABLE READ` 의 맨 SELECT 는 `PARALLEL` 힌트가 붙어도 병렬 코디네이터 아래로 가면 안 된다. 대조군으로 `READ COMMITTED` 가 병렬을 타는 것을 먼저 보인다(그러지 않으면 항진식) |
+| `Disk/DML/multiTableRowMovement.tc` | N8 | O-8 이 고친 자리. 훅(NULL 커서)과 순서(DELETE→INSERT) 둘 다. **리뷰 §9 가 "감시자가 스크립트 하나뿐" 이라 한 불변식의 감시자**이고, §7.3 이 요구한 LOB 축을 픽스처에 넣었다 |
+| `Disk/DDL/convertFromLegacy.tc` | N9·N10·N11 | 전환 축 셋이 픽스처를 공유한다 — DIRECTKEY 가 전환을 수행하면 안 되고(§3), 전환본과 신규본의 카탈로그가 같아야 하며(§4), 예산 경계에서 거짓 거부가 없어야 한다(§6) |
+| `Memory/DML/triggerRowMovement.tc` | N12 | 리뷰 §2. **트리거 축은 스위트에 0 이었다.** D 절이 분화 레이아웃 + `:OLD` 를 겨눈다 |
+| `Disk/Boundary/keySizeLimit.tc` | N13 | 같은 컬럼이 **LOCAL 로는 서고 글로벌로는 거절되는 폭이 실재한다.** 없으면 셋째 인자가 죽은 코드다. 절대값 대신 사다리를 훑는다 |
+| `Tool/iloaderRoundTrip.tc` | N14 | 계보에 없는 유일한 유틸리티. **힙과 트리를 따로 센다** — 적재가 인덱스를 갱신하지 않으면 `COUNT(*)` 하나로는 안 보인다 |
+| `Memory/Catalog/privilegeAndSchema.tc` | N15 | 네이티브 시대 0. 특히 **전환 DDL 의 권한 검사는 J23 이후 생긴 경로**다. `connect user/pass` 재접속이라 Hard Stops 에 안 걸린다 |
+| `Disk/Query/memberDirectory.tc` | N16 | 그물 열 개 넘는 스크립트가 오라클로 쓰던 관측 창을 스위트는 거의 안 본다. **멤버 수 == 파티션 수**와 DDL 전후의 증감. 번호는 발급 일련번호라 찍지 않는다 |
+
+**남은 것**: N2 의 디스크 절반(가변 키가 디스크에서 다른 계산을 쓰므로
+`nvarcharKey` 의 디스크 판도 별건이다), N8 의 메모리 절반(거기서 재는 것은
+"우연한 통과" 가 계속 성립하는가라 같은 케이스가 아니다), N16 의 메모리
+대응(창 자체가 없다 — 대상 아님).
+
+### 9.1.1 (ㄱ) 에서 끌어온 둘 — 이식을 기다리지 않기로 했다
+
+| 케이스 | 닫는 공백 | 왜 기다리지 않았나 |
+|---|---|---|
+| `Memory/DML/mergeInto.tc` | `MERGE INTO` **0** | 담은 스크립트 둘이 전부 가장 어려운 묶음(`ngi_cli` 9 · FIT). 그물이 보던 것은 **플랜**이라, 이 케이스는 무게를 **정합성**에 두었다 — 특히 **MERGE 의 UPDATE 가 파티션 키를 건드리면 row movement** 이고 그 경로를 MERGE 로 밟은 적이 없다 |
+| `Memory/Query/psmGlobalAccess.tc` | PSM **0** | 근거로 적힌 스크립트 둘 중 하나는 PSM 을 채우개로만 쓰고, 진짜 축을 가진 쪽은 골든+재기동이다. 이 케이스는 **잡힌 예외 뒤의 트리 정합**을 본다 — 그물의 FIT 절이 크래시로 보던 것을 잡힌 예외로 본다 |
+
+(트리거는 §9.1 의 `triggerRowMovement.tc` 가 이미 같은 이유로 새로 쓴 것이다.)
+
+### 9.2 배선 — 고아를 만들지 않았다
+
+`Disk/DML/` · `Disk/Boundary/` · `Tool/` 을 신설하고 전부 `.ts` 에 걸었다.
+**배선한 이유**는 §계획 9.4 결함 ①과 같다 — 걸지 않은 케이스는 전체
+실행에서 조용히 빠진다. 각 줄에 `★ .lst 미기록` 을 달았다.
+
+`Tool/` 은 **제안**이다(§7.4) — 계획 §3.1 에 유틸리티 축의 자리가 없어
+`Regress/` 와 같은 이유로 최상위에 두었다. 결정이 다르면 디렉터리째 옮긴다.
+
+루트 `.ts` 에는 `Replication/` 이 왜 없는지 묻는 주석을 남겼다. 그 레인은
+두 서버를 띄우고 죽이므로 기본 실행에서 빼는 판단이 정당할 수 있으나
+**어디에도 적혀 있지 않아서**, 배선하든 빼든 한 줄이 필요하다. 레인 소유
+세션이 결정한다.
+
+### 9.3 `.lst` 를 찍는 순서 — 전제가 다르다
+
+| 순서 | 케이스 | 조건 |
+|---|---|---|
+| 1 | `rangeUsingHashPruning` · `surroundingObjects` · `nvarcharKey` · `privilegeAndSchema` · `keySizeLimit` · `memberDirectory` · `parallelIsolationGate` | **오늘 빌드로 가능.** 제품 수정과 무관하다 |
+| 2 | `multiTableRowMovement` | altibase `5504aad9e`(O-8) **이후** 빌드 |
+| 3 | `convertFromLegacy` | 작업 트리의 **미커밋 수정(리뷰 §3·§4·§6)이 커밋된 뒤** |
+| 4 | `replacePartitionRemap` | 상동. 그리고 **C 절을 먼저 본다** — 커밋 시점 purge 가 비동기라 두 번 돌려 값이 갈리면 기다리지 않은 것이다(§9.4) |
+| 5 | `triggerRowMovement` **D 절만** | 리뷰 §2 수정이 **아직 착수도 안 됐다.** A~C 는 오늘 그린이어야 하고, D 는 수정 뒤에 찍는다 — 지금 찍으면 하드 제약 5(KNOWN 금지)를 정면으로 어긴다 |
+| 6 | `iloaderRoundTrip` | 러너 환경에 `iloader` 가 있어야 하고, 출력에 건수·시각·경로가 섞이면 그 줄을 걷어야 한다 |
+
+### 9.9 커밋과 보류를 가른 기준 — 의심스러운 결과는 기대값이 아니다
+
+`.lst` 가 결정적이라고 해서 커밋할 수 있는 것은 아니다. **그 값이 옳아야**
+한다. 옳은지 알 수 없는 값을 `.lst` 로 굳히면 그 케이스는 앞으로 영원히
+"이 동작이 정답" 이라고 주장하게 된다.
+
+| 커밋 | 근거 |
+|---|---|
+| `rangeUsingHashPruning` · `psmGlobalAccess` · `surroundingObjects` · `nvarcharKey` · `mergeInto` · `privilegeAndSchema` · `keySizeLimit` · `memberDirectory` · `multiTableRowMovement` · `replacePartitionRemap` | 값이 스스로 검산된다 — 합·distinct·힙과 트리 일치, 의도한 거절만 나옴, 불변식(멤버=파티션) 성립 |
+
+| 보류 | 굳히면 무엇이 잘못되나 |
+|---|---|
+| `convertFromLegacy` | 전환 뒤 판별자는 네이티브인데 `INDEX_TABLE_ID` 가 0 이 아니다. 커밋하면 **의심되는 카탈로그 불일치가 정답이 된다** (§9.7 ①) |
+| `parallelIsolationGate` | REPEATABLE READ 에서 워커가 전량을 훑는다. 명세 §4.3 R1 이 막으려던 모양이라 **명세와 어긋난 동작을 정답으로 굳히게 된다** |
+| `triggerRowMovement` | D 절이 그린이지만 겨눈 분화 조건에 닿았는지 모른다. **닿지 않았다면 그 그린은 항진식**이다 |
+| `Tool/iloaderRoundTrip` | 왕복 0 행 — `.lst` 자체를 찍지 않았다 (§9.8) |
+
+보류 넷은 `.ts` 에 걸지 않고, 각 `.ts` 에 **왜 아직 걸지 않는지**를 산문
+주석으로 남겼다(프레임워크가 케이스 줄 주석을 거부한다 -- `WARN: this test
+case was commented. it is not allowed`).
+
+### 9.10 `memberDirectory` 가 한 번 더 가르쳐 준 것
+
+이 케이스는 단독 실행에서 PASS 로 봉인됐다가 **다시 돌리니 실패**했다.
+원인은 한 줄이었다:
+
+```
+SELECT COUNT(*) AS MEMBER_ROWS FROM X$DISK_BTREE_GLOBAL_MEMBER;   -- 4 -> 10
+```
+
+`X$DISK_BTREE_GLOBAL_MEMBER` 는 **인스턴스 전역**이라 다른 케이스가 남긴
+글로벌 인덱스까지 센다. `WHERE INDEX_NAME = 'NGD_MEM_G'` 로 좁혀 고쳤다.
+
+**이것은 §계획 8.5 규약 ①(카탈로그·고정 뷰 나열은 자기 객체로 좁힌다)의
+정확한 위반**이고, 하필 그 규약을 자기 머리말에 인용한 케이스가 어겼다.
+복제 레인의 `X$REPRECEIVER` 무범위를 지적한 것과 같은 실수를 같은 회차에
+반복한 셈이다. 신규 10 건 전량을 다시 훑어 **WHERE 없는 고정 뷰·카탈로그
+조회가 더 없음**을 확인했다.
+
+교훈은 §5 의 "두 번 돌려 바이트 동일" 이 **연속 두 번이 아니라 다른 이웃과
+함께 한 번 더**여야 한다는 것이다 -- 단독 두 번은 전역 조회의 비결정성을
+잡지 못한다.
+
+### 9.4 이 회차가 배운 것 — 문자열 계수는 헬퍼 뒤를 못 본다
+
+N1 과 N7 이 **둘 다 전제가 틀렸다.** 원인이 같다 — §1 을 `grep` 계수로
+만들었기 때문이다.
+
+- **N1**: `EXCHANGE PARTITION` 이 1 로 세어졌는데, 그 하나는 *"Altibase 에
+  EXCHANGE PARTITION 이 없다"* 는 **주석**이었다.
+- **N7**: `SET TRANSACTION` 이 3 으로 세어졌는데, 실제로는 `DEF` 헬퍼 하나가
+  세 수준을 여섯 번 돈다.
+
+**규칙**: 계수가 0 이나 1 을 내면 **그 자리를 열어 읽고 나서** 공백이라
+부른다. 계수는 후보를 고르는 도구이지 판정이 아니다.
+
+### 9.5 §8 이 이 케이스들에 주는 것
+
+복제 레인이 실측한 규칙 셋(§8.1)은 복제 전용이 아니다. **셋째가 이
+다섯에도 그대로 걸린다** — *"`FLUSH` 는 긍정 단언 전용, 부정 단언에는
+항진식"* 의 일반형은 **"아무 일도 일어나지 않음을 재려면 일어날 기회를
+먼저 줘야 한다"** 이고, 위 다섯 중 셋이 부정 단언을 담고 있다:
+
+| 케이스 | 부정 단언 | 오늘 무엇으로 받나 |
+|---|---|---|
+| `keySizeLimit` | "이 폭은 글로벌로 **안 선다**" | 동기 DDL 이라 즉시 오류가 돌아온다 — **안전** |
+| `surroundingObjects` | 임시·큐·시노님 인덱스 거절 | 〃 — **안전** |
+| `parallelIsolationGate` | "병렬 코디네이터가 **서지 않는다**" | **플랜 전사**로 받는다. 실행 중 상태가 아니라 컴파일 결과라 대기가 필요 없다 — **안전** |
+| `replacePartitionRemap` C 절 | "나간 멤버의 키가 **남아 있지 않다**" | ★ **여기는 다르다.** 커밋 시점 purge 가 **비동기**다. `DELETE` 직후 세는 것이 이른지 확인해야 하고, 이르면 §8.1 규칙 3 과 같은 처방(정착 + 명시적 전제 단언)이 필요하다 |
+
+**그러므로 `.lst` 를 찍을 때 `replacePartitionRemap` C 절을 먼저 본다.**
+두 번 돌려 값이 갈리면 purge 를 기다리지 않은 것이다.
+
+§8.2 의 둘째("시도마다 다른 컬럼을 써야 한다 — 같은 컬럼에 세 번 걸었더니
+`ERR-31051` 이 나서 재려던 것 대신 컬럼 재사용을 쟀다")도 `keySizeLimit`
+A·B 절에 그대로 걸리는 함정이라, 그 케이스는 사다리 칸마다 **다른 컬럼**을
+쓰도록 이미 짜 두었다(C1~C5).
+
+
+### 9.6 실행이 뒤집은 것 — 케이스 다섯의 전제가 틀렸다
+
+`.lst` 를 찍는 일은 받아 적기가 아니었다. **다섯 케이스가 처음 돌 때
+제 전제를 스스로 깨뜨렸고**, 그 정정이 케이스 머리말에 남았다.
+
+| 케이스 | 무엇이 틀렸나 | 실측 |
+|---|---|---|
+| `parallelIsolationGate` | "REPEATABLE READ 면 `PARALLEL-SCAN-COORDINATOR` 가 서지 않는다" | **선다.** 갈리는 것은 그 아래다 — RC/SERIALIZABLE 은 워커마다 슬라이스(ACCESS 7860/7467…)에 `TID` 가 있고, RR 은 워커마다 **ACCESS 30000 전량 + `TID` 없음**. 게이트는 **노드를 걷는 게 아니라 슬라이싱을 멈춘다**. 답은 세 수준 모두 동일(450015000/90000/30000) |
+| `replacePartitionRemap` | "두 경로의 관측이 **모두** 같아야 한다" | 데이터·활성 멤버는 같고(9/9, 3/3) **전체 멤버 수가 다르다** — remap 4 vs rebuild 3. LEAVING 멤버가 purge 전까지 남는 설계 그대로다. 그러므로 그 차이는 **remap 이 실제로 돌았다는 표지**로 읽어야 한다 |
+| `convertFromLegacy` | PK 를 `(K, P)` 로 잡음 | 파티션 키를 포함하면 **로컬로 설 수 있어 글로벌이 아예 안 생긴다**(`IMPL_BEFORE = NATIVE`). `(K)` 로 고치니 `GIT` 이 나왔다 |
+| `triggerRowMovement` | "리뷰 §2 수정 전이니 D 절은 붉다" | **그린이다** — `:OLD` 가 옳은 값(P 11 · V 'D-B'). 다만 `ADD COLUMN` 이 로우를 다시 썼다면 분화 조건에 닿지 못한 것이므로 **"결함 없음" 으로 읽으면 안 된다** |
+| `keySizeLimit` | 사다리로 경계를 좁힐 생각 | 좁힐 필요가 없었다. 오류가 **차이를 직접 말한다** — `ERR-311E0 … estimated 3544, limit 3384 (native global index; non-global limit is 3386)`. memberNo **2 바이트**가 그대로 보인다 |
+
+이 다섯이 "케이스를 쓰는 것"과 "케이스를 세우는 것"의 거리다. §5 가
+"두 번 돌려 바이트 동일" 을 요구하는 이유도 같다 — 한 번 돌리기 전에는
+그 케이스가 무엇을 재는지 쓴 사람도 모른다.
+
+### 9.7 실행이 낸 두 관측 — 제품 쪽으로 넘긴다
+
+케이스 범위 밖이라 여기 적어 넘긴다.
+
+1. **전환 뒤 `INDEX_TABLE_ID` 가 남는다.** `convertFromLegacy` C 절에서
+   `REBUILD` 뒤 판별자는 네이티브(`IS_NATIVE_AFTER = 1`)인데
+   `SYS_INDICES_.INDEX_TABLE_ID` 는 0 이 아니다(`IMPL_AFTER = GIT`).
+   두 칸이 서로 다른 말을 한다. D-1 의 "전환 결과 == CREATE 결과"
+   불변식과 어떻게 맞물리는지 제품 판정이 필요하다.
+   (`SYS_PART_KEY_COLUMNS_` 고아 행은 이 키 모양에서 **0** 이었다 —
+   리뷰 §4 가 말한 것은 재현되지 않았다.)
+2. **리뷰 §3(DIRECTKEY)은 디스크로는 도달하지 않는다.**
+   `ALTER INDEX … DIRECTKEY` 가 `ERR-111A5 : The DIRECTKEY option is only
+   supported for memory B-Tree indexes.` 로 **매체 가드에서 먼저 막힌다.**
+   리뷰가 그린 "DIRECTKEY 가 요청 없는 전환을 수행한다" 는 메모리 `$GIT_`
+   에서만 성립하는데, 탈출구(`__DISK_GLOBAL_INDEX_LEGACY_CREATE`)가
+   **디스크 전용**이라 그 조합은 오늘 이 스위트에서 만들 수 없다.
+
+### 9.8 유일한 보류 — `iloaderRoundTrip`
+
+케이스는 끝까지 돌지만 **왕복이 0 행**이다(SRC 27 → DST 0). `EXEC PROC1`
+이 iloader 의 출력을 전사에 남기지 않아 무엇이 실패했는지 `.out` 만으로는
+보이지 않는다. **0 을 기대값으로 굳히면 영원히 그린이면서 아무것도 재지
+않는 항진식**이 되므로 `.lst` 를 찍지 않고 `Tool.ts` 에서 주석 처리했다.
+여는 조건은 케이스 머리말에 셋으로 적어 두었다(포트 명시 · 출력 포획 ·
+폼 파일 확인).

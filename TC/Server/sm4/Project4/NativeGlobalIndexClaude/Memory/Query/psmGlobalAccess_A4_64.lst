@@ -1,0 +1,355 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = PSM 이 글로벌 인덱스 테이블을 읽고 쓴다 (메모리).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다.
+$T0> #
+$T0> # ★ 왜 이식이 아니라 새로 쓰는가 -- 분류를 정정한다
+$T0> #   커버리지 §2 (ㄱ) 는 PSM 을 "이식으로 채워진다" 로 놓고 근거를
+$T0> #   `parallelbuild-check` · `disk-matrix-check` 로 적었다. **둘 다 근거가
+$T0> #   되지 못한다 -- 실물을 열어 보니 이렇다:**
+$T0> #
+$T0> #     parallelbuild-check  PSM 을 **데이터 채우개로만** 쓴다
+$T0> #                          (`ngi_pb_fill`). 이식해도 PSM 축은 하나도
+$T0> #                          안 닫힌다 -- 재는 것은 병렬 빌드다.
+$T0> #     disk-matrix-check    `d19_walk` 계열이 **진짜 PSM 축**이다. 그런데
+$T0> #                          이 스크립트는 골든 참조 2 + 재기동 1 이라
+$T0> #                          건지기의 가장 어려운 묶음에 있다.
+$T0> #
+$T0> #   즉 "소스 grep 하나만 걸림" 이라는 종전 판정은 틀렸고, 이 공백을 닫아
+$T0> #   줄 이식은 가깝지 않다. 계수가 키워드 적중만 보고 **그 적중이 무엇을
+$T0> #   하는지 읽지 않아** 생긴 오류이고, N1(주석을 구문으로 셈)·N7(헬퍼 뒤를
+$T0> #   못 봄)과 같은 가족이다.
+$T0> #
+$T0> #   ★ 나중에 `disk-matrix-check` 의 `d19_walk` 절이 이식되면 **중복 판정
+$T0> #     대상**이다. 이 주석이 그 표지다.
+$T0> #
+$T0> # 무엇을 재는가 -- PSM 은 다른 입구로 들어온다
+$T0> #
+$T0> #   PSM 안의 SQL 은 정적 커서로 미리 준비되고, 실행 계획이 세션이 아니라
+$T0> #   프로시저에 붙는다. 그래서 물음이 셋 생긴다:
+$T0> #
+$T0> #     1. PSM 커서가 글로벌 인덱스를 타는가 (그리고 파티션을 가로질러
+$T0> #        정렬을 받는가)
+$T0> #     2. PSM 안의 DML 이 글로벌 트리를 옳게 갱신하는가 --
+$T0> #        **파티션을 넘는 갱신(row movement) 포함**
+$T0> #     3. 유일성 위반이 PSM 예외로 잡히고, 잡은 뒤에도 트리가 정합인가
+$T0> #
+$T0> #   3 이 특히 이 스위트의 몫이다. 예외를 잡아 계속 도는 경로는 실패한
+$T0> #   키 삽입이 **반쪽만 남았는지**를 드러낸다 -- 그물의 FIT 절이 크래시로
+$T0> #   보던 것을 여기서는 잡힌 예외로 본다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP PROCEDURE NGM_PSM_WALK;
+$T0> DROP PROCEDURE NGM_PSM_MOVE;
+$T0> DROP PROCEDURE NGM_PSM_DUP;
+$T0> DROP TABLE NGM_PSM;
+$T0> DROP TABLE NGM_PSM_LOG;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGM_PSM ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE TABLE NGM_PSM_LOG ( TAG VARCHAR(24), N INTEGER ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_PSM SELECT LEVEL,      100 + LEVEL, 'A' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> INSERT INTO NGM_PSM SELECT LEVEL + 10, 200 + LEVEL, 'B' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> INSERT INTO NGM_PSM SELECT LEVEL + 20, 300 + LEVEL, 'C' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE UNIQUE INDEX NGM_PSM_G ON NGM_PSM ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> ALTER TABLE NGM_PSM ENABLE ROW MOVEMENT;
+Alter success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_PSM_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- PSM 커서가 글로벌 트리를 순회한다
+$T0> ##################################
+$T0> CREATE OR REPLACE PROCEDURE NGM_PSM_WALK AS
+        CURSOR C1 IS
+            SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ K, P
+              FROM NGM_PSM ORDER BY K;
+        V_CNT   INTEGER := 0;
+        V_PREV  INTEGER := -1;
+        V_ORDER INTEGER := 1;
+    BEGIN
+        FOR R IN C1 LOOP
+            V_CNT := V_CNT + 1;
+            -- 파티션을 가로질러 키 순서가 보존되는가. 글로벌 인덱스가
+            -- 주는 값이 정확히 이것이므로, 어긋나면 0 으로 남는다.
+            IF R.K <= V_PREV THEN
+                V_ORDER := 0;
+            END IF;
+            V_PREV := R.K;
+        END LOOP;
+        INSERT INTO NGM_PSM_LOG VALUES ( 'WALK_COUNT', V_CNT );
+        INSERT INTO NGM_PSM_LOG VALUES ( 'WALK_ORDERED', V_ORDER );
+    END;
+    /
+Create success.
+
+$T0> EXEC NGM_PSM_WALK();
+Execute success.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT TAG, N FROM NGM_PSM_LOG ORDER BY TAG;
+TAG                       N           
+-----------------------------------------
+WALK_COUNT                15          
+WALK_ORDERED              1           
+2 rows selected.
+$T0> DELETE FROM NGM_PSM_LOG;
+2 rows deleted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- PSM 안의 DML 이 파티션을 넘긴다
+$T0> ##################################
+$T0> CREATE OR REPLACE PROCEDURE NGM_PSM_MOVE AS
+        CURSOR C2 IS SELECT K FROM NGM_PSM WHERE P < 10;
+        V_CNT INTEGER := 0;
+    BEGIN
+        -- P1 의 행들을 PD 쪽으로 민다. 한 문장이 아니라 루프 안의
+        -- 갱신이므로, 커서 handoff 가 반복마다 서야 한다.
+        FOR R IN C2 LOOP
+            UPDATE NGM_PSM SET P = P + 20 WHERE K = R.K;
+            V_CNT := V_CNT + 1;
+        END LOOP;
+        INSERT INTO NGM_PSM_LOG VALUES ( 'MOVED', V_CNT );
+    END;
+    /
+Create success.
+
+$T0> EXEC NGM_PSM_MOVE();
+Execute success.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT TAG, N FROM NGM_PSM_LOG ORDER BY TAG;
+TAG                       N           
+-----------------------------------------
+MOVED                     5           
+1 row selected.
+
+$T0> # B1. 잃지도 겹치지도 않았는가.
+$T0> SELECT COUNT(*) AS TOTAL_HEAP FROM NGM_PSM;
+TOTAL_HEAP           
+-----------------------
+15                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*)          AS TOTAL_TREE FROM NGM_PSM;
+TOTAL_TREE           
+-----------------------
+15                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(DISTINCT K) AS DISTINCT_K FROM NGM_PSM;
+DISTINCT_K           
+-----------------------
+15                   
+1 row selected.
+
+$T0> # B2. 파티션 배치가 옮겨졌는가.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*) AS IN_P1 FROM NGM_PSM PARTITION( P1 );
+IN_P1                
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*) AS IN_P2 FROM NGM_PSM PARTITION( P2 );
+IN_P2                
+-----------------------
+5                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*) AS IN_PD FROM NGM_PSM PARTITION( PD );
+IN_PD                
+-----------------------
+10                   
+1 row selected.
+
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ K, P, V FROM NGM_PSM ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         21          A                 
+102         22          A                 
+103         23          A                 
+104         24          A                 
+105         25          A                 
+201         11          B                 
+202         12          B                 
+203         13          B                 
+204         14          B                 
+205         15          B                 
+301         21          C                 
+302         22          C                 
+303         23          C                 
+304         24          C                 
+305         25          C                 
+15 rows selected.
+
+$T0> DELETE FROM NGM_PSM_LOG;
+1 row deleted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 유일성 위반을 PSM 예외로 잡는다
+$T0> ##################################
+$T0> # ★ 잡은 **뒤에** 트리가 정합인지가 이 절의 핵심이다.
+$T0> #   실패한 삽입이 키를 반쪽 남기면 여기서 드러난다 -- 예외를 잡고
+$T0> #   계속 도는 경로는 그 반쪽을 청소할 기회가 크래시 경로와 다르다.
+$T0> CREATE OR REPLACE PROCEDURE NGM_PSM_DUP AS
+        V_ERR INTEGER := 0;
+    BEGIN
+        BEGIN
+            -- 이미 있는 키를 다른 파티션에 넣는다. 트리가 하나이므로
+            -- 실패해야 한다.
+            INSERT INTO NGM_PSM VALUES ( 5, 301, 'DUP' );
+        EXCEPTION
+            WHEN OTHERS THEN
+                V_ERR := 1;
+        END;
+        INSERT INTO NGM_PSM_LOG VALUES ( 'DUP_REJECTED', V_ERR );
+
+        -- 예외를 잡은 뒤에도 정상 삽입이 되는가.
+        INSERT INTO NGM_PSM VALUES ( 6, 901, 'AFTER-EXC' );
+        INSERT INTO NGM_PSM_LOG VALUES ( 'AFTER_EXC_OK', 1 );
+    END;
+    /
+Create success.
+
+$T0> EXEC NGM_PSM_DUP();
+Execute success.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT TAG, N FROM NGM_PSM_LOG ORDER BY TAG;
+TAG                       N           
+-----------------------------------------
+AFTER_EXC_OK              1           
+DUP_REJECTED              1           
+2 rows selected.
+
+$T0> # C1. 거절된 키가 트리에 남지 않았는가.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*) AS K301_ROWS FROM NGM_PSM WHERE K = 301;
+K301_ROWS            
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ K, P, V  FROM NGM_PSM WHERE K = 301;
+K           P           V                 
+----------------------------------------------
+301         21          C                 
+1 row selected.
+
+$T0> # C2. 예외 뒤의 삽입이 트리에 들어갔는가.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ K, P, V FROM NGM_PSM WHERE K = 901;
+K           P           V                 
+----------------------------------------------
+901         6           AFTER-EXC         
+1 row selected.
+
+$T0> # C3. 힙과 트리가 여전히 같은가 -- 반쪽이 남았다면 여기서 갈린다.
+$T0> SELECT COUNT(*) AS FINAL_HEAP FROM NGM_PSM;
+FINAL_HEAP           
+-----------------------
+16                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*)          AS FINAL_TREE     FROM NGM_PSM;
+FINAL_TREE           
+-----------------------
+16                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(DISTINCT K) AS FINAL_DISTINCT FROM NGM_PSM;
+FINAL_DISTINCT       
+-----------------------
+16                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- PSM 함수를 술어에 쓰면 플랜이 어떻게 되는가
+$T0> ##################################
+$T0> # 명세 조사가 적은 것: 게이트가 mParallelDegree 만 보므로 PSM 함수 술어처럼
+$T0> # 어차피 직렬인 문장이 힌트 한 줄로 글로벌을 잃던 자리가 있었다.
+$T0> # parallelIsolationGate.tc D 절의 자매 확인이다.
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ INDEX( NGM_PSM, NGM_PSM_G ) */ COUNT(*) FROM NGM_PSM WHERE K > 0;
+COUNT                
+-----------------------
+16                   
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.NGM_PSM, INDEX: SYS.NGM_PSM_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 16, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP PROCEDURE NGM_PSM_WALK;
+$T0> DROP PROCEDURE NGM_PSM_MOVE;
+$T0> DROP PROCEDURE NGM_PSM_DUP;
+$T0> SKIP END;
+$T0> DROP TABLE NGM_PSM;
+Drop success.
+$T0> DROP TABLE NGM_PSM_LOG;
+Drop success.
+

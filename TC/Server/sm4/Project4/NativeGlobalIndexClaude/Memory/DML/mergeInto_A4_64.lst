@@ -1,0 +1,360 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = MERGE INTO 가 글로벌 인덱스 테이블에 대해 옳게 도는가 (메모리).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다.
+$T0> #
+$T0> # ★ 왜 이식이 아니라 새로 쓰는가 -- 분류를 정정한다
+$T0> #   커버리지 §2 (ㄱ) 는 `MERGE INTO` 를 "이식으로 채워진다 -- 새로 쓰지
+$T0> #   않는다" 로 놓았다. 근거는 그물의 `sql-level-check` K 절과
+$T0> #   `parallel-scan-check` 가 그것을 밟는다는 것이었다. **그 근거가 약하다:**
+$T0> #
+$T0> #     sql-level-check    ngi_cli 의존 9 곳 + 재기동 1 -- 절 분해가 먼저다
+$T0> #     parallel-scan-check FIT 의존 -- FIT 레인 계약이 먼저다
+$T0> #
+$T0> #   둘 다 건지기의 **가장 어려운 묶음**(FIT·골든·ngi_cli 혼합 8)에 있고,
+$T0> #   오늘까지 이식된 것은 **의존 없는 11 중 3** 뿐이다. 즉 이 공백을 닫아
+$T0> #   줄 이식은 **가깝지 않고 담당도 없다.** 그동안 J11 이 글로벌 플랜
+$T0> #   통과 목록에 올린 문장 하나가 스위트에서 **0 회** 남는다.
+$T0> #
+$T0> #   그리고 서버를 쓸 수 없는 동안에는 이식도 `.lst` 를 받아 적지 못하므로
+$T0> #   "이식이 싸다" 는 비교 자체가 성립하지 않는다. 그래서 새로 쓴다.
+$T0> #
+$T0> #   ★ 나중에 K 절이 이식되면 **중복 판정 대상**이다. 그때 이 케이스와
+$T0> #     견주어 겹치는 절을 걷을 것 -- 이 주석이 그 표지다.
+$T0> #
+$T0> # 무엇을 재는가 -- 그물이 재지 않는 쪽을 고른다
+$T0> #
+$T0> #   그물 K 절이 보는 것은 **플랜**이다(대상 테이블 스캔이 글로벌을 고르는가).
+$T0> #   이 케이스는 그것을 한 번 담되, 무게는 **정합성**에 둔다:
+$T0> #
+$T0> #     1. MATCHED 갱신이 글로벌 트리에 반영되는가
+$T0> #     2. NOT MATCHED 삽입이 옳은 파티션으로 라우팅되고 트리에 들어가는가
+$T0> #     3. ★ MERGE 의 UPDATE 가 **파티션 키를 건드리면 row movement** 다.
+$T0> #        한 문장 안에서 삭제+삽입으로 갈리는 그 경로를 MERGE 로 밟은
+$T0> #        적이 없다
+$T0> #     4. 글로벌 유일성이 MERGE 를 통과해도 서는가
+$T0> #
+$T0> # ★ 플랜을 볼 때의 함정 (그물이 적어 둔 것)
+$T0> #   MERGE 의 대상 하위 플랜은 `TRCLOG_DETAIL_PREDICATE = 1` 에서만 찍힌다 --
+$T0> #   최상위 플랜은 **원본(SOURCE) 스캔만** 보여 준다(`qmnMRGE::printPlan`).
+$T0> #   그것을 모르고 보면 "글로벌이 안 쓰인다" 고 오독한다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE = 0;
+$T0> DROP TABLE NGM_MRG;
+$T0> DROP TABLE NGM_MRG_S;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # 대상 -- 파티션드 + 글로벌 유일 인덱스
+$T0> CREATE TABLE NGM_MRG ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # 원본 -- 평범한 테이블
+$T0> CREATE TABLE NGM_MRG_S ( P INTEGER, K INTEGER, V VARCHAR(16) )
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_MRG VALUES ( 1,  101, 'OLD-1' );
+1 row inserted.
+$T0> INSERT INTO NGM_MRG VALUES ( 2,  102, 'OLD-2' );
+1 row inserted.
+$T0> INSERT INTO NGM_MRG VALUES ( 11, 103, 'OLD-3' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE UNIQUE INDEX NGM_MRG_G ON NGM_MRG ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_MRG_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- MATCHED 갱신 + NOT MATCHED 삽입
+$T0> ##################################
+$T0> # 101·102 는 있고(MATCHED), 201 은 없다(NOT MATCHED).
+$T0> INSERT INTO NGM_MRG_S VALUES ( 1,  101, 'NEW-1' );
+1 row inserted.
+$T0> INSERT INTO NGM_MRG_S VALUES ( 2,  102, 'NEW-2' );
+1 row inserted.
+$T0> INSERT INTO NGM_MRG_S VALUES ( 21, 201, 'NEW-INS' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> MERGE INTO NGM_MRG t USING NGM_MRG_S s ON ( t.K = s.K )
+        WHEN MATCHED THEN UPDATE SET t.V = s.V
+        WHEN NOT MATCHED THEN INSERT VALUES ( s.P, s.K, s.V );
+3 rows merged.
+$T0> COMMIT;
+Commit success.
+
+$T0> # A1. 갱신이 반영됐는가 -- 트리로 읽는다.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ K, P, V FROM NGM_MRG ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         1           NEW-1             
+102         2           NEW-2             
+103         11          OLD-3             
+201         21          NEW-INS           
+4 rows selected.
+
+$T0> # A2. 삽입이 트리에 들어갔는가. 힙과 트리를 따로 센다 --
+$T0> #     삽입이 인덱스를 안 건드리면 여기서 갈린다.
+$T0> SELECT COUNT(*) AS TOTAL_HEAP FROM NGM_MRG;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*)          AS TOTAL_TREE FROM NGM_MRG;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(DISTINCT K) AS DISTINCT_K FROM NGM_MRG;
+DISTINCT_K           
+-----------------------
+4                    
+1 row selected.
+
+$T0> # A3. 삽입된 행이 옳은 파티션으로 갔는가.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*) AS IN_P1 FROM NGM_MRG PARTITION( P1 );
+IN_P1                
+-----------------------
+2                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*) AS IN_P2 FROM NGM_MRG PARTITION( P2 );
+IN_P2                
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*) AS IN_PD FROM NGM_MRG PARTITION( PD );
+IN_PD                
+-----------------------
+1                    
+1 row selected.
+
+$T0> # A4. 점 조회로 새 행을 트리에서 찾을 수 있는가.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ K, P, V FROM NGM_MRG WHERE K = 201;
+K           P           V                 
+----------------------------------------------
+201         21          NEW-INS           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- ★ MERGE 의 갱신이 파티션 키를 건드리면 row movement 다
+$T0> ##################################
+$T0> # 한 문장 안에서 삭제+삽입으로 갈리는 경로를 MERGE 로 밟은 적이 없다.
+$T0> DELETE FROM NGM_MRG_S;
+3 rows deleted.
+$T0> INSERT INTO NGM_MRG_S VALUES ( 15, 101, 'MOVED-BY-MERGE' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ALTER TABLE NGM_MRG ENABLE ROW MOVEMENT;
+Alter success.
+
+$T0> MERGE INTO NGM_MRG t USING NGM_MRG_S s ON ( t.K = s.K )
+        WHEN MATCHED THEN UPDATE SET t.P = s.P, t.V = s.V
+        WHEN NOT MATCHED THEN INSERT VALUES ( s.P, s.K, s.V );
+1 row merged.
+$T0> COMMIT;
+Commit success.
+
+$T0> # B1. 살아 있는가.
+$T0> SELECT COUNT(*) AS ALIVE FROM NGM_MRG;
+ALIVE                
+-----------------------
+4                    
+1 row selected.
+
+$T0> # B2. ★ 정확히 한 행인가. 갈린 채로 남으면 둘이 되거나 사라진다.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*) AS K101_ROWS FROM NGM_MRG WHERE K = 101;
+K101_ROWS            
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ K, P, V  FROM NGM_MRG WHERE K = 101;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+1 row selected.
+
+$T0> # B3. 옮겨졌는가 -- P1 에서 P2 로.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*) AS AFTER_MOVE_P1 FROM NGM_MRG PARTITION( P1 );
+AFTER_MOVE_P1        
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*) AS AFTER_MOVE_P2 FROM NGM_MRG PARTITION( P2 );
+AFTER_MOVE_P2        
+-----------------------
+2                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*)          AS AFTER_MOVE_TOTAL    FROM NGM_MRG;
+AFTER_MOVE_TOTAL     
+-----------------------
+4                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(DISTINCT K) AS AFTER_MOVE_DISTINCT FROM NGM_MRG;
+AFTER_MOVE_DISTINCT  
+-----------------------
+4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 글로벌 유일성이 MERGE 를 통과해도 서는가
+$T0> ##################################
+$T0> # 원본이 이미 있는 키를 **다른 파티션에** 새로 넣으려 한다.
+$T0> # ON 조건이 K 가 아니라 P 이므로 MATCHED 가 아니고, INSERT 가 시도된다.
+$T0> DELETE FROM NGM_MRG_S;
+1 row deleted.
+$T0> INSERT INTO NGM_MRG_S VALUES ( 25, 102, 'DUP-ACROSS-PART' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> MERGE INTO NGM_MRG t USING NGM_MRG_S s ON ( t.P = s.P )
+        WHEN MATCHED THEN UPDATE SET t.V = s.V
+        WHEN NOT MATCHED THEN INSERT VALUES ( s.P, s.K, s.V );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(*)          AS AFTER_DUP_TOTAL    FROM NGM_MRG;
+AFTER_DUP_TOTAL      
+-----------------------
+4                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ COUNT(DISTINCT K) AS AFTER_DUP_DISTINCT FROM NGM_MRG;
+AFTER_DUP_DISTINCT   
+-----------------------
+4                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ K, P, V FROM NGM_MRG ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+103         11          OLD-3             
+201         21          NEW-INS           
+4 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 플랜. 대상 하위 플랜은 상세 술어에서만 보인다
+$T0> ##################################
+$T0> # ★ 이 절을 읽을 때: 최상위 플랜은 **원본 스캔만** 보여 준다.
+$T0> #   대상 쪽이 글로벌을 고르는지는 TRCLOG_DETAIL_PREDICATE = 1 에서만
+$T0> #   찍힌다(qmnMRGE::printPlan). 이것을 모르면 "글로벌이 안 쓰인다" 고
+$T0> #   오독한다 -- 그물이 같은 자리에 그 주석을 남겼다.
+$T0> DELETE FROM NGM_MRG_S;
+1 row deleted.
+$T0> INSERT INTO NGM_MRG_S VALUES ( 1, 101, 'PLAN-PROBE' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE = 1;
+Alter success.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+
+$T0> MERGE INTO NGM_MRG t USING NGM_MRG_S s ON ( t.K = s.K )
+        WHEN MATCHED THEN UPDATE SET t.V = s.V
+        WHEN NOT MATCHED THEN INSERT VALUES ( s.P, s.K, s.V );
+1 row merged.
+------------------------------------------------------------
+MERGE ( TABLE: SYS.NGM_MRG T )
+ PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 26, COST: BLOCKED )
+  SCAN ( TABLE: SYS.NGM_MRG_S S, FULL SCAN, ACCESS: 1, COST: BLOCKED )
+ [ MATCH CONDITION ]
+ PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 26, COST: BLOCKED )
+  SCAN ( TABLE: SYS.NGM_MRG T, INDEX: SYS.NGM_MRG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, COST: BLOCKED )
+   [ VARIABLE KEY ]
+   OR
+    AND
+     T.K = S.K
+ [ MATCHED ]
+ UPDATE ( TABLE: SYS.NGM_MRG T )
+  SCAN ( TABLE: SYS.NGM_MRG T, INDEX: SYS.NGM_MRG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, COST: BLOCKED )
+   [ VARIABLE KEY ]
+   OR
+    AND
+     T.K = S.K
+ [ NOT MATCHED ]
+ INSERT ( TABLE: SYS.NGM_MRG T )
+------------------------------------------------------------
+
+$T0> ROLLBACK;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+$T0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE = 0;
+Alter success.
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> # 롤백이 정말 되돌렸는가.
+$T0> SELECT /*+ INDEX( NGM_MRG, NGM_MRG_G ) */ K, P, V FROM NGM_MRG ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+103         11          OLD-3             
+201         21          NEW-INS           
+4 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> DROP TABLE NGM_MRG;
+Drop success.
+$T0> DROP TABLE NGM_MRG_S;
+Drop success.
+

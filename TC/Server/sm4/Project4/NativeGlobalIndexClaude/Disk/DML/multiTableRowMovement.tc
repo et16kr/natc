@@ -1,0 +1,213 @@
+###########################################################################
+# TestCase Description = 멀티테이블 UPDATE 의 row movement (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N8).
+#                        오늘 이것을 재는 곳은 삭제될 그물의
+#                        rowmovement-order-check.sh **J 절** 하나뿐이다.
+#
+# 무엇을 재는가 -- O-8 이 고친 자리다
+#
+#   `UPDATE t1 a, t2 b SET ...` 가 로우를 다른 파티션으로 옮기면 **서버가
+#   죽었다**(`ERR-91015` / 릴리즈 SIGSEGV). 통합 계획 §14 가 "고쳐진 뒤에
+#   케이스가 붙는다" 며 넘긴 항목이고, altibase `5504aad9e` 가 고쳤다.
+#
+#   파티션을 가로지르는 UPDATE 는 SM 에게 두 반쪽이다(원본 DELETE + 대상
+#   INSERT). 그 두 반쪽을 실행하는 함수가 문장 종류마다 다른데, 멀티테이블
+#   판에는 단일 테이블 판이 가진 것 **둘이 없었다**:
+#
+#     1. 대상 파티션의 커서를 여는 훅 (V3)
+#        없으면 sInsertCursor 가 NULL 인 채로 insertRow 에 들어간다.
+#        글로벌 스캔은 로우의 owner 파티션만 커서를 열므로(handoff),
+#        스캔이 도달한 적 없는 대상 파티션은 커서가 없다.
+#     2. DELETE -> INSERT 순서 (J04)
+#        그대로면 새 키가 아직 살아 있는 자기 옛 키와 같은 트리에서
+#        충돌한다(`ERR-11058`).
+#
+# ★ 왜 디스크인가 -- 메모리는 우연히 통과한다
+#   순서 결함(2)은 메모리에서 **키 삽입을 미루는 성질 때문에 우연히**
+#   통과한다(v4-rowmovement-order.md §1.1). 디스크에서만 `ERR-11058` 로
+#   드러난다. 그러므로 이 축의 이빨은 디스크에 있다.
+#   메모리 판은 따로 둔다 -- 거기서 재는 것은 "우연한 통과" 가 계속
+#   성립하는가이지 같은 것이 아니다.
+#
+# ★ 순서 불변식의 감시자가 여기다
+#   V4 코드 리뷰 §9 가 지적했다: DELETE->INSERT 순서는 O-5·O-6·O-8 셋의
+#   뿌리를 닫은 핵심 불변식인데 **지키는 것이 주석과 외부 스크립트뿐**이고
+#   그 스크립트는 삭제된다. 손으로 동기화된 복사본 4 벌 중 하나만 되돌려도
+#   컴파일과 메모리 테스트는 통과한다. 이 케이스가 그 자리의 감시자다.
+#
+# ★ LOB 축을 함께 담는다 (커버리지 §7.3)
+#   리뷰 §12 는 "DELETE 선행 후 LOB 읽기" 를 **코드 읽기로** 무해 판정했다 --
+#   재는 테스트가 없다. 그물의 LOB 생존 검사는 재기동 절에 있어
+#   `Lifecycle/` 계약 뒤로 밀리므로, 여기에 비키 LOB 컬럼을 넣어
+#   재기동 없이 잰다.
+#
+# ★ .lst 미기록 -- 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_MTR_A;
+    DROP TABLE NGD_MTR_B;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    # 옮겨질 쪽. 글로벌 유니크 -- 파티션을 가로질러 하나여야 한다.
+    CREATE TABLE NGD_MTR_A ( P INTEGER, K INTEGER, V VARCHAR(16), L CLOB )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    # 같은 문장에 걸리는 다른 쪽. 파티션드가 아니어도 된다.
+    CREATE TABLE NGD_MTR_B ( K INTEGER, W VARCHAR(16) )
+        TABLESPACE SYS_TBS_DISK_DATA;
+
+    ALTER TABLE NGD_MTR_A ENABLE ROW MOVEMENT;
+
+    INSERT INTO NGD_MTR_A VALUES ( 1,  101, 'A-1', 'lob-101' );
+    INSERT INTO NGD_MTR_A VALUES ( 2,  102, 'A-2', 'lob-102' );
+    INSERT INTO NGD_MTR_A VALUES ( 11, 103, 'A-3', 'lob-103' );
+    INSERT INTO NGD_MTR_B VALUES ( 101, 'B-1' );
+    INSERT INTO NGD_MTR_B VALUES ( 102, 'B-2' );
+    INSERT INTO NGD_MTR_B VALUES ( 103, 'B-3' );
+    COMMIT;
+
+    CREATE UNIQUE INDEX NGD_MTR_A_G ON NGD_MTR_A ( K );
+
+    # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_MTR_A_G';
+
+##################################
+SECTOR; A -- 파티션을 넘는 멀티테이블 UPDATE. 죽지 않아야 한다
+##################################
+# ★ 이 문장이 O-8 이 죽던 자리다. P 를 1 -> 15 로 바꾸면 로우가 P1 에서
+#   P2 로 옮겨 가고, 대상 파티션은 글로벌 스캔이 도달한 적이 없으므로
+#   훅이 없으면 커서가 NULL 이다.
+    UPDATE NGD_MTR_A a, NGD_MTR_B b
+       SET a.P = 15, a.V = 'MOVED'
+     WHERE a.K = b.K AND b.K = 101;
+    COMMIT;
+
+    # A1. 서버가 살아 있는가 -- 뒤 문장이 도는 것으로 대신한다.
+    SELECT COUNT(*) AS ALIVE FROM NGD_MTR_A;
+
+    # A2. 옮겨졌는가. 그리고 **정확히 한 행**인가 --
+    #     순서가 뒤집히지 않았으면 옛 키가 남아 두 행이 된다.
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS K101_ROWS
+      FROM NGD_MTR_A WHERE K = 101;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ P, K, V
+      FROM NGD_MTR_A WHERE K = 101;
+
+    # A3. 잃지도 겹치지도 않았는가.
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*)          AS TOTAL    FROM NGD_MTR_A;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(DISTINCT K) AS DISTINCT_K FROM NGD_MTR_A;
+    SELECT COUNT(*) AS TOTAL_HEAP FROM NGD_MTR_A;
+
+    # A4. 파티션별로도 맞는가.
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS IN_P1 FROM NGD_MTR_A PARTITION( P1 );
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS IN_P2 FROM NGD_MTR_A PARTITION( P2 );
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS IN_PD FROM NGD_MTR_A PARTITION( PD );
+
+    # A5. ★ LOB 이 따라왔는가 (리뷰 §12 가 코드로만 판정한 자리).
+    #     이동은 DELETE + INSERT 로 갈리므로 LOB 피스도 함께 옮겨져야 한다.
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, LENGTH( L ) AS LOB_LEN
+      FROM NGD_MTR_A WHERE K = 101;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, SUBSTRING( L, 1, 16 ) AS LOB_HEAD
+      FROM NGD_MTR_A WHERE K = 101;
+
+    # A6. 같은 문장의 **다른 테이블**도 갱신되었는가.
+    SELECT K, W FROM NGD_MTR_B ORDER BY K;
+
+##################################
+SECTOR; B -- 유일성은 여전히 파티션을 가로지른다
+##################################
+    # B1. 진짜 중복으로 옮기려 하면 실패해야 한다(ERR-11058).
+    #     옛 키가 제때 걷히는지를 이것이 가른다 -- 안 걷히면 이 문장이
+    #     아니라 A 절이 이미 실패했을 것이고, 너무 일찍 걷히면 이것이
+    #     성공한다.
+    UPDATE NGD_MTR_A a, NGD_MTR_B b
+       SET a.K = 102
+     WHERE a.K = b.K AND b.K = 103;
+    COMMIT;
+
+    # B2. 아무것도 잃지 않았는가.
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS AFTER_DUP_TOTAL FROM NGD_MTR_A;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, P, V FROM NGD_MTR_A ORDER BY K;
+
+##################################
+SECTOR; C -- 여러 행을 한 문장으로 옮긴다
+##################################
+    UPDATE NGD_MTR_A a, NGD_MTR_B b
+       SET a.P = a.P + 20
+     WHERE a.K = b.K AND b.K IN ( 102, 103 );
+    COMMIT;
+
+    SELECT COUNT(*) AS ALIVE_C FROM NGD_MTR_A;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*)          AS TOTAL_C    FROM NGD_MTR_A;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(DISTINCT K) AS DISTINCT_C FROM NGD_MTR_A;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, P, V FROM NGD_MTR_A ORDER BY K;
+
+##################################
+SECTOR; D -- PARTITION( p ) 로 제한한 멀티테이블 이동
+##################################
+# 글로벌 스캔의 허용 집합이 멀티테이블 경로에서도 서는지 본다.
+    UPDATE NGD_MTR_A PARTITION( PD ) a, NGD_MTR_B b
+       SET a.V = 'PD-ONLY'
+     WHERE a.K = b.K;
+    COMMIT;
+
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, P, V FROM NGD_MTR_A ORDER BY K;
+    SELECT COUNT(*) AS ALIVE_D FROM NGD_MTR_A;
+
+##################################
+SECTOR; E -- 파티션 안에 머무는 UPDATE (대조군)
+##################################
+# 이동이 아니면 제자리 갱신이다. 이 절이 없으면 위의 결과가 "이동을
+# 잘 했다" 인지 "전부 다시 만들었다" 인지 구별되지 않는다.
+    UPDATE NGD_MTR_A a, NGD_MTR_B b
+       SET a.V = 'IN-PLACE'
+     WHERE a.K = b.K AND b.K = 101;
+    COMMIT;
+
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, P, V FROM NGD_MTR_A WHERE K = 101;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS TOTAL_E FROM NGD_MTR_A;
+
+##################################
+SECTOR; F -- 롤백
+##################################
+    AUTOCOMMIT OFF;
+    UPDATE NGD_MTR_A a, NGD_MTR_B b
+       SET a.P = a.P + 100
+     WHERE a.K = b.K;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, P FROM NGD_MTR_A ORDER BY K;
+    ROLLBACK;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ K, P FROM NGD_MTR_A ORDER BY K;
+    SELECT /*+ INDEX( NGD_MTR_A, NGD_MTR_A_G ) */ COUNT(*) AS AFTER_ROLLBACK FROM NGD_MTR_A;
+    AUTOCOMMIT ON;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    DROP TABLE NGD_MTR_A;
+    DROP TABLE NGD_MTR_B;
+}

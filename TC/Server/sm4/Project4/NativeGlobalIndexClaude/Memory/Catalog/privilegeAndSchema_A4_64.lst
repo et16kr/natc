@@ -1,0 +1,280 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 권한과 교차 스키마 — 남의 파티션드 테이블에 글로벌 인덱스 (메모리).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N15).
+$T0> #
+$T0> # 무엇을 재는가 -- 네이티브 시대에 한 번도 안 밟은 축
+$T0> #
+$T0> #   스위트에서 `CREATE USER` 가 나오는 곳은 레거시 `pdt/Bugs/BUG-27` 하나뿐이고
+$T0> #   그것은 `$GIT_` 시절의 것이다. 네이티브 글로벌 인덱스가 만든 새 경로 --
+$T0> #   특히 **전환 DDL(`ALTER INDEX ... REBUILD`)의 권한 검사는 J23 이후에
+$T0> #   생긴 것**이라 검증된 적이 없다.
+$T0> #
+$T0> #   물음은 넷이다:
+$T0> #     1. 소유자가 아닌 사용자가 남의 파티션드 테이블에 글로벌 인덱스를
+$T0> #        만들 수 있는가 (권한 있을 때 / 없을 때)
+$T0> #     2. 만든 인덱스는 누구의 것인가 -- 카탈로그의 USER_ID 가 테이블
+$T0> #        소유자를 따르는가 인덱스 생성자를 따르는가
+$T0> #     3. 비소유자가 그 인덱스를 ALTER / DROP / REBUILD 할 수 있는가
+$T0> #     4. 교차 스키마 이름(`U1.T`)으로 글로벌 스캔이 서는가
+$T0> #
+$T0> #   ★ 이 케이스도 "옳음" 을 미리 주장하지 않는다. 답이 없는 자리이므로
+$T0> #     **서버가 무엇이라 하는지를 전사해 기준선을 만든다.**
+$T0> #
+$T0> # 관용구 -- 한 세션에서 사용자를 바꾼다
+$T0> #   `connect user1/user1;` · `connect sys/manager;`
+$T0> #   (선례: `qp4/BugsPSM/BUG-41561/initialize.tc`). 다중 세션이 아니라
+$T0> #   **재접속**이므로 TC_GUIDE 의 Hard Stops 에 걸리지 않는다.
+$T0> #
+$T0> # ★ 왜 메모리인가
+$T0> #   권한과 이름 해석은 QP 의 일이라 매체를 가리지 않는다. 싼 쪽에 둔다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> #   이 케이스는 **거절 메시지가 곧 기대값**이라 손으로 지어낼 수 없다.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> CONNECT SYS/MANAGER;
+$T0> DROP TABLE NGM_PRV;
+$T0> DROP USER NGMU1 CASCADE;
+$T0> DROP USER NGMU2 CASCADE;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # NGMU1 = 테이블 소유자. NGMU2 = 남.
+$T0> CREATE USER NGMU1 IDENTIFIED BY NGMU1;
+Create success.
+$T0> CREATE USER NGMU2 IDENTIFIED BY NGMU2;
+Create success.
+$T0> GRANT ALL PRIVILEGES TO NGMU1;
+Grant success.
+
+$T0> CONNECT NGMU1/NGMU1;
+Connect success.
+
+$T0> CREATE TABLE NGM_PRV ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_PRV SELECT LEVEL,      100 + LEVEL, 'A' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> INSERT INTO NGM_PRV SELECT LEVEL + 10, 200 + LEVEL, 'B' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> INSERT INTO NGM_PRV SELECT LEVEL + 20, 300 + LEVEL, 'C' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 소유자가 만든다 (기준선)
+$T0> ##################################
+$T0> CREATE INDEX NGM_PRV_G ON NGM_PRV ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # A1. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_PRV_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> # A2. 인덱스의 소유자는 누구로 적혔는가.
+$T0> SELECT U.USER_NAME AS INDEX_OWNER
+      FROM SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_USERS_ U
+     WHERE I.USER_ID = U.USER_ID AND I.INDEX_NAME = 'NGM_PRV_G';
+INDEX_OWNER                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+NGMU1                                                                                                                             
+1 row selected.
+
+$T0> SELECT /*+ INDEX( NGM_PRV, NGM_PRV_G ) */ COUNT(*) AS OWNER_SCAN FROM NGM_PRV;
+OWNER_SCAN           
+-----------------------
+15                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 권한 없는 남이 손대려 하면
+$T0> ##################################
+$T0> CONNECT NGMU2/NGMU2;
+Connect success.
+
+$T0> # B1. 읽기 -- 권한이 없다.
+$T0> SELECT COUNT(*) FROM NGMU1.NGM_PRV;
+[ERR-311B1 : The user must have SELECT_ANY_TABLE privilege(s) to execute this statement.]
+
+$T0> # B2. 남의 테이블에 글로벌 인덱스 만들기.
+$T0> CREATE INDEX NGM_PRV_G2 ON NGMU1.NGM_PRV ( V ) TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-311B1 : The user must have CREATE_ANY_INDEX privilege(s) to execute this statement.]
+
+$T0> # B3. 남의 글로벌 인덱스 지우기.
+$T0> DROP INDEX NGMU1.NGM_PRV_G;
+[ERR-311B1 : The user must have DROP_ANY_INDEX privilege(s) to execute this statement.]
+
+$T0> # B4. ★ 남의 글로벌 인덱스를 REBUILD -- J23 이후 생긴 경로다.
+$T0> #     이것이 전환 DDL 과 같은 입구를 쓰므로, 권한 검사가 그 앞에
+$T0> #     서는지가 이 절의 물음이다.
+$T0> ALTER INDEX NGMU1.NGM_PRV_G REBUILD;
+[ERR-311B1 : The user must have ALTER_ANY_INDEX privilege(s) to execute this statement.]
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 권한을 주면 무엇이 열리는가
+$T0> ##################################
+$T0> # 객체 권한은 **소유자**가 준다. SYS 로는 ERR-313D8 이다 --
+$T0> # 처음 이 절을 SYS 로 썼다가 GRANT 가 실패해 C 절 전체가 B 절의
+$T0> # 항진식이 되는 것을 보고 고쳤다.
+$T0> CONNECT NGMU1/NGMU1;
+Connect success.
+$T0> GRANT SELECT ON NGM_PRV TO NGMU2;
+Grant success.
+
+$T0> CONNECT NGMU2/NGMU2;
+Connect success.
+
+$T0> # C1. 이제 읽힌다. 그리고 교차 스키마 이름으로 글로벌 스캔이 서는가.
+$T0> SELECT COUNT(*) AS GRANTED_READ FROM NGMU1.NGM_PRV;
+GRANTED_READ         
+-----------------------
+15                   
+1 row selected.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ INDEX( NGMU1.NGM_PRV, NGM_PRV_G ) */ COUNT(*)
+      FROM NGMU1.NGM_PRV WHERE K > 0;
+COUNT                
+-----------------------
+15                   
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: NGMU1.NGM_PRV, INDEX: NGMU1.NGM_PRV_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 15, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> # C2. 파티션 지정도 교차 스키마에서 서는가.
+$T0> SELECT COUNT(*) AS CROSS_SCHEMA_P1 FROM NGMU1.NGM_PRV PARTITION( P1 );
+CROSS_SCHEMA_P1      
+-----------------------
+5                    
+1 row selected.
+
+$T0> # C3. SELECT 만 받았으므로 DDL 은 여전히 막혀야 한다.
+$T0> CREATE INDEX NGM_PRV_G3 ON NGMU1.NGM_PRV ( V ) TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-311B1 : The user must have CREATE_ANY_INDEX privilege(s) to execute this statement.]
+$T0> ALTER INDEX NGMU1.NGM_PRV_G REBUILD;
+[ERR-311B1 : The user must have ALTER_ANY_INDEX privilege(s) to execute this statement.]
+
+$T0> ##################################
+$T0> SECTOR 5; D -- SYS 는 무엇을 할 수 있는가
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # D1. 교차 스키마 스캔
+$T0> SELECT COUNT(*) AS SYS_READ FROM NGMU1.NGM_PRV;
+SYS_READ             
+-----------------------
+15                   
+1 row selected.
+
+$T0> # D2. 남의 글로벌 인덱스 REBUILD -- 전환 경로의 관리자 판이다.
+$T0> ALTER INDEX NGMU1.NGM_PRV_G REBUILD;
+Alter success.
+
+$T0> # D3. REBUILD 뒤에도 네이티브이고 데이터가 온전한가.
+$T0> SELECT COUNT(*) AS IS_NATIVE_AFTER_REBUILD
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_PRV_G';
+IS_NATIVE_AFTER_REBUILD 
+--------------------------
+1                    
+1 row selected.
+$T0> SELECT COUNT(*) AS ROWS_AFTER_REBUILD FROM NGMU1.NGM_PRV;
+ROWS_AFTER_REBUILD   
+-----------------------
+15                   
+1 row selected.
+
+$T0> # D4. 소유자 표시가 REBUILD 로 바뀌지 않았는가 --
+$T0> #     전환은 인덱스를 다시 만들므로 여기서 SYS 로 넘어가면 결함이다.
+$T0> SELECT U.USER_NAME AS INDEX_OWNER_AFTER
+      FROM SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_USERS_ U
+     WHERE I.USER_ID = U.USER_ID AND I.INDEX_NAME = 'NGM_PRV_G';
+INDEX_OWNER_AFTER                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------
+NGMU1                                                                                                                             
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- 사용자를 지우면 인덱스도 따라가는가
+$T0> ##################################
+$T0> # CASCADE 는 테이블과 그 위의 글로벌 인덱스를 함께 지워야 한다.
+$T0> DROP USER NGMU1 CASCADE;
+Drop success.
+
+$T0> SELECT COUNT(*) AS INDEX_ROWS_AFTER_DROP_USER
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGM_PRV_G';
+INDEX_ROWS_AFTER_DROP_USER 
+-----------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS PART_INDEX_ROWS_AFTER_DROP_USER
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND I.INDEX_NAME = 'NGM_PRV_G';
+PART_INDEX_ROWS_AFTER_DROP_USER 
+----------------------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> SKIP BEGIN;
+$T0> DROP USER NGMU1 CASCADE;
+$T0> SKIP END;
+$T0> DROP USER NGMU2 CASCADE;
+Drop success.
+

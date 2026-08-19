@@ -1,0 +1,323 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 멤버 디렉터리 — X$DISK_BTREE_GLOBAL_MEMBER 와 헤더의 멤버 칸 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N16).
+$T0> #
+$T0> # 무엇을 재는가 -- 구현이 만든 관측 표면을 스위트가 거의 안 본다
+$T0> #
+$T0> #   이 프로젝트는 런타임 관측 창을 새로 냈다:
+$T0> #       X$DISK_BTREE_GLOBAL_MEMBER      멤버 격자
+$T0> #       V$DISK_BTREE_HEADER.IS_GLOBAL   글로벌 여부
+$T0> #       ... .MEMBER_COUNT / ACTIVE_MEMBER_COUNT
+$T0> #
+$T0> #   삭제될 그물은 이것을 **열 개 넘는 스크립트가 오라클로** 쓴다
+$T0> #   (disk-planstat · cost-model · disk-undo · disk-memberno-budget ·
+$T0> #    member-dir-geom · disk-matrix …). 스위트는 `IS_GLOBAL` 을 한 번
+$T0> #   볼 뿐이고 `X$DISK_BTREE_GLOBAL_MEMBER` 는 **0 번** 본다.
+$T0> #
+$T0> #   그물이 사라지면 이 창으로 보던 것이 통째로 사라진다. 그중 `.tc` 로
+$T0> #   옮길 수 있는 것 -- **멤버 집합이 파티션 집합과 일치하는가, 그리고
+$T0> #   파티션 DDL 이 그 일치를 유지하는가** -- 를 여기서 받는다.
+$T0> #
+$T0> #   ★ 이것은 N1(REPLACE 리매핑)의 오라클이기도 하다. 멤버 수가 맞는지를
+$T0> #     이 창 없이 재려면 간접 증거밖에 없다.
+$T0> #
+$T0> # ★ 왜 디스크인가
+$T0> #   멤버 디렉터리는 **디스크만 영속한다**. 메모리에는 대응 창이 없다
+$T0> #   (§계획 3.2). 이 케이스가 디스크에만 있는 것은 대칭 강제 금지의 예다.
+$T0> #
+$T0> # ★ 절대값을 최소로 담는다
+$T0> #   멤버 번호(memberNo)는 **발급 일련번호**라 앞에서 무엇이 돌았는지에
+$T0> #   따라 달라진다(§계획 8.5 규약 ①이 경고한 그 종류). 그래서 이 케이스는
+$T0> #   **번호를 찍지 않고 개수와 관계만** 찍는다 -- 멤버 수 == 파티션 수,
+$T0> #   활성 수, DDL 전후의 증감.
+$T0> #
+$T0> # ★ .lst 미기록 -- 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_MEM;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGD_MEM ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION P3 VALUES LESS THAN ( 30 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGD_MEM SELECT LEVEL,      100 + LEVEL, 'A' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> INSERT INTO NGD_MEM SELECT LEVEL + 10, 200 + LEVEL, 'B' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> INSERT INTO NGD_MEM SELECT LEVEL + 20, 300 + LEVEL, 'C' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> INSERT INTO NGD_MEM SELECT LEVEL + 30, 400 + LEVEL, 'D' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE INDEX NGD_MEM_G ON NGD_MEM ( K );
+Create success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_MEM_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 헤더가 글로벌이라고 말하는가
+$T0> ##################################
+$T0> SELECT DECODE( IS_GLOBAL, 'T', 1, 0 ) AS IS_GLOBAL_FLAG
+      FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+IS_GLOBAL_FLAG 
+-----------------
+1           
+1 row selected.
+
+$T0> # 로컬 인덱스는 아니라고 말해야 한다 -- 대조군이 없으면 이 칸이
+$T0> # 늘 'T' 인지 구별되지 않는다.
+$T0> CREATE INDEX NGD_MEM_L ON NGD_MEM ( V ) LOCAL;
+Create success.
+$T0> SELECT COUNT(*) AS LOCAL_ROWS_IN_HEADER
+      FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_L';
+LOCAL_ROWS_IN_HEADER 
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT DECODE( IS_GLOBAL, 'T', 1, 0 ) AS LOCAL_IS_GLOBAL_FLAG
+      FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_L';
+LOCAL_IS_GLOBAL_FLAG 
+-----------------------
+0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 멤버 수 == 파티션 수
+$T0> ##################################
+$T0> # 글로벌 인덱스는 모든 파티션을 멤버로 갖는다. 그러므로 이 둘은
+$T0> # 언제나 같아야 하고, 어긋나면 멤버 하나가 빠졌거나 유령이 남은 것이다.
+$T0> SELECT COUNT(*) AS PARTITION_COUNT
+      FROM SYSTEM_.SYS_TABLE_PARTITIONS_
+     WHERE TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                         WHERE TABLE_NAME = 'NGD_MEM' );
+PARTITION_COUNT      
+-----------------------
+4                    
+1 row selected.
+
+$T0> SELECT MEMBER_COUNT        AS MEMBERS FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+MEMBERS     
+--------------
+4           
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT AS ACTIVE  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+ACTIVE      
+--------------
+4           
+1 row selected.
+
+$T0> # 멤버 격자 자체. 번호는 찍지 않고 개수만 센다(위 ★).
+$T0> #
+$T0> # ★ 반드시 **자기 인덱스로 범위를 좁힌다**. 이 창은 인스턴스 전역이라
+$T0> #   WHERE 없이 세면 다른 케이스가 남긴 글로벌 인덱스까지 들어온다 --
+$T0> #   처음 그렇게 썼다가 같은 케이스가 4 와 10 을 오가는 것을 보고 고쳤다.
+$T0> #   §계획 8.5 규약 ①(카탈로그·고정 뷰 나열은 자기 객체로 좁힌다)이
+$T0> #   정확히 이것을 겨눈 규약이다.
+$T0> SELECT COUNT(*) AS MEMBER_ROWS FROM X$DISK_BTREE_GLOBAL_MEMBER
+     WHERE INDEX_NAME = 'NGD_MEM_G';
+MEMBER_ROWS          
+-----------------------
+4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 파티션을 더하면 멤버도 는다
+$T0> ##################################
+$T0> # 구문은 `SPLIT PARTITION <p> AT ( <값> ) INTO ( PARTITION a, PARTITION b )` 다.
+$T0> # 두 가지를 실측으로 배웠다: INTO 안에 VALUES LESS THAN 을 쓰면 ERR-31001,
+$T0> # 그리고 **DEFAULT 파티션은 이 형태로 쪼개지지 않는다**. 그래서 대상은
+$T0> # 경계가 있는 P3 다.
+$T0> ALTER TABLE NGD_MEM SPLIT PARTITION P3 AT ( 25 )
+        INTO ( PARTITION P3A, PARTITION P3B );
+Alter success.
+
+$T0> SELECT COUNT(*) AS PARTITION_COUNT_AFTER_SPLIT
+      FROM SYSTEM_.SYS_TABLE_PARTITIONS_
+     WHERE TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                         WHERE TABLE_NAME = 'NGD_MEM' );
+PARTITION_COUNT_AFTER_SPLIT 
+------------------------------
+5                    
+1 row selected.
+$T0> SELECT MEMBER_COUNT        AS MEMBERS_AFTER_SPLIT FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+MEMBERS_AFTER_SPLIT 
+----------------------
+5           
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT AS ACTIVE_AFTER_SPLIT  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+ACTIVE_AFTER_SPLIT 
+---------------------
+5           
+1 row selected.
+
+$T0> # 데이터는 온전한가 -- 멤버가 늘었다고 행이 새지 않아야 한다.
+$T0> SELECT /*+ INDEX( NGD_MEM, NGD_MEM_G ) */ COUNT(*)          AS TOTAL_AFTER_SPLIT    FROM NGD_MEM;
+TOTAL_AFTER_SPLIT    
+-----------------------
+36                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGD_MEM, NGD_MEM_G ) */ COUNT(DISTINCT K) AS DISTINCT_AFTER_SPLIT FROM NGD_MEM;
+DISTINCT_AFTER_SPLIT 
+-----------------------
+36                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 파티션을 빼면 멤버도 준다
+$T0> ##################################
+$T0> ALTER TABLE NGD_MEM DROP PARTITION P1;
+Alter success.
+
+$T0> SELECT COUNT(*) AS PARTITION_COUNT_AFTER_DROP
+      FROM SYSTEM_.SYS_TABLE_PARTITIONS_
+     WHERE TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                         WHERE TABLE_NAME = 'NGD_MEM' );
+PARTITION_COUNT_AFTER_DROP 
+-----------------------------
+4                    
+1 row selected.
+$T0> SELECT MEMBER_COUNT        AS MEMBERS_AFTER_DROP FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+MEMBERS_AFTER_DROP 
+---------------------
+5           
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT AS ACTIVE_AFTER_DROP  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+ACTIVE_AFTER_DROP 
+--------------------
+4           
+1 row selected.
+
+$T0> # ★ 지운 파티션의 키가 트리에서 사라졌는가. 멤버가 준 것과
+$T0> #   키가 걷힌 것은 다른 사건이다 -- 둘 다 물어야 한다.
+$T0> SELECT /*+ INDEX( NGD_MEM, NGD_MEM_G ) */ COUNT(*) AS DROPPED_KEYS
+      FROM NGD_MEM WHERE K BETWEEN 101 AND 109;
+DROPPED_KEYS         
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGD_MEM, NGD_MEM_G ) */ COUNT(*) AS TOTAL_AFTER_DROP FROM NGD_MEM;
+TOTAL_AFTER_DROP     
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT COUNT(*) AS TOTAL_AFTER_DROP_HEAP FROM NGD_MEM;
+TOTAL_AFTER_DROP_HEAP 
+------------------------
+27                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- MERGE 와 TRUNCATE
+$T0> ##################################
+$T0> ALTER TABLE NGD_MEM MERGE PARTITIONS P3A, P3B INTO PARTITION P3M;
+Alter success.
+
+$T0> SELECT COUNT(*) AS PARTITION_COUNT_AFTER_MERGE
+      FROM SYSTEM_.SYS_TABLE_PARTITIONS_
+     WHERE TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                         WHERE TABLE_NAME = 'NGD_MEM' );
+PARTITION_COUNT_AFTER_MERGE 
+------------------------------
+3                    
+1 row selected.
+$T0> SELECT MEMBER_COUNT        AS MEMBERS_AFTER_MERGE FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+MEMBERS_AFTER_MERGE 
+----------------------
+3           
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT AS ACTIVE_AFTER_MERGE  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+ACTIVE_AFTER_MERGE 
+---------------------
+3           
+1 row selected.
+$T0> SELECT /*+ INDEX( NGD_MEM, NGD_MEM_G ) */ COUNT(*) AS TOTAL_AFTER_MERGE FROM NGD_MEM;
+TOTAL_AFTER_MERGE    
+-----------------------
+27                   
+1 row selected.
+
+$T0> ALTER TABLE NGD_MEM TRUNCATE PARTITION P3M;
+Alter success.
+
+$T0> SELECT MEMBER_COUNT        AS MEMBERS_AFTER_TRUNCATE FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+MEMBERS_AFTER_TRUNCATE 
+-------------------------
+4           
+1 row selected.
+$T0> SELECT ACTIVE_MEMBER_COUNT AS ACTIVE_AFTER_TRUNCATE  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+ACTIVE_AFTER_TRUNCATE 
+------------------------
+3           
+1 row selected.
+$T0> SELECT /*+ INDEX( NGD_MEM, NGD_MEM_G ) */ COUNT(*) AS TOTAL_AFTER_TRUNCATE FROM NGD_MEM;
+TOTAL_AFTER_TRUNCATE 
+-----------------------
+18                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; F -- 인덱스를 지우면 창에서도 사라진다
+$T0> ##################################
+$T0> DROP INDEX NGD_MEM_G;
+Drop success.
+$T0> SELECT COUNT(*) AS HEADER_ROWS_AFTER_DROP_INDEX
+      FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_MEM_G';
+HEADER_ROWS_AFTER_DROP_INDEX 
+-------------------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 8; FINALIZATION
+$T0> ##################################
+$T0> DROP TABLE NGD_MEM;
+Drop success.
+

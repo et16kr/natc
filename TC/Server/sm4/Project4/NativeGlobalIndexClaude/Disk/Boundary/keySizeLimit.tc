@@ -1,0 +1,208 @@
+###########################################################################
+# TestCase Description = 네이티브 글로벌 인덱스의 키 길이 상한은 로컬보다 낮다 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N13).
+#                        스위트 0 · 삭제될 그물 0 -- 아무도 밟은 적이 없다.
+#
+# 무엇을 재는가 -- 제품에 네이티브 전용 분기가 실재한다
+#
+#   smiGetIndexKeySizeLimit( aTableType, aIndexType, aIsNativeGlobalIndex )
+#   의 셋째 인자가 이 케이스의 대상이다. 구현은 이렇게 갈린다
+#   (smiMisc.cpp):
+#
+#       디스크 + 네이티브 글로벌  ->  smnManager::getGlobalIndexKeySizeLimit()
+#                                     ( = sdnbBTree::getMaxKeySize( ID_TRUE ) )
+#       그 밖의 모든 인덱스        ->  모듈 상수 mMaxKeySize
+#
+#   이유는 주석이 적어 두었다 -- **키 헤더가 memberNo 2 바이트만큼 길다**
+#   (설계 §13.1). 그래서 같은 컬럼이라도 글로벌로는 안 들어가고 로컬로는
+#   들어가는 구간이 존재한다.
+#
+#   ★ 이 케이스의 주장: **그 구간이 실재하고, 거절이 조용하지 않다.**
+#     같은 컬럼에 대해 LOCAL 은 서고 글로벌은 거절되는 폭이 하나라도 있으면
+#     분기가 살아 있는 것이다. 하나도 없으면 셋째 인자가 죽은 코드다.
+#
+# ★ 왜 디스크인가
+#   분기 조건이 aTableType == SMI_TABLE_DISK 다. 메모리는 이 갈림이 없다 --
+#   메모리 키는 로우 포인터를 담아 memberNo 를 키 헤더에 싣지 않는다.
+#
+# ★ 상한의 절대값을 기대값에 박지 않는다
+#   getMaxKeySize 는 **페이지 크기의 함수**다(4K 축에서 달라진다). 그래서
+#   이 케이스는 숫자를 주장하지 않고 폭을 사다리로 훑어 **경계가 어디서
+#   갈리는지를 전사**한다. 기대값은 A4_64 의 것이고, 4K 로 옮기면 다시
+#   찍어야 한다 -- parallelGlobalScan.tc 와 같은 사정이다.
+#
+# ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_KSZ;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    # 폭이 다른 가변 컬럼을 한 테이블에 모아 둔다. 사다리 한 칸씩 인덱스를
+    # 걸어 보는 것이 이 케이스가 하는 일의 전부다.
+    CREATE TABLE NGD_KSZ
+    (
+        P  INTEGER,
+        C1 VARCHAR( 100 ),
+        C2 VARCHAR( 500 ),
+        C3 VARCHAR( 1000 ),
+        C4 VARCHAR( 2000 ),
+        C5 VARCHAR( 3000 )
+    )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_KSZ VALUES ( 1,  'a', 'b', 'c', 'd', 'e' );
+    INSERT INTO NGD_KSZ VALUES ( 11, 'f', 'g', 'h', 'i', 'j' );
+    INSERT INTO NGD_KSZ VALUES ( 21, 'k', 'l', 'm', 'n', 'o' );
+    COMMIT;
+
+##################################
+SECTOR; A -- 글로벌 사다리. 어느 폭에서 거절이 시작되는가
+##################################
+# 성공하면 판별자로 네이티브임을 확인하고 지운다. 실패하면 오류가
+# 그대로 전사된다 -- .lst 가 경계를 말해 준다.
+
+    CREATE INDEX NGD_KSZ_G1 ON NGD_KSZ ( C1 );
+    SELECT COUNT(*) AS G1_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G1';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_G1;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_G2 ON NGD_KSZ ( C2 );
+    SELECT COUNT(*) AS G2_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G2';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_G2;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_G3 ON NGD_KSZ ( C3 );
+    SELECT COUNT(*) AS G3_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G3';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_G3;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_G4 ON NGD_KSZ ( C4 );
+    SELECT COUNT(*) AS G4_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G4';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_G4;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_G5 ON NGD_KSZ ( C5 );
+    SELECT COUNT(*) AS G5_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G5';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_G5;
+    SKIP END;
+
+##################################
+SECTOR; B -- 같은 사다리를 LOCAL 로. 여기가 대조군이다
+##################################
+# ★ 이 절이 케이스의 뜻을 만든다. A 에서 거절된 폭이 여기서 서면
+#   "글로벌만 상한이 낮다" 가 실측된 것이고, A·B 가 같은 자리에서 갈리면
+#   상한이 인덱스 종류와 무관하다는 뜻이라 셋째 인자가 죽은 코드다.
+
+    CREATE INDEX NGD_KSZ_L1 ON NGD_KSZ ( C1 ) LOCAL;
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_L1;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_L2 ON NGD_KSZ ( C2 ) LOCAL;
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_L2;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_L3 ON NGD_KSZ ( C3 ) LOCAL;
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_L3;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_L4 ON NGD_KSZ ( C4 ) LOCAL;
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_L4;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_L5 ON NGD_KSZ ( C5 ) LOCAL;
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_L5;
+    SKIP END;
+
+##################################
+SECTOR; C -- 복합 키에서도 같은 경계인가
+##################################
+# 상한은 키 전체에 걸린다. 좁은 컬럼을 여럿 묶어 같은 선을 넘어 본다 --
+# 단일 컬럼 경로와 복합 경로가 다른 계산을 쓰면 여기서 갈린다.
+
+    CREATE INDEX NGD_KSZ_GC ON NGD_KSZ ( C1, C2 );
+    SELECT COUNT(*) AS GC_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_GC';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_GC;
+    SKIP END;
+
+    CREATE INDEX NGD_KSZ_GC2 ON NGD_KSZ ( C2, C3, C4 );
+    SELECT COUNT(*) AS GC2_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_GC2';
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_GC2;
+    SKIP END;
+
+##################################
+SECTOR; D -- 프로퍼티 0 에서는 무엇이라 하는가
+##################################
+# J24 가 프로퍼티 0 의 뜻을 "은퇴한 구현으로는 만들 수 없다" 로 바꿨다.
+# 그러므로 여기서 나오는 것은 키 길이 오류가 아니라 거절이어야 한다 --
+# 두 거절이 뒤섞이면 사용자가 원인을 못 가른다.
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    CREATE INDEX NGD_KSZ_OFF ON NGD_KSZ ( C1 );
+    SKIP BEGIN;
+    DROP INDEX NGD_KSZ_OFF;
+    SKIP END;
+
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    DROP TABLE NGD_KSZ;
+}

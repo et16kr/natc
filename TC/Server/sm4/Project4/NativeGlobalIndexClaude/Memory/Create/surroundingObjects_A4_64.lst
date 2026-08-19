@@ -1,0 +1,275 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 주변 객체 -- 시퀀스 · 시노님 · 임시 테이블 · 큐 (메모리).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N4 · N5 · N6).
+$T0> #
+$T0> # 무엇을 재는가 -- 스위트가 한 번도 만들지 않은 객체들
+$T0> #
+$T0> #   실측(.tc + .sql 전량)에서 이것들은 전부 0 이다:
+$T0> #       CREATE SEQUENCE 0 · SYNONYM 0 · TEMPORARY TABLE 0 · CREATE TRIGGER 0
+$T0> #   글로벌 인덱스는 파티션드 테이블 위에 서므로, 이 객체들이 그 테이블에
+$T0> #   닿는 경로가 각각 다르다:
+$T0> #
+$T0> #     시퀀스   키 컬럼을 채우는 값의 출처. 글로벌 유일성은 트리 하나로
+$T0> #              보장되므로, 파티션이 갈려도 시퀀스 값이 겹치면 안 된다.
+$T0> #     시노님   이름 해석 계층. DML 이 시노님을 거쳐 들어와도 같은 글로벌
+$T0> #              경로를 타는가 -- 아니면 이름 해석이 파티션드 테이블을
+$T0> #              놓치는가.
+$T0> #     임시 테이블 파티션드가 아니다. 그러므로 **거절이 기대값일 가능성이
+$T0> #              높다** -- 무엇이라 거절하는지가 이 절의 산출물이다.
+$T0> #     큐       마찬가지. 확인된 적이 없다.
+$T0> #
+$T0> #   ★ 이 케이스는 "무엇이 옳은가" 를 미리 주장하지 않는다. 넷 다 오늘
+$T0> #     답이 없는 자리이므로, **서버가 무엇이라 하는지를 전사해 기준선을
+$T0> #     만드는 것**이 목적이다. 기대값을 읽는 사람이 "이게 맞나" 를 판단할
+$T0> #     수 있도록 각 절이 무엇을 물었는지 주석으로 남긴다.
+$T0> #
+$T0> # ★ 왜 메모리인가
+$T0> #   넷 다 매체와 무관한 이름 해석·객체 종류의 문제다. 싼 쪽에 둔다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> #   특히 이 케이스는 **거절 메시지가 곧 기대값**이라 손으로 지어낼 수 없다.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP SYNONYM NGM_SUR_SYN;
+$T0> DROP TABLE NGM_SUR;
+$T0> DROP SEQUENCE NGM_SUR_SEQ;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGM_SUR ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # 글로벌 유일 인덱스. 파티션을 가로질러 유일해야 한다.
+$T0> CREATE UNIQUE INDEX NGM_SUR_G ON NGM_SUR ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_SUR_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 시퀀스가 글로벌 유일 키를 채운다
+$T0> ##################################
+$T0> CREATE SEQUENCE NGM_SUR_SEQ START WITH 1 INCREMENT BY 1;
+Create success.
+
+$T0> # 파티션 셋에 흩어지되 키는 시퀀스가 준다. 트리가 하나이므로
+$T0> # 파티션이 갈려도 값이 겹치면 안 된다.
+$T0> INSERT INTO NGM_SUR VALUES ( 1,  NGM_SUR_SEQ.NEXTVAL, 'P1-A' );
+1 row inserted.
+$T0> INSERT INTO NGM_SUR VALUES ( 2,  NGM_SUR_SEQ.NEXTVAL, 'P1-B' );
+1 row inserted.
+$T0> INSERT INTO NGM_SUR VALUES ( 11, NGM_SUR_SEQ.NEXTVAL, 'P2-A' );
+1 row inserted.
+$T0> INSERT INTO NGM_SUR VALUES ( 12, NGM_SUR_SEQ.NEXTVAL, 'P2-B' );
+1 row inserted.
+$T0> INSERT INTO NGM_SUR VALUES ( 21, NGM_SUR_SEQ.NEXTVAL, 'PD-A' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ K, P, V FROM NGM_SUR ORDER BY K;
+K           P           V                 
+----------------------------------------------
+1           1           P1-A              
+2           2           P1-B              
+3           11          P2-A              
+4           12          P2-B              
+5           21          PD-A              
+5 rows selected.
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ COUNT(*)          AS TOTAL    FROM NGM_SUR;
+TOTAL                
+-----------------------
+5                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ COUNT(DISTINCT K) AS DISTINCT_K FROM NGM_SUR;
+DISTINCT_K           
+-----------------------
+5                    
+1 row selected.
+
+$T0> # A2. 시퀀스가 준 값이 이미 있는 값과 부딪히면 -- 유일성은 글로벌이다.
+$T0> #     CURRVAL 로 되돌린 값을 다른 파티션에 넣어 본다.
+$T0> INSERT INTO NGM_SUR VALUES ( 15, NGM_SUR_SEQ.CURRVAL, 'DUP-ACROSS-PART' );
+[ERR-11058 : The row already exists in a unique index.]
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ COUNT(*) AS AFTER_DUP_ATTEMPT FROM NGM_SUR;
+AFTER_DUP_ATTEMPT    
+-----------------------
+5                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 시노님 경유 DML 이 같은 글로벌 경로를 탄다
+$T0> ##################################
+$T0> CREATE SYNONYM NGM_SUR_SYN FOR NGM_SUR;
+Create success.
+
+$T0> # B1. 읽기 -- 플랜이 글로벌 SCAN 이어야 한다. 이름 해석이 파티션드를
+$T0> #     놓치면 여기서 다른 플랜이 나온다.
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ INDEX( NGM_SUR_SYN, NGM_SUR_G ) */ COUNT(*) FROM NGM_SUR_SYN WHERE K > 0;
+COUNT                
+-----------------------
+5                    
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  SCAN ( TABLE: SYS.NGM_SUR_SYN, INDEX: SYS.NGM_SUR_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 5, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> SELECT COUNT(*) AS VIA_SYNONYM FROM NGM_SUR_SYN;
+VIA_SYNONYM          
+-----------------------
+5                    
+1 row selected.
+$T0> SELECT K, P, V FROM NGM_SUR_SYN ORDER BY K;
+K           P           V                 
+----------------------------------------------
+1           1           P1-A              
+2           2           P1-B              
+3           11          P2-A              
+4           12          P2-B              
+5           21          PD-A              
+5 rows selected.
+
+$T0> # B2. 쓰기 -- 시노님으로 넣은 행도 같은 트리에 들어가야 한다.
+$T0> INSERT INTO NGM_SUR_SYN VALUES ( 25, 901, 'VIA-SYN' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ K, P, V FROM NGM_SUR WHERE K = 901;
+K           P           V                 
+----------------------------------------------
+901         25          VIA-SYN           
+1 row selected.
+
+$T0> # B3. 시노님을 통한 유일성 위반 -- 본체와 같은 거절이어야 한다.
+$T0> INSERT INTO NGM_SUR_SYN VALUES ( 3, 901, 'VIA-SYN-DUP' );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> # B4. 시노님 경유 UPDATE 로 파티션을 넘긴다.
+$T0> ALTER TABLE NGM_SUR ENABLE ROW MOVEMENT;
+Alter success.
+$T0> UPDATE NGM_SUR_SYN SET P = 15 WHERE K = 901;
+1 row updated.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ COUNT(*) AS K901_ROWS FROM NGM_SUR WHERE K = 901;
+K901_ROWS            
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_SUR, NGM_SUR_G ) */ K, P, V  FROM NGM_SUR WHERE K = 901;
+K           P           V                 
+----------------------------------------------
+901         15          VIA-SYN           
+1 row selected.
+
+$T0> # B5. 시노님 위에 인덱스를 만들려 하면 -- 대상이 테이블이 아니다.
+$T0> CREATE INDEX NGM_SUR_SYN_IDX ON NGM_SUR_SYN ( V );
+[ERR-31031 : Table or view was not found : 
+0001 : CREATE INDEX NGM_SUR_SYN_IDX ON NGM_SUR_SYN ( V )
+                                      ^          ^
+]
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGM_SUR_SYN_IDX;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 임시 테이블. 파티션드가 아니므로 무엇이라 하는가
+$T0> ##################################
+$T0> # C1. 파티션드 임시 테이블 자체가 되는가
+$T0> CREATE TEMPORARY TABLE NGM_SUR_TMP ( P INTEGER, K INTEGER )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-3135F : Temporary tables cannot be created in non-volatile tablespaces.]
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_SUR_TMP;
+$T0> SKIP END;
+
+$T0> # C2. 파티션드가 아닌 임시 테이블에 글로벌 인덱스를 걸어 본다.
+$T0> #     글로벌은 파티션드 위에만 서므로 거절이 기대값이다 -- 다만
+$T0> #     어느 거절인지(파티션드가 아니라서 / 임시라서)가 산출물이다.
+$T0> CREATE TEMPORARY TABLE NGM_SUR_TMP2 ( P INTEGER, K INTEGER );
+[ERR-3135F : Temporary tables cannot be created in non-volatile tablespaces.]
+$T0> CREATE INDEX NGM_SUR_TMP2_G ON NGM_SUR_TMP2 ( K );
+[ERR-31031 : Table or view was not found : 
+0001 : CREATE INDEX NGM_SUR_TMP2_G ON NGM_SUR_TMP2 ( K )
+                                     ^           ^
+]
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_SUR_TMP2;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 큐 테이블
+$T0> ##################################
+$T0> # 곁가지로 함께 묻는다(§Coverage-Gaps 7.2). 큐도 파티션드가 아니다.
+$T0> CREATE QUEUE NGM_SUR_Q ( MSG VARCHAR(32) );
+Create success.
+$T0> CREATE INDEX NGM_SUR_Q_G ON NGM_SUR_Q ( MSG );
+Create success.
+$T0> SKIP BEGIN;
+$T0> DROP QUEUE NGM_SUR_Q;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP SYNONYM NGM_SUR_SYN;
+$T0> SKIP END;
+$T0> DROP TABLE NGM_SUR;
+Drop success.
+$T0> DROP SEQUENCE NGM_SUR_SEQ;
+Drop success.
+

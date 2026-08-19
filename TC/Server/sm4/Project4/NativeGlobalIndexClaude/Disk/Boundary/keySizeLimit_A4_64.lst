@@ -1,0 +1,284 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 네이티브 글로벌 인덱스의 키 길이 상한은 로컬보다 낮다 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N13).
+$T0> #                        스위트 0 · 삭제될 그물 0 -- 아무도 밟은 적이 없다.
+$T0> #
+$T0> # 무엇을 재는가 -- 제품에 네이티브 전용 분기가 실재한다
+$T0> #
+$T0> #   smiGetIndexKeySizeLimit( aTableType, aIndexType, aIsNativeGlobalIndex )
+$T0> #   의 셋째 인자가 이 케이스의 대상이다. 구현은 이렇게 갈린다
+$T0> #   (smiMisc.cpp):
+$T0> #
+$T0> #       디스크 + 네이티브 글로벌  ->  smnManager::getGlobalIndexKeySizeLimit()
+$T0> #                                     ( = sdnbBTree::getMaxKeySize( ID_TRUE ) )
+$T0> #       그 밖의 모든 인덱스        ->  모듈 상수 mMaxKeySize
+$T0> #
+$T0> #   이유는 주석이 적어 두었다 -- **키 헤더가 memberNo 2 바이트만큼 길다**
+$T0> #   (설계 §13.1). 그래서 같은 컬럼이라도 글로벌로는 안 들어가고 로컬로는
+$T0> #   들어가는 구간이 존재한다.
+$T0> #
+$T0> #   ★ 이 케이스의 주장: **그 구간이 실재하고, 거절이 조용하지 않다.**
+$T0> #     같은 컬럼에 대해 LOCAL 은 서고 글로벌은 거절되는 폭이 하나라도 있으면
+$T0> #     분기가 살아 있는 것이다. 하나도 없으면 셋째 인자가 죽은 코드다.
+$T0> #
+$T0> # ★ 왜 디스크인가
+$T0> #   분기 조건이 aTableType == SMI_TABLE_DISK 다. 메모리는 이 갈림이 없다 --
+$T0> #   메모리 키는 로우 포인터를 담아 memberNo 를 키 헤더에 싣지 않는다.
+$T0> #
+$T0> # ★ 상한의 절대값을 기대값에 박지 않는다
+$T0> #   getMaxKeySize 는 **페이지 크기의 함수**다(4K 축에서 달라진다). 그래서
+$T0> #   이 케이스는 숫자를 주장하지 않고 폭을 사다리로 훑어 **경계가 어디서
+$T0> #   갈리는지를 전사**한다. 기대값은 A4_64 의 것이고, 4K 로 옮기면 다시
+$T0> #   찍어야 한다 -- parallelGlobalScan.tc 와 같은 사정이다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_KSZ;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # 폭이 다른 가변 컬럼을 한 테이블에 모아 둔다. 사다리 한 칸씩 인덱스를
+$T0> # 걸어 보는 것이 이 케이스가 하는 일의 전부다.
+$T0> CREATE TABLE NGD_KSZ
+    (
+        P  INTEGER,
+        C1 VARCHAR( 100 ),
+        C2 VARCHAR( 500 ),
+        C3 VARCHAR( 1000 ),
+        C4 VARCHAR( 2000 ),
+        C5 VARCHAR( 3000 )
+    )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGD_KSZ VALUES ( 1,  'a', 'b', 'c', 'd', 'e' );
+1 row inserted.
+$T0> INSERT INTO NGD_KSZ VALUES ( 11, 'f', 'g', 'h', 'i', 'j' );
+1 row inserted.
+$T0> INSERT INTO NGD_KSZ VALUES ( 21, 'k', 'l', 'm', 'n', 'o' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 글로벌 사다리. 어느 폭에서 거절이 시작되는가
+$T0> ##################################
+$T0> # 성공하면 판별자로 네이티브임을 확인하고 지운다. 실패하면 오류가
+$T0> # 그대로 전사된다 -- .lst 가 경계를 말해 준다.
+
+$T0> CREATE INDEX NGD_KSZ_G1 ON NGD_KSZ ( C1 );
+Create success.
+$T0> SELECT COUNT(*) AS G1_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G1';
+G1_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_G1;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_G2 ON NGD_KSZ ( C2 );
+Create success.
+$T0> SELECT COUNT(*) AS G2_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G2';
+G2_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_G2;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_G3 ON NGD_KSZ ( C3 );
+Create success.
+$T0> SELECT COUNT(*) AS G3_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G3';
+G3_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_G3;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_G4 ON NGD_KSZ ( C4 );
+Create success.
+$T0> SELECT COUNT(*) AS G4_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G4';
+G4_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_G4;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_G5 ON NGD_KSZ ( C5 );
+Create success.
+$T0> SELECT COUNT(*) AS G5_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_G5';
+G5_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_G5;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 같은 사다리를 LOCAL 로. 여기가 대조군이다
+$T0> ##################################
+$T0> # ★ 이 절이 케이스의 뜻을 만든다. A 에서 거절된 폭이 여기서 서면
+$T0> #   "글로벌만 상한이 낮다" 가 실측된 것이고, A·B 가 같은 자리에서 갈리면
+$T0> #   상한이 인덱스 종류와 무관하다는 뜻이라 셋째 인자가 죽은 코드다.
+
+$T0> CREATE INDEX NGD_KSZ_L1 ON NGD_KSZ ( C1 ) LOCAL;
+Create success.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_L1;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_L2 ON NGD_KSZ ( C2 ) LOCAL;
+Create success.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_L2;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_L3 ON NGD_KSZ ( C3 ) LOCAL;
+Create success.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_L3;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_L4 ON NGD_KSZ ( C4 ) LOCAL;
+Create success.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_L4;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_L5 ON NGD_KSZ ( C5 ) LOCAL;
+Create success.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_L5;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 복합 키에서도 같은 경계인가
+$T0> ##################################
+$T0> # 상한은 키 전체에 걸린다. 좁은 컬럼을 여럿 묶어 같은 선을 넘어 본다 --
+$T0> # 단일 컬럼 경로와 복합 경로가 다른 계산을 쓰면 여기서 갈린다.
+
+$T0> CREATE INDEX NGD_KSZ_GC ON NGD_KSZ ( C1, C2 );
+Create success.
+$T0> SELECT COUNT(*) AS GC_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_GC';
+GC_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_GC;
+$T0> SKIP END;
+
+$T0> CREATE INDEX NGD_KSZ_GC2 ON NGD_KSZ ( C2, C3, C4 );
+[ERR-311E0 : The estimated size of the index key exceeds the maximum limit. estimated 3544, limit 3384 (native global index; non-global limit is 3386)]
+$T0> SELECT COUNT(*) AS GC2_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_KSZ_GC2';
+GC2_IS_NATIVE_GLOBAL 
+-----------------------
+0                    
+1 row selected.
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_GC2;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 프로퍼티 0 에서는 무엇이라 하는가
+$T0> ##################################
+$T0> # J24 가 프로퍼티 0 의 뜻을 "은퇴한 구현으로는 만들 수 없다" 로 바꿨다.
+$T0> # 그러므로 여기서 나오는 것은 키 길이 오류가 아니라 거절이어야 한다 --
+$T0> # 두 거절이 뒤섞이면 사용자가 원인을 못 가른다.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+0                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE INDEX NGD_KSZ_OFF ON NGD_KSZ ( C1 );
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create NGD_KSZ_OFF.]
+$T0> SKIP BEGIN;
+$T0> DROP INDEX NGD_KSZ_OFF;
+$T0> SKIP END;
+
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> DROP TABLE NGD_KSZ;
+Drop success.
+

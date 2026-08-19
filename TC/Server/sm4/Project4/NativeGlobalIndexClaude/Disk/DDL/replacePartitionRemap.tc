@@ -1,0 +1,273 @@
+###########################################################################
+# TestCase Description = REPLACE PARTITION 의 멤버 리매핑이 리빌드와 같은 결과를 낸다 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N1).
+#                        재는 곳이 제품 어디에도 없었다 --
+#                        scripts/global-index/exchange-remap-bench.sh 가
+#                        유일한데 그것은 **시간과 바이트를 재지 정합성을
+#                        재지 않는다**.
+#
+# ★ N1 의 정정 -- Altibase 에 EXCHANGE PARTITION 은 없다
+#   커버리지 문서가 처음에 이 공백을 "EXCHANGE PARTITION" 이라 적었으나
+#   그 구문은 존재하지 않는다(qcply.y 에 EXCHANGE 토큰 자체가 없다).
+#   같은 일을 하는 구문은
+#       ALTER TABLE <target> REPLACE <source> PARTITION <name>
+#   이고, 벤치 스크립트도 자기 제목에 "REPLACE PARTITION (EXCHANGE)" 라고
+#   적었다. 그러므로 이 케이스가 그 자리다.
+#
+# 무엇을 재는가 -- 같은 DDL 이 두 경로로 갈린다
+#
+#   GR-10(V4 B-4 / J14)이 재구성 DDL 의 비용을 낮추면서 경로를 둘로 갈랐고,
+#   고르는 것은 프로퍼티 GLOBAL_INDEX_EXCHANGE_REMAP 이다.
+#
+#     rebuild (= 0)  V1~V3 이 하던 것. 양쪽 논리 테이블의 인덱스를
+#                    DROP + CREATE 한다. 모든 파티션의 모든 로우를 읽는다.
+#     remap  (<> 0)  나가는 멤버를 LEAVING 으로 표시하고, 들어오는 것에
+#                    번호를 발급하고, **그 파티션의 로우만** 훑는다.
+#                    나가는 멤버의 키는 커밋 시점 purge 가 걷어 간다.
+#
+#   프로퍼티는 스위치가 아니라 **비율**이다 -- 들어오는 파티션이 테이블의
+#   1/N 이하일 때만 remap 을 탄다. 그래서 1 로 두면 "항상 remap" 이 되어
+#   경로가 결정적이 된다.
+#
+#   ★ 실측 (2026-08-20, 처음 돌린 결과) -- 주장을 정밀하게 고친다
+#
+#     처음 이 케이스는 "두 경로의 관측 결과가 **모두** 같아야 한다" 고
+#     적었다. 돌려 보니 **데이터는 같고 멤버 디렉터리는 다르다**:
+#
+#       AFTER_TOTAL / AFTER_DISTINCT   9 / 9   ->  두 경로 **동일**
+#       AFTER_ACTIVE (활성 멤버)        3 / 3   ->  두 경로 **동일**
+#       AFTER_MEMBERS (전체 멤버)       4 (remap) vs 3 (rebuild)  -> **다르다**
+#
+#     이 차이는 결함이 아니라 **설계 그대로**다 -- remap 은 나가는 멤버를
+#     LEAVING 으로 표시해 두고 커밋 시점 purge 가 걷어 가므로, 그 순간의
+#     전체 멤버 수가 하나 많다. rebuild 는 인덱스를 다시 만들므로 그런
+#     잔재가 없다.
+#
+#     그러므로 이 케이스가 감시하는 것은 둘로 갈린다:
+#       (1) **데이터·활성 멤버는 두 경로가 같아야 한다** -- 어긋나면 결함
+#       (2) **전체 멤버 수의 차이는 remap 의 표지** -- 이것이 사라지면
+#           리매핑이 실제로 돌지 않았다는 뜻이다(프로퍼티가 비율이므로
+#           픽스처가 작으면 rebuild 로 떨어질 수 있다)
+#
+#     참고: `GLOBAL_INDEX_EXCHANGE_REMAP` 의 이 빌드 기본값은 **10** 이다
+#     (스위치가 아니라 비율이라는 설계 주석과 일치한다).
+#
+# ★ 왜 디스크인가
+#   멤버 디렉터리와 memberNo 는 **디스크만 영속한다**. 메모리에는 대응이
+#   없다(§계획 3.2). LEAVING 표시도, V$DISK_BTREE_HEADER 의 멤버 칸도
+#   디스크의 것이다.
+#
+# ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+#   기대값을 손으로 지어내면 결함을 동결한다 (§Coverage-Gaps 5).
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_XRM_T;
+    DROP TABLE NGD_XRM_S;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    # 이 빌드가 GR-10 의 프로퍼티를 갖고 있는가. 없으면 아래 두 절은
+    # 같은 경로를 두 번 재는 항진식이 되므로, 값이 보이는지부터 찍는다.
+    select name, value1 from v$property where name = 'GLOBAL_INDEX_EXCHANGE_REMAP';
+
+##################################
+SECTOR; A -- remap 경로 (GLOBAL_INDEX_EXCHANGE_REMAP = 1, 항상 remap)
+##################################
+    CREATE TABLE NGD_XRM_T ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE TABLE NGD_XRM_S ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    # 대상: P1 에 1..5, P2 에 11..13, PD 에 21..22
+    INSERT INTO NGD_XRM_T SELECT LEVEL,      1000 + LEVEL, 'T-OLD' FROM DUAL CONNECT BY LEVEL <= 5;
+    INSERT INTO NGD_XRM_T SELECT LEVEL + 10, 2000 + LEVEL, 'T-P2'  FROM DUAL CONNECT BY LEVEL <= 3;
+    INSERT INTO NGD_XRM_T SELECT LEVEL + 20, 3000 + LEVEL, 'T-PD'  FROM DUAL CONNECT BY LEVEL <= 2;
+    # 원본: P1 에만 담는다. 맞바꿀 것은 P1 이다.
+    INSERT INTO NGD_XRM_S SELECT LEVEL,      9000 + LEVEL, 'S-NEW' FROM DUAL CONNECT BY LEVEL <= 4;
+    COMMIT;
+
+    CREATE INDEX NGD_XRM_T_G ON NGD_XRM_T ( K );
+
+    # A0. 전제 -- 그 인덱스가 정말 네이티브 글로벌인가(판별자 101).
+    #     아니면 아래는 로컬 인덱스를 재는 것이 된다.
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_XRM_T_G';
+
+    # A1. 맞바꾸기 전의 상태. B 절의 같은 자리와 대조하는 기준선이다.
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS BEFORE_TOTAL FROM NGD_XRM_T;
+    SELECT COUNT(*) AS BEFORE_MEMBER_COUNT        FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+    SELECT MEMBER_COUNT        AS BEFORE_MEMBERS  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+    SELECT ACTIVE_MEMBER_COUNT AS BEFORE_ACTIVE   FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+
+    alter system set GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+    select name, value1 from v$property where name = 'GLOBAL_INDEX_EXCHANGE_REMAP';
+
+    ALTER TABLE NGD_XRM_T REPLACE NGD_XRM_S PARTITION P1;
+
+    # A2. 나간 키는 트리에서 사라지고 들어온 키는 트리에서 보여야 한다.
+    #     이것이 리매핑이 실제로 한 일이다.
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS GONE_OLD_KEYS
+      FROM NGD_XRM_T WHERE K BETWEEN 1001 AND 1005;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS ARRIVED_NEW_KEYS
+      FROM NGD_XRM_T WHERE K BETWEEN 9001 AND 9004;
+
+    # A3. 합이 맞는가 -- 그리고 중복이 없는가.
+    #     리매핑이 나가는 멤버의 키를 안 걷으면 COUNT 는 맞아도
+    #     DISTINCT 가 어긋난다.
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*)          AS AFTER_TOTAL    FROM NGD_XRM_T;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(DISTINCT K) AS AFTER_DISTINCT FROM NGD_XRM_T;
+    SELECT COUNT(*) AS AFTER_TOTAL_HEAP FROM NGD_XRM_T;
+
+    # A4. 파티션별로도 맞는가 -- PARTITION(p) 가 글로벌 스캔을 제한한다.
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_P1 FROM NGD_XRM_T PARTITION( P1 );
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_P2 FROM NGD_XRM_T PARTITION( P2 );
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_PD FROM NGD_XRM_T PARTITION( PD );
+
+    # A5. 값까지 맞는가. 키로 찾은 행이 옳은 로우를 가리켜야 한다 --
+    #     리프 슬롯이 회수된 페이지를 가리키면 여기서 어긋난다.
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ P, K, V
+      FROM NGD_XRM_T WHERE K >= 9001 ORDER BY K;
+
+    # A6. 멤버 디렉터리. 나간 멤버가 LEAVING 으로 남아 있으면
+    #     MEMBER_COUNT 와 ACTIVE_MEMBER_COUNT 가 갈린다.
+    SELECT MEMBER_COUNT        AS AFTER_MEMBERS FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+    SELECT ACTIVE_MEMBER_COUNT AS AFTER_ACTIVE  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+
+    # A7. 원본 테이블도 온전한가. 맞바꾸기는 양방향이다.
+    SELECT COUNT(*) AS SOURCE_TOTAL FROM NGD_XRM_S;
+    SELECT P, K, V  FROM NGD_XRM_S ORDER BY K;
+
+    DROP TABLE NGD_XRM_T;
+    DROP TABLE NGD_XRM_S;
+
+##################################
+SECTOR; B -- rebuild 경로 (GLOBAL_INDEX_EXCHANGE_REMAP = 0)
+##################################
+# ★ A 절과 **같은 픽스처 · 같은 질의**다. 다른 것은 프로퍼티 하나뿐이다.
+#   위 머리말의 (1)/(2) 대로 읽는다 -- 데이터와 활성 멤버가 갈리면 결함이고,
+#   전체 멤버 수의 차이는 remap 이 실제로 돌았다는 표지다.
+
+    CREATE TABLE NGD_XRM_T ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    CREATE TABLE NGD_XRM_S ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_XRM_T SELECT LEVEL,      1000 + LEVEL, 'T-OLD' FROM DUAL CONNECT BY LEVEL <= 5;
+    INSERT INTO NGD_XRM_T SELECT LEVEL + 10, 2000 + LEVEL, 'T-P2'  FROM DUAL CONNECT BY LEVEL <= 3;
+    INSERT INTO NGD_XRM_T SELECT LEVEL + 20, 3000 + LEVEL, 'T-PD'  FROM DUAL CONNECT BY LEVEL <= 2;
+    INSERT INTO NGD_XRM_S SELECT LEVEL,      9000 + LEVEL, 'S-NEW' FROM DUAL CONNECT BY LEVEL <= 4;
+    COMMIT;
+
+    CREATE INDEX NGD_XRM_T_G ON NGD_XRM_T ( K );
+
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_XRM_T_G';
+
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS BEFORE_TOTAL FROM NGD_XRM_T;
+    SELECT COUNT(*) AS BEFORE_MEMBER_COUNT        FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+    SELECT MEMBER_COUNT        AS BEFORE_MEMBERS  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+    SELECT ACTIVE_MEMBER_COUNT AS BEFORE_ACTIVE   FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+
+    alter system set GLOBAL_INDEX_EXCHANGE_REMAP = 0;
+    select name, value1 from v$property where name = 'GLOBAL_INDEX_EXCHANGE_REMAP';
+
+    ALTER TABLE NGD_XRM_T REPLACE NGD_XRM_S PARTITION P1;
+
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS GONE_OLD_KEYS
+      FROM NGD_XRM_T WHERE K BETWEEN 1001 AND 1005;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS ARRIVED_NEW_KEYS
+      FROM NGD_XRM_T WHERE K BETWEEN 9001 AND 9004;
+
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*)          AS AFTER_TOTAL    FROM NGD_XRM_T;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(DISTINCT K) AS AFTER_DISTINCT FROM NGD_XRM_T;
+    SELECT COUNT(*) AS AFTER_TOTAL_HEAP FROM NGD_XRM_T;
+
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_P1 FROM NGD_XRM_T PARTITION( P1 );
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_P2 FROM NGD_XRM_T PARTITION( P2 );
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_PD FROM NGD_XRM_T PARTITION( PD );
+
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ P, K, V
+      FROM NGD_XRM_T WHERE K >= 9001 ORDER BY K;
+
+    SELECT MEMBER_COUNT        AS AFTER_MEMBERS FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+    SELECT ACTIVE_MEMBER_COUNT AS AFTER_ACTIVE  FROM V$DISK_BTREE_HEADER WHERE INDEX_NAME = 'NGD_XRM_T_G';
+
+    SELECT COUNT(*) AS SOURCE_TOTAL FROM NGD_XRM_S;
+    SELECT P, K, V  FROM NGD_XRM_S ORDER BY K;
+
+##################################
+SECTOR; C -- 맞바꾼 뒤에도 트리가 계속 산다
+##################################
+# 리매핑이 남긴 멤버 상태가 뒤이은 DML 에서 드러나는지 본다. 벤치가
+# 못 재는 자리이고, 하드 제약 6 이 경고한 "암묵 회수 경로 제거" 의
+# 실제 후과가 나온다면 여기다.
+
+    INSERT INTO NGD_XRM_T VALUES ( 3,  9101, 'AFTER-1' );
+    INSERT INTO NGD_XRM_T VALUES ( 13, 9102, 'AFTER-2' );
+    COMMIT;
+
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_INSERT_TOTAL FROM NGD_XRM_T;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ P, K, V
+      FROM NGD_XRM_T WHERE K >= 9101 ORDER BY K;
+
+    # 옛 키 하나를 다시 넣어 본다 -- 나간 멤버의 키가 트리에 남아 있으면
+    # 여기서 유일성 위반이나 엉뚱한 행이 나온다.
+    INSERT INTO NGD_XRM_T VALUES ( 4, 1001, 'REUSED' );
+    COMMIT;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ P, K, V
+      FROM NGD_XRM_T WHERE K = 1001;
+
+    DELETE FROM NGD_XRM_T WHERE K = 1001;
+    COMMIT;
+    SELECT /*+ INDEX( NGD_XRM_T, NGD_XRM_T_G ) */ COUNT(*) AS AFTER_DELETE FROM NGD_XRM_T WHERE K = 1001;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    DROP TABLE NGD_XRM_T;
+    DROP TABLE NGD_XRM_S;
+}

@@ -1,0 +1,387 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = NVARCHAR 키와 얇은 키 타입들 (메모리).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N3).
+$T0> #
+$T0> # 무엇을 재는가 -- 키 타입 커버리지가 사실상 정수 하나다
+$T0> #
+$T0> #   스위트 전량에서 센 키 타입 출현은 이렇다:
+$T0> #       INTEGER 1824 · VARCHAR 285 · DATE 195 · NUMERIC 55 ·
+$T0> #       CHAR 29 · BIGINT 21 · FLOAT 19 · SMALLINT 17 · DOUBLE 17 ·
+$T0> #       **NVARCHAR 1**
+$T0> #
+$T0> #   `BLOB`(155) · `CLOB`(131) · `GEOMETRY`(33) 는 대부분 **거절 자리**로
+$T0> #   나오는 것이라 키 타입 커버리지가 아니다.
+$T0> #
+$T0> #   ★ NVARCHAR 가 중요한 이유는 희소해서가 아니라 **경로가 다르기
+$T0> #     때문**이다. 가변 키 컬럼은 고정 폭이 아니라 colSpace 를 계산해
+$T0> #     저장하는데(J11 / GR-08), 그 경로가 오늘까지 `VARCHAR` 로만
+$T0> #     검증됐다. NVARCHAR 는 문자 하나가 여러 바이트라 길이 계산이
+$T0> #     `VARCHAR` 와 다르다 -- 같은 코드가 두 뜻을 맞게 다루는지는 재 봐야
+$T0> #     아는 것이다.
+$T0> #
+$T0> #   덧붙여 이 케이스는 얇은 타입 몇을 글로벌 키로 함께 세운다. 목적은
+$T0> #   **정렬과 유일성이 타입마다 같은 뜻인가** 다 -- 글로벌 인덱스가 주는
+$T0> #   두 값이 그것이고, 트리가 하나이므로 파티션을 가로질러 성립해야 한다.
+$T0> #
+$T0> # ★ 왜 메모리인가
+$T0> #   colSpace 의 자매 케이스(`Memory/DML/variableColumn.tc`)가 메모리에
+$T0> #   있고, 그 옆에 두어야 두 경로를 나란히 읽을 수 있다. 디스크 가변 키는
+$T0> #   `smiGetVariableColumnSize4DiskIndex` 라는 다른 계산을 쓰므로 **디스크
+$T0> #   판이 따로 필요하다** -- 이 케이스의 사본이 아니라 별건이다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> #   특히 다국어 문자열의 정렬 순서는 **손으로 지어낼 수 없다.**
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGM_NVC;
+$T0> DROP TABLE NGM_NVC_T;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # 데이터베이스의 국가 문자 집합을 먼저 찍는다 -- NVARCHAR 의 뜻이
+$T0> # 여기에 매달리므로, 기대값을 읽는 사람이 전제를 알 수 있어야 한다.
+$T0> SELECT NAME, VALUE1 FROM V$PROPERTY WHERE NAME = 'NLS_NCHAR_CHARACTERSET';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> SELECT NAME, VALUE1 FROM V$PROPERTY WHERE NAME = 'NLS_CHARACTERSET';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> CREATE TABLE NGM_NVC
+    (
+        P  INTEGER,
+        NK NVARCHAR( 32 ),
+        VK VARCHAR( 32 ),
+        DK DATE,
+        NM NUMERIC( 12, 3 ),
+        BK BIGINT,
+        V  VARCHAR( 16 )
+    )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # 파티션 셋에 흩어 놓는다. 같은 키 계열이 여러 파티션에 걸쳐야
+$T0> # 글로벌 트리의 정렬·유일성이 뜻을 갖는다.
+$T0> INSERT INTO NGM_NVC VALUES ( 1,  N'apple',  'apple',  TO_DATE('2026-01-01','YYYY-MM-DD'), 1.5,   10, 'P1' );
+1 row inserted.
+$T0> INSERT INTO NGM_NVC VALUES ( 2,  N'banana', 'banana', TO_DATE('2026-03-01','YYYY-MM-DD'), 2.25,  20, 'P1' );
+1 row inserted.
+$T0> INSERT INTO NGM_NVC VALUES ( 11, N'cherry', 'cherry', TO_DATE('2026-02-01','YYYY-MM-DD'), -3.125, 30, 'P2' );
+1 row inserted.
+$T0> INSERT INTO NGM_NVC VALUES ( 12, N'date',   'date',   TO_DATE('2026-05-01','YYYY-MM-DD'), 0,     40, 'P2' );
+1 row inserted.
+$T0> INSERT INTO NGM_NVC VALUES ( 21, N'elder',  'elder',  TO_DATE('2026-04-01','YYYY-MM-DD'), 99.999, 50, 'PD' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- NVARCHAR 를 글로벌 키로
+$T0> ##################################
+$T0> CREATE INDEX NGM_NVC_NK ON NGM_NVC ( NK ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS NK_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_NVC_NK';
+NK_IS_NATIVE_GLOBAL  
+-----------------------
+1                    
+1 row selected.
+
+$T0> # A1. 정렬이 파티션을 가로질러 보존되는가 -- 글로벌이 주는 값이다.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ NK, P, V FROM NGM_NVC ORDER BY NK;
+NK                                                                P           
+---------------------------------------------------------------------------------
+V                 
+--------------------
+apple                                                             1           
+P1                
+banana                                                            2           
+P1                
+cherry                                                            11          
+P2                
+date                                                              12          
+P2                
+elder                                                             21          
+PD                
+5 rows selected.
+
+$T0> # A2. 범위 검색이 파티션을 가로지르는가.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ COUNT(*) AS NK_RANGE
+      FROM NGM_NVC WHERE NK BETWEEN N'banana' AND N'date';
+NK_RANGE             
+-----------------------
+3                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ NK, P FROM NGM_NVC
+     WHERE NK BETWEEN N'banana' AND N'date' ORDER BY NK;
+NK                                                                P           
+---------------------------------------------------------------------------------
+banana                                                            2           
+cherry                                                            11          
+date                                                              12          
+3 rows selected.
+
+$T0> # A3. 점 조회.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ NK, P, V FROM NGM_NVC WHERE NK = N'cherry';
+NK                                                                P           
+---------------------------------------------------------------------------------
+V                 
+--------------------
+cherry                                                            11          
+P2                
+1 row selected.
+
+$T0> # A4. ★ VARCHAR 와 같은 답을 내는가. 같은 문자열을 두 컬럼에 넣어
+$T0> #     두었으므로, 두 인덱스가 다른 답을 내면 가변 키 경로가 타입에
+$T0> #     따라 갈린 것이다.
+$T0> CREATE INDEX NGM_NVC_VK ON NGM_NVC ( VK ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_VK ) */ VK, P, V FROM NGM_NVC ORDER BY VK;
+VK                                P           V                 
+--------------------------------------------------------------------
+apple                             1           P1                
+banana                            2           P1                
+cherry                            11          P2                
+date                              12          P2                
+elder                             21          PD                
+5 rows selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_VK ) */ COUNT(*) AS VK_RANGE
+      FROM NGM_NVC WHERE VK BETWEEN 'banana' AND 'date';
+VK_RANGE             
+-----------------------
+3                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 가변 키의 갱신. colSpace 가 자라고 줄어든다
+$T0> ##################################
+$T0> # J11/GR-08 이 다룬 자리다. 길이가 바뀌는 갱신이 키를 옳게 옮기는가.
+$T0> UPDATE NGM_NVC SET NK = N'apple-much-longer-value' WHERE P = 1;
+1 row updated.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ NK, P FROM NGM_NVC ORDER BY NK;
+NK                                                                P           
+---------------------------------------------------------------------------------
+apple-much-longer-value                                           1           
+banana                                                            2           
+cherry                                                            11          
+date                                                              12          
+elder                                                             21          
+5 rows selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ COUNT(*) AS AFTER_GROW FROM NGM_NVC;
+AFTER_GROW           
+-----------------------
+5                    
+1 row selected.
+
+$T0> UPDATE NGM_NVC SET NK = N'a' WHERE P = 1;
+1 row updated.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ NK, P FROM NGM_NVC ORDER BY NK;
+NK                                                                P           
+---------------------------------------------------------------------------------
+a                                                                 1           
+banana                                                            2           
+cherry                                                            11          
+date                                                              12          
+elder                                                             21          
+5 rows selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ COUNT(*) AS AFTER_SHRINK FROM NGM_NVC;
+AFTER_SHRINK         
+-----------------------
+5                    
+1 row selected.
+
+$T0> # NULL 키.
+$T0> UPDATE NGM_NVC SET NK = NULL WHERE P = 1;
+1 row updated.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ COUNT(*) AS NULL_KEYS FROM NGM_NVC WHERE NK IS NULL;
+NULL_KEYS            
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NK ) */ COUNT(*) AS NONNULL_KEYS FROM NGM_NVC WHERE NK IS NOT NULL;
+NONNULL_KEYS         
+-----------------------
+4                    
+1 row selected.
+
+$T0> UPDATE NGM_NVC SET NK = N'apple' WHERE P = 1;
+1 row updated.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- NVARCHAR 글로벌 유일성은 파티션을 가로지른다
+$T0> ##################################
+$T0> CREATE TABLE NGM_NVC_T ( P INTEGER, NK NVARCHAR( 32 ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> CREATE UNIQUE INDEX NGM_NVC_T_U ON NGM_NVC_T ( NK ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> INSERT INTO NGM_NVC_T VALUES ( 1,  N'same' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+$T0> # 다른 파티션에 같은 값 -- 트리가 하나이므로 실패해야 한다.
+$T0> INSERT INTO NGM_NVC_T VALUES ( 21, N'same' );
+[ERR-11058 : The row already exists in a unique index.]
+$T0> SELECT /*+ INDEX( NGM_NVC_T, NGM_NVC_T_U ) */ COUNT(*) AS UNIQUE_TOTAL FROM NGM_NVC_T;
+UNIQUE_TOTAL         
+-----------------------
+1                    
+1 row selected.
+
+$T0> # row movement 로 파티션을 넘겨도 하나여야 한다.
+$T0> ALTER TABLE NGM_NVC_T ENABLE ROW MOVEMENT;
+Alter success.
+$T0> UPDATE NGM_NVC_T SET P = 21 WHERE NK = N'same';
+1 row updated.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT /*+ INDEX( NGM_NVC_T, NGM_NVC_T_U ) */ COUNT(*) AS AFTER_MOVE FROM NGM_NVC_T;
+AFTER_MOVE           
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGM_NVC_T, NGM_NVC_T_U ) */ NK, P FROM NGM_NVC_T;
+NK                                                                P           
+---------------------------------------------------------------------------------
+same                                                              21          
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 얇은 타입들. 정렬과 범위가 타입마다 옳은가
+$T0> ##################################
+$T0> CREATE INDEX NGM_NVC_DK ON NGM_NVC ( DK ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_DK ) */ DK, P FROM NGM_NVC ORDER BY DK;
+DK                   P           
+------------------------------------
+01-JAN-2026          1           
+01-FEB-2026          11          
+01-MAR-2026          2           
+01-APR-2026          21          
+01-MAY-2026          12          
+5 rows selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_DK ) */ COUNT(*) AS DATE_RANGE
+      FROM NGM_NVC WHERE DK BETWEEN TO_DATE('2026-02-01','YYYY-MM-DD')
+                                AND TO_DATE('2026-04-01','YYYY-MM-DD');
+DATE_RANGE           
+-----------------------
+3                    
+1 row selected.
+
+$T0> # NUMERIC -- 음수와 소수가 섞인 정렬은 정수와 다른 비교기를 탄다.
+$T0> CREATE INDEX NGM_NVC_NM ON NGM_NVC ( NM ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NM ) */ NM, P FROM NGM_NVC ORDER BY NM;
+NM          P           
+---------------------------
+-3.125      11          
+0           12          
+1.5         1           
+2.25        2           
+99.999      21          
+5 rows selected.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_NM ) */ COUNT(*) AS NEG_COUNT FROM NGM_NVC WHERE NM < 0;
+NEG_COUNT            
+-----------------------
+1                    
+1 row selected.
+
+$T0> CREATE INDEX NGM_NVC_BK ON NGM_NVC ( BK ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_BK ) */ BK, P FROM NGM_NVC ORDER BY BK;
+BK                   P           
+------------------------------------
+10                   1           
+20                   2           
+30                   11          
+40                   12          
+50                   21          
+5 rows selected.
+
+$T0> # 복합 키 -- 가변 + 고정 섞기. 오프셋 계산이 갈리는 자리다.
+$T0> CREATE INDEX NGM_NVC_MIX ON NGM_NVC ( NK, BK ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> SELECT /*+ INDEX( NGM_NVC, NGM_NVC_MIX ) */ NK, BK, P FROM NGM_NVC ORDER BY NK, BK;
+NK                                                                
+--------------------------------------------------------------------
+BK                   P           
+------------------------------------
+apple                                                             
+10                   1           
+banana                                                            
+20                   2           
+cherry                                                            
+30                   11          
+date                                                              
+40                   12          
+elder                                                             
+50                   21          
+5 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> DROP TABLE NGM_NVC;
+Drop success.
+$T0> DROP TABLE NGM_NVC_T;
+Drop success.
+

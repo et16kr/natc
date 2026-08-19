@@ -1,0 +1,178 @@
+###########################################################################
+# TestCase Description = RANGE_USING_HASH 파티션드 테이블 위의 글로벌 인덱스와 프루닝 (메모리).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N2).
+#                        스위트 0 · 삭제될 그물 0 -- 네 번째 파티션 방법을
+#                        아무도 밟은 적이 없다.
+#
+# 무엇을 재는가 -- 파티션 방법의 네 번째 값
+#
+#   스위트가 밟는 파티션 방법은 셋뿐이다 (RANGE 538 · LIST 295 · HASH 273).
+#   제품에는 넷째가 있다 -- QCM_PARTITION_METHOD_RANGE_USING_HASH = 3.
+#   그리고 그것만을 위한 코드가 옵티마이저에 따로 있다:
+#
+#       qmoPartition::rangeUsinghashPartitionPruningWithKeyRange
+#       qmoPartition::compareRangeUsingHashPartition
+#
+#   글로벌 인덱스는 파티션드 테이블 위에만 서고, 프루닝 결과는 글로벌
+#   스캔이 "어느 파티션의 행을 봐도 되는가"(partitionAllowSet.tc 가 재는
+#   그 집합)로 직접 이어진다. 그러므로 네 번째 방법에서 그 경로가 서는지는
+#   재야 하는 것이고, **한 번도 재지 않았다.**
+#
+# 구문 주의 -- 토큰은 밑줄이 있는 한 낱말이다
+#   qcply.y 가 위치 3 의 원문을 "RANGE_USING_HASH"(16 자)와 대조한다.
+#   그래서 `PARTITION BY RANGE_USING_HASH ( c )` 로 쓴다. 그리고 그 갈래는
+#   **DEFAULT 파티션이 정확히 하나**여야 하고(아니면
+#   ERR_QDB_INVALID_DEFAULT_PARTITION_COUNT) LIST 값 목록은 거절한다.
+#
+# ★ 왜 메모리인가
+#   프루닝은 QP 의 일이라 매체를 가리지 않는다. 그래서 싼 쪽에 둔다 --
+#   디스크 대응이 필요해지면 같은 본문을 디스크 테이블스페이스로 옮기면
+#   된다(§계획 3.2 는 두 매체의 영역 집합이 대칭일 필요가 없다고 적었다).
+#
+# ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_RUH;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGM_RUH ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE_USING_HASH ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    # 파티션 방법이 정말 넷째(3)로 잡혔는가. 아니면 아래는 평범한 RANGE 를
+    # 재는 것이 된다.
+    SELECT PARTITION_METHOD AS PART_METHOD
+      FROM SYSTEM_.SYS_PART_TABLES_
+     WHERE TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                         WHERE TABLE_NAME = 'NGM_RUH' );
+
+    INSERT INTO NGM_RUH SELECT LEVEL,      100 + LEVEL, 'P1' FROM DUAL CONNECT BY LEVEL <= 9;
+    INSERT INTO NGM_RUH SELECT LEVEL + 10, 200 + LEVEL, 'P2' FROM DUAL CONNECT BY LEVEL <= 9;
+    INSERT INTO NGM_RUH SELECT LEVEL + 20, 300 + LEVEL, 'PD' FROM DUAL CONNECT BY LEVEL <= 9;
+    COMMIT;
+
+    CREATE INDEX NGM_RUH_G ON NGM_RUH ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_RUH_G';
+
+##################################
+SECTOR; A -- 글로벌 인덱스가 이 파티션 방법 위에 선다
+##################################
+    SELECT COUNT(*) AS TOTAL FROM NGM_RUH;
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS TOTAL_VIA_GLOBAL FROM NGM_RUH;
+
+    # 트리가 하나이므로 키 순서가 파티션을 가로질러 보존돼야 한다.
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ K, P, V
+      FROM NGM_RUH WHERE K BETWEEN 108 AND 203 ORDER BY K;
+
+##################################
+SECTOR; B -- 파티션 키 술어의 프루닝
+##################################
+# 여기가 전용 분기(rangeUsinghashPartitionPruningWithKeyRange)의 자리다.
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+
+    # B1. 상수 하나 -- 한 파티션으로 좁혀져야 한다
+    SELECT COUNT(*) AS EQ_ONE FROM NGM_RUH WHERE P = 5;
+
+    # B2. 범위 -- 두 파티션에 걸친다
+    SELECT COUNT(*) AS RANGE_TWO FROM NGM_RUH WHERE P BETWEEN 5 AND 15;
+
+    # B3. 기본 파티션만
+    SELECT COUNT(*) AS ONLY_DEFAULT FROM NGM_RUH WHERE P > 20;
+
+    # B4. OR 체인 -- J19b 가 DNF 가지마다 집합이 갈리는 결함을 닫은 축이다.
+    #     그 수리가 이 파티션 방법에도 미쳤는지 본다.
+    SELECT COUNT(*) AS OR_CHAIN FROM NGM_RUH WHERE P = 5 OR P = 15;
+
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+    # 값도 맞는가 (플랜만 보고 지나가지 않는다)
+    SELECT P, K, V FROM NGM_RUH WHERE P = 5 ORDER BY K;
+    SELECT COUNT(*) AS EQ_ONE_VALUE   FROM NGM_RUH WHERE P = 5;
+    SELECT COUNT(*) AS RANGE_TWO_VALUE FROM NGM_RUH WHERE P BETWEEN 5 AND 15;
+
+##################################
+SECTOR; C -- PARTITION(p) 가 글로벌 스캔을 제한한다
+##################################
+# partitionAllowSet.tc 가 RANGE 에서 재는 것을 여기서는 넷째 방법으로 잰다.
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS ONLY_P1 FROM NGM_RUH PARTITION( P1 );
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS ONLY_P2 FROM NGM_RUH PARTITION( P2 );
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS ONLY_PD FROM NGM_RUH PARTITION( PD );
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS ALL_PARTS FROM NGM_RUH;
+
+##################################
+SECTOR; D -- DML 과 row movement
+##################################
+    ALTER TABLE NGM_RUH ENABLE ROW MOVEMENT;
+
+    # 파티션을 넘는 UPDATE. 글로벌 트리에서 한 행이어야 한다.
+    UPDATE NGM_RUH SET P = 15 WHERE K = 101;
+    COMMIT;
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS K101_ROWS FROM NGM_RUH WHERE K = 101;
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ P, K, V FROM NGM_RUH WHERE K = 101;
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS TOTAL_AFTER_MOVE FROM NGM_RUH;
+
+    DELETE FROM NGM_RUH WHERE K = 101;
+    COMMIT;
+    SELECT /*+ INDEX( NGM_RUH, NGM_RUH_G ) */ COUNT(*) AS AFTER_DELETE FROM NGM_RUH WHERE K = 101;
+
+##################################
+SECTOR; E -- 구문 규칙 둘
+##################################
+# 이 갈래가 요구하는 것을 어겼을 때 무엇이라 하는지 전사한다.
+# 케이스가 이것을 담는 이유는, 위 픽스처가 왜 그 모양이어야 하는지를
+# 다음 사람이 읽을 수 있게 하기 위해서다.
+
+    # E1. DEFAULT 파티션이 없다
+    CREATE TABLE NGM_RUH_ND ( P INTEGER, K INTEGER )
+    PARTITION BY RANGE_USING_HASH ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 )
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    SKIP BEGIN;
+    DROP TABLE NGM_RUH_ND;
+    SKIP END;
+
+    # E2. LIST 값 목록을 준다
+    CREATE TABLE NGM_RUH_LV ( P INTEGER, K INTEGER )
+    PARTITION BY RANGE_USING_HASH ( P )
+    (
+        PARTITION P1 VALUES ( 1, 2, 3 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    SKIP BEGIN;
+    DROP TABLE NGM_RUH_LV;
+    SKIP END;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    DROP TABLE NGM_RUH;
+}

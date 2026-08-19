@@ -9,4 +9,6 @@ optimizerSelection.tc                    # 무힌트·로컬·네이티브·풀 
 pruningCardinality.tc                    # 프루닝 기수 0/1/다수/전체 (Codex 흡수, J19b 축)
 statisticsContinuity.tc                  # 통계 수집 전후 (Codex 흡수)
 joinSubqueryView.tc                      # 조인·서브쿼리·뷰 (Codex 흡수)
+rangeUsingHashPruning.tc                 # RANGE_USING_HASH — 넷째 파티션 방법 (신규 N2)
+psmGlobalAccess.tc                       # PSM 커서·DML·예외 (신규)
 -------------------------------------------------------------------------------
