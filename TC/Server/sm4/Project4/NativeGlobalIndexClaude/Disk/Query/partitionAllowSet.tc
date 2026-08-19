@@ -1,0 +1,139 @@
+###########################################################################
+# TestCase Description = PARTITION(p) 가 글로벌 스캔의 볼 수 있는 행을 제한한다 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = altibase/scripts/global-index/global-partfilter-check.sh
+#                        (삭제 예정인 그물에서 건짐 -- 통합 Phase E)
+#
+# 무엇을 재는가
+#   네이티브 글로벌 인덱스는 모든 파티션 위의 b-tree 하나다. 그래서
+#   파티션을 지목한 질의 -- PARTITION(p), 또는 옵티마이저가 프루닝한
+#   상수 파티션 키 술어 -- 는 "어느 파티션의 행을 봐도 되는가" 를 따로
+#   들어야 한다. QP 가 그 집합을 만들고(qmnSCAN::makeGlobalPartFilter)
+#   SM 이 가시성·로우 필터·잠금 **앞에서** 그 밖의 행을 버린다.
+#
+# ★ 왜 디스크인가
+#   그 계약이 메모리 b-tree 에만 구현돼 있었다. sdnbBTree 는 그 필드를 읽지
+#   않아, 디스크 파티션드 테이블에서 PARTITION(p1) 이 **테이블 전체**를
+#   세었다. 조용히 틀린 답이었고 출하 기본값이 1 이다. 아무도 못 잡은 이유는
+#   이 프로젝트의 PARTITION(p) 단언이 전부 메모리 픽스처였기 때문이다
+#   (V4 J19 / E-1). 그래서 이 케이스의 매체는 디스크여야 한다.
+#
+#   덧붙여 J19b 가 같은 자리에서 두 번째 결함을 닫았다 -- 파티션 키 OR
+#   체인에서 DNF 가지마다 갈리는 집합을 그래프 공용 partitionRef 에서
+#   읽던 것. C 절이 그 회귀 축이다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGD_PAF_R;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGD_PAF_R ( I1 INTEGER, I2 INTEGER )
+    PARTITION BY RANGE ( I1 )
+    (
+        PARTITION P1 VALUES LESS THAN ( 100 ),
+        PARTITION P2 VALUES LESS THAN ( 200 ),
+        PARTITION P3 VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_PAF_R SELECT LEVEL,       7 FROM DUAL CONNECT BY LEVEL <= 60;
+    INSERT INTO NGD_PAF_R SELECT LEVEL + 100, 7 FROM DUAL CONNECT BY LEVEL <= 30;
+    INSERT INTO NGD_PAF_R SELECT LEVEL + 200, 7 FROM DUAL CONNECT BY LEVEL <= 10;
+    COMMIT;
+
+    CREATE INDEX NGD_PAF_R_G ON NGD_PAF_R ( I2, I1 );
+
+    # A0. 전제 -- 그 인덱스가 정말 네이티브 글로벌인가(판별자 101).
+    #     아니면 아래는 로컬 인덱스를 재는 것이 된다.
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_PAF_R_G';
+
+##################################
+SECTOR; A -- PARTITION(p) 는 글로벌 SCAN 을 열고, 그 파티션만 센다
+##################################
+    # A1. 플랜은 여전히 글로벌 SCAN 하나다 (PCRD 로 물러나지 않는다)
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*)
+      FROM NGD_PAF_R PARTITION( P1 ) WHERE I2 = 7;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+    # A2~A4. 각 파티션의 행 수 -- 60 / 30 / 10 이어야 한다.
+    #        고치기 전에는 셋 다 100 (테이블 전체) 이었다.
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS ONLY_P1
+      FROM NGD_PAF_R PARTITION( P1 ) WHERE I2 = 7;
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS ONLY_P2
+      FROM NGD_PAF_R PARTITION( P2 ) WHERE I2 = 7;
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS ONLY_P3
+      FROM NGD_PAF_R PARTITION( P3 ) WHERE I2 = 7;
+
+    # A5. 셋을 더하면 테이블 전체다 -- 집합이 겹치지도 새지도 않는다
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS WHOLE_TABLE
+      FROM NGD_PAF_R WHERE I2 = 7;
+
+    # A6/A7. p2 에 사는 키는 p1 을 통해서는 안 보이고, 절 없이는 보인다
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS P2KEY_VIA_P1
+      FROM NGD_PAF_R PARTITION( P1 ) WHERE I2 = 7 AND I1 = 150;
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS P2KEY_NO_CLAUSE
+      FROM NGD_PAF_R WHERE I2 = 7 AND I1 = 150;
+
+    # A8. 역방향 스캔도 같은 집합을 따른다
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS BACKWARD_P2
+      FROM ( SELECT I1 FROM NGD_PAF_R PARTITION( P2 ) WHERE I2 = 7 ORDER BY I2 DESC, I1 DESC );
+
+##################################
+SECTOR; B -- 글로벌 경유와 풀스캔이 같은 답을 낸다
+##################################
+    SELECT COUNT(*) AS P1_BY_FULLSCAN FROM NGD_PAF_R PARTITION( P1 );
+    SELECT COUNT(*) AS P2_BY_FULLSCAN FROM NGD_PAF_R PARTITION( P2 );
+    SELECT COUNT(*) AS P3_BY_FULLSCAN FROM NGD_PAF_R PARTITION( P3 );
+
+##################################
+SECTOR; C -- 프루닝된 파티션 키 술어 (J19b 회귀 축)
+##################################
+    # 상수 파티션 키 술어를 옵티마이저가 프루닝한 뒤에도 같은 집합이 서야 한다.
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS PRUNED_ONE
+      FROM NGD_PAF_R WHERE I2 = 7 AND I1 < 100;
+
+    # OR 체인 -- DNF 가지마다 파티션 집합이 갈린다. J19b 가 닫은 자리.
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS OR_CHAIN_TWO
+      FROM NGD_PAF_R WHERE I2 = 7 AND ( I1 < 100 OR I1 >= 200 );
+    SELECT /*+ INDEX( NGD_PAF_R, NGD_PAF_R_G ) */ COUNT(*) AS OR_CHAIN_ALL
+      FROM NGD_PAF_R WHERE I2 = 7 AND ( I1 < 100 OR I1 >= 100 );
+
+##################################
+SECTOR; D -- DML 도 같은 집합을 쓴다
+##################################
+    # 고치기 전에는 DELETE ... PARTITION(p) 가 ERR-31318 로 죽었다
+    # (qmnSCAN::findGlobalPartEntry: 로우 owner 파티션을 못 찾음).
+    # AUTOCOMMIT 을 끈다 -- 켜 둔 채로는 아래 ROLLBACK 이 아무것도 되돌리지
+    # 않아(DELETE 가 이미 커밋된다) 롤백 절이 항진식이 된다. 처음 이식할 때
+    # 그렇게 썼다가 AFTER_ROLLBACK 이 90 으로 나오는 것을 보고 고쳤다.
+    AUTOCOMMIT OFF;
+    DELETE FROM NGD_PAF_R PARTITION( P3 ) WHERE I2 = 7;
+    SELECT COUNT(*) AS AFTER_DELETE_P3  FROM NGD_PAF_R PARTITION( P3 );
+    SELECT COUNT(*) AS AFTER_DELETE_ALL FROM NGD_PAF_R;
+    ROLLBACK;
+    SELECT COUNT(*) AS AFTER_ROLLBACK   FROM NGD_PAF_R;
+    AUTOCOMMIT ON;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    DROP TABLE NGD_PAF_R;
+}
