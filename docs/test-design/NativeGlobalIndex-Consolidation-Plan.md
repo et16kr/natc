@@ -22,11 +22,19 @@
 | 8 | **`sm-matrix-check` 분해** | 9 절을 영역별 케이스로. 실질 7 개 (§8.2.1) |
 | 9 | **MANIFEST** | 작업 중에는 `manifest.tc` 로 자동 대조, **완성 시점에 대조표로 넘기고 `.tc` 는 걷는다** (§8.4) |
 | 10 | **복제 레인** | 프레임워크는 막지 않는다. **원본 스위트의 `initialize.tc` 가 템플릿**이고, 막았던 것은 `server.conf` 블록 부재와 이 프로젝트의 격리 인스턴스 전제였다 (§9.3) |
+| 11 | **러너를 새로 만들지 않는다** | `natc-check.sh` 의 두 안전 스위치는 격리 인스턴스 때문에 있었다. **회사 러너 + auto-init ON** 이 답이고 `NEEDS_FRESH_INSTANCE` 도 그것으로 충족된다 (§8.7) |
+| 12 | **레인마다 브리프가 다르다** | TC_GUIDE 의 Hard Stops 는 금지가 아니라 **그 브리프의 범위**다. 범위 밖 레인(재기동·다중 세션·복제·FIT)은 케이스 첫 주석에 그 사실을 적는다 (§3.3) |
 
-> **★ 이 문서를 이어받는 사람에게** — 이 조사는 `rnd-ai5` 의 natc 체크아웃에서
-> 했고 **그 체크아웃은 부분이다**(`TC/Server/repl4` 추적 파일 37 개. 공식
-> 트리는 수백 개다). `conf/server.conf` 도 잘려 있을 수 있다. §10.1 의 확인
-> 둘을 **공식 트리에서** 다시 돌릴 것.
+> **★ 이 문서를 이어받는 사람에게**
+>
+> - **선행 조건은 풀렸다** — V4 J25 완료(`c6bffafc`, 27/27 Done). Phase A 부터
+>   착수 가능하다. 다만 **실행 검증은 J24 이후 빌드에서만** 뜻이 있다 (§2.1).
+> - 이 조사는 **부분 체크아웃** 둘에서 했다(`TC/Server/repl4` 추적 파일
+>   37 개, 공식 트리는 수백 개). §9.3 의 ATAF 관용구 표는 **공식 트리의 실물
+>   케이스에서 옮겨 적은 것이라 이 체크아웃에서는 재검증할 수 없다**
+>   (`repl4/ActiveStandby/Bugs/BUG-52439`·`BUG-52224`). 공식 트리에서 한 번
+>   대조할 것.
+> - `conf/server.conf` 도 잘려 있을 수 있다 (§10.1 의 남은 단서).
 
 ---
 
@@ -46,25 +54,38 @@
 
 ---
 
-## 2. 선행 조건 — V4 J25
+## 2. 선행 조건 — V4 J25 ✅ **해제됨 (2026-08-19)**
 
-**이 계획의 어떤 Phase 도 V4 워크플로의 J25(종결)가 끝나기 전에 시작하지
-않는다.**
+이 계획의 어떤 Phase 도 V4 워크플로의 J25(종결)가 끝나기 전에 시작하지
+않기로 했었다. **끝났다.**
 
-J25 의 1단계(클린 재실행)가 두 스위트를 **이름과 경로로** 돌린다:
-
-```bash
-./natc-check.sh --suite NativeGlobalIndexClaude      # 37
-./natc-check.sh --suite NativeGlobalIndexPort1624    # 208 중 203
+```
+altibase HEAD  c6bffafc  Close V4, and find that the last thing in the way is ours, not $GIT_'s (J25)
+               jobs.tsv  27 / 27 Done   (v2·v3·v4·disk·memory·followup 전 워크플로 Done)
 ```
 
-`natc-check.sh` 는 `SUITE_ROOT="$ATAF_TEST_CASE/TC/Server/sm4/Project4"` 아래
-이름으로 디렉터리를 찾고, 없으면 `exit 2` 한다. 루트 `.ts` 도
-`<디렉터리명>.ts` → `NativeGlobalIndex.ts` 순으로 찾는다. Phase B 가
-움직이는 순간 셋 다 깨진다.
+막고 있던 이유는 J25 의 1단계(클린 재실행)가 두 스위트를 **이름과 경로로**
+돌리기 때문이었다 — `natc-check.sh` 가
+`SUITE_ROOT="$ATAF_TEST_CASE/TC/Server/sm4/Project4"` 아래 이름으로
+디렉터리를 찾고 없으면 `exit 2` 한다. 이제 그 실행이 끝났으므로 Phase A 부터
+착수할 수 있다.
 
-또한 J25 는 "클린 재실행으로 전 그물을 다시 세워" 완료 판정 12종을 채우는
-종결 잡이다 — 재는 대상이 이동 중이면 판정 자체가 성립하지 않는다.
+### 2.1 착수 전 실측 조건 — 빌드가 J24 이후여야 한다
+
+**설치된 서버 바이너리가 J19b·J20~J24 보다 앞서면 어떤 실행 검증도 틀린
+것을 잰다.** Port1624 배치 3~7 의 `.lst` 도, J23/J24 가 새로 찍은 섹터도
+그 바이너리에서는 재현되지 않는다.
+
+```bash
+( cd <altibase> && make build -j"$(nproc)" )
+<altibase>/scripts/global-index/testdb.sh restart      # ★ 반드시
+```
+
+재빌드 뒤 `restart` 가 필수인 이유: `bin` 이 빌드 산출물로 가는 심볼릭
+링크라, 인스턴스가 떠 있으면 **옛 바이너리로 테스트가 돈다.**
+
+Phase A(판정)는 파일을 읽고 판정표를 만드는 일이라 서버 없이 진행할 수
+있다 — **다만 Codex 판정은 반쪽만 가능하다**(§5.3).
 
 ---
 
@@ -125,6 +146,32 @@ Memory 58 로 강제 대칭을 세운 것은 매트릭스로서는 깔끔하지�
 중복 판정을 했더니 **완전 중복 0** 이었고, 가르는 축은 문장이 아니라
 매체였다.
 
+### 3.3 레인마다 따르는 브리프가 다르다
+
+`docs/TC_GUIDE.md` 의 **Hard Stops** 는 "server restart, multi-server
+topology, HDB/XDB, WhiteBox, fault injection, external processes" 를 만나면
+**멈추라**고 한다. 이 계획의 여러 레인이 거기 걸린다 — 그러나 **금지가
+아니라 브리프의 범위 문제**다. TC_GUIDE 는 첫 문단에서 스스로 선을 긋는다:
+
+> FIT, fault injection, WhiteBox, restart/recovery 테스트는 이 브리프의
+> 범위가 아니다. 그런 요청이면 이 브리프로 작업하지 말고 중단한다.
+
+그리고 `docs/FIT_GUIDE.md` 가 따로 있고, `TC/Server/repl4/` 가 multi-server
+를 실제로 하고 있다. 그러므로 **레인마다 따르는 브리프를 명시한다.**
+
+| 레인 | 따르는 것 | 비고 |
+|---|---|---|
+| `Catalog`·`Create`·`Query`·`DML`·`DDL`·`Transaction`·`Boundary`·`Unsupported`·`Regress` | **`docs/TC_GUIDE.md`** | 일반 SQL regression. 이 계획의 대부분 |
+| `Lifecycle/`(재기동·복구) | TC_GUIDE **범위 밖** — 별도 계약 필요 | Hard Stops 의 "server restart" |
+| `Concurrency/`(다중 세션) | TC_GUIDE **범위 밖** | |
+| FIT 계열(크래시 주입) | **`docs/FIT_GUIDE.md`** | `stdFit.i`·`##fail`/`##success` |
+| 복제(`Deferred/Replication`) | **`repl4` 의 실사용 패턴** (§9.3) | Hard Stops 의 "multi-server topology" |
+| `manifest.tc`(§8.4) · `ngi_cli`(§8.3) | TC_GUIDE 의 "Do Not Generate — Shell or Python wrappers" 와 맞닿는다 | 그 줄의 단서는 **"for behavior that TC syntax can express directly"** 다. C 프로그램 빌드·원본 `.ts` 전개는 TC 문법으로 표현할 수 없으므로 그 단서에 걸리지 않는다. 다만 **한시적**임을 케이스 주석에 적는다 |
+
+**규칙**: TC_GUIDE 범위 밖 레인의 케이스는 그 사실을 케이스 첫 주석에
+적는다. 그러지 않으면 다음 사람이 TC_GUIDE 하나만 들고 와서 "이건 규약
+위반" 이라고 읽는다.
+
 ---
 
 ## 4. 무엇이 어디로 — 전체 지도
@@ -160,6 +207,14 @@ Memory 58 로 강제 대칭을 세운 것은 매트릭스로서는 깔끔하지�
 | `regress/noGlobalIndexUnchanged` · `propertyRuntimeChange` | `Memory/Regress/` | 신설 영역 |
 | `repl/replicationReject` | `Deferred/Replication` 참조 + `Memory/Unsupported/` | §9.2 |
 
+`.tc` 아닌 잔재 셋도 지도에 넣는다:
+
+| 현재 | 처리 |
+|---|---|
+| `tools/lint-tc.py` | **프로젝트 로컬 파이썬.** TC_GUIDE 의 "Do Not Generate — Shell or Python wrappers" 에 걸린다. 남길지 걷을지 Phase A 에서 판정 |
+| `deferred/` (소문자) | `Deferred/` 로 통일. 내용(재기동이 필요한 항목 목록)은 §9.2 표로 흡수 |
+| `README` · `TEST_SCENARIOS.md` | 통합 후 내용이 어긋난다. Phase B 에서 갱신 |
+
 ---
 
 ## 5. Codex 선별 흡수
@@ -184,6 +239,38 @@ Memory 58 로 강제 대칭을 세운 것은 매트릭스로서는 깔끔하지�
 | Create · DDL · DML | 27 | 27 | 대응 있음 | 중복 유력 |
 
 거친 추정 **~30**. Disk 쪽은 Port1624 와도 겹치므로 3자 판정이 필요하다.
+
+### 5.3 ★ Codex 흡수분에는 `.lst` 무변경이 성립하지 않는다
+
+Codex 의 `.lst` 는 **2026-08-02~08-05 기록**이고, 그 뒤 제품이 세 번
+바뀌었다:
+
+| 잡 | 바꾼 것 |
+|---|---|
+| J19b | 파티션 키 OR 체인의 프루닝 오답 수리 — **플랜이 바뀐다** |
+| J23 | `ALTER INDEX … REBUILD` 로 `$GIT_` 전환 |
+| J24 | 프로퍼티 0 의 뜻이 **거절(`ERR-314B6`)** 로 바뀜 |
+
+그러므로:
+
+1. **§8.6 의 "`.lst` 무변경" 은 Claude·Port1624 이동에만 적용된다.** Codex
+   복사분은 **재기록이 전제**다. 이 예외를 판정표에 명시한다.
+2. **선별 ~30 이라는 추정 자체가 한 번 돌려 본 뒤에 선다** — Codex 116 은
+   08-05 이후 실행 이력이 없어 **오늘 그린인지 알 수 없다.** Phase A 의
+   Codex 칸은 빌드가 선 뒤에 채운다(§2.1).
+
+### 5.4 ★ Codex 는 프로퍼티를 한 자리도 못박지 않는다
+
+실측: Codex 116 케이스에서 `GLOBAL_INDEX_ENABLE` 참조 **0 건**.
+
+§8.5 규약 ②("케이스마다 자기 전제를 세운다")의 정면 위반이다. J24 로
+프로퍼티 0 의 뜻이 "거절" 이 된 만큼, **흡수할 때 프로퍼티 못박기를 넣는
+것이 필수 작업**이다. 넣지 않으면 기본값이 움직이는 날 조용히 다른 것을
+재게 된다 — 원본 PROJ-1624 와 `ddl/diskPartitionedTable` 이 실제로 그렇게
+어긋났다.
+
+매체 축은 맞다 — `Disk/Catalog/implementationType` 이
+`INDEX_IMPL_TYPE = 3` · `INDEX_TABLE_ID = 0` 으로 네이티브를 재고 있다.
 
 ---
 
@@ -220,8 +307,23 @@ Codex 가 이미 그 모델이다 — 116 케이스 전부 `stdFunc.i` **하나�
 | 스위트 | 로컬 `.i` | INCLUDE 쓰는 `.tc` |
 |---|---|---:|
 | Claude | 4 (`checkGlobalIndex` 7.4KB · `createMemPartTable` 5.1KB · `globalIndexEnv` 1.2KB · `selectMeta` 3.4KB) | 37 / 37 |
-| Port1624 | 5 (`checkGlobalIndex` · `globalIndexEnv` · `descIndex` · `checkFunctionIndex` · `pinNative.sql`) + `qc/select_meta.i` | 93 / 97 |
+| Port1624 | **9** + `include/pinNative.sql` | 93 / 97 |
 | Codex | **0** | 116 (전부 `stdFunc.i` 만) |
+
+Port1624 의 9 는 `include/` 아래 넷만이 아니라 **배치 로컬이 다섯** 더
+있다 — 처음 셀 때 놓쳤다:
+
+```
+include/checkGlobalIndex.i   include/globalIndexEnv.i
+include/descIndex.i          include/checkFunctionIndex.i
+DDL/check_global_index.i     DDL/desc_global_index.i
+meta/desc_global_index.i     meta/select_meta.i
+qc/select_meta.i
+```
+
+**합치기는 생각보다 싸다** — `desc_global_index.i` 두 벌(`DDL/`·`meta/`)과
+`select_meta.i` 두 벌(`meta/`·`qc/`)이 **바이트 동일**이다. 교차 스위트
+동명이체(`checkGlobalIndex.i`·`globalIndexEnv.i`)만 내용이 갈린다.
 
 **이름 충돌 둘이 실측돼 있다** — `checkGlobalIndex.i` 와 `globalIndexEnv.i`
 가 Claude·Port1624 에 **같은 이름·다른 내용**으로 있다(메모리 판별자 vs
@@ -366,11 +468,35 @@ MANIFEST 동시 갱신을 리뷰 체크리스트로 명시한다.
 분배는 실행마다 갈릴 수 있다.** `.lst` 에 박을 것은 스레드 수가 아니라
 **직렬과 같은 체크섬**이다.
 
-### 8.6 `.lst` 무변경 원칙
+### 8.6 `.lst` 무변경 원칙 — 적용 범위를 못박는다
 
 이동·자족화로 **`.lst` 가 한 줄도 바뀌면 안 된다.** 바뀌었다면 옮기다가
-무언가를 바꾼 것이고, 그것이 곧 결함이다. 새로 쓰는 케이스(§8.2·8.3)만
-`.lst` 를 새로 찍는다.
+무언가를 바꾼 것이고, 그것이 곧 결함이다.
+
+**적용되는 것**: Claude 37 재배치(Phase B) · Port1624 서브트리 이동(Phase C)
+· 두 스위트의 `.i` 자족화.
+
+**적용되지 않는 것**:
+- 새로 쓰는 케이스(§8.2·8.3) — 처음부터 새로 찍는다.
+- **Codex 흡수분(Phase D) — 재기록이 전제다** (§5.3).
+
+### 8.7 러너 — 삭제되는 것과 남는 것
+
+`natc-check.sh` 도 삭제 대상 `scripts/global-index/` 소속이다. 그 스크립트에
+용접돼 있던 것 셋을 각각 따진다.
+
+| 용접돼 있던 것 | 통합 후 |
+|---|---|
+| `--auto-init=OFF` | **필요 없어진다.** 이 스위치는 ATAF 의 초기화 TC 가 `natc/bin/createdb` 를 돌려 **이 프로젝트의 격리 인스턴스를 지워 버리는 것**을 막으려고 켠 것이다. 격리 인스턴스가 사라지면 이유도 사라진다 |
+| `--core=OFF` | **필요 없어진다.** 코어 수집기가 이 기계에 없는 경로를 원해서 껐던 것이다 |
+| `NEEDS_FRESH_INSTANCE` 처리 | **회사 러너가 대신한다.** 그 파일 자신이 그렇게 적어 두었다 — *"the original suite… never noticed because **ATAF's auto-init recreates the database on every run.** natc-check.sh keeps auto-init OFF on purpose (it would destroy the isolated instance), so it reads this file instead."* auto-init ON 이면 매 실행 DB 가 새로 만들어져 요구가 저절로 충족된다 |
+
+남는 위험은 그 파일이 적은 **두 번째**뿐이다 — 같은 실행 안에서 **이웃
+케이스가 남긴 것**을 보는 것(신선한 DB 로도 안 풀린다). 그것은 §8.5 규약
+①(카탈로그 나열은 자기 객체로 범위를 좁힌다)이 이미 덮는다.
+
+**결론**: 러너를 새로 만들 필요가 없다. 회사 러너 + auto-init ON 이 답이고,
+**비표준이었던 것은 우리 쪽이었다** — 복제 레인(§9.3)과 같은 결론이다.
 
 ---
 
@@ -498,26 +624,39 @@ delete+insert 로 갈려도, 수신 측 행 수와 값이 송신과 같으면 �
 | ③ | **`manifest.tc` 로 시작해 완성 시점에 대조표로 동결** | 자동 대조의 값은 케이스가 움직이는 동안에만 크다 (§8.4) |
 | ④ | **원본 스위트의 `initialize.tc` 를 템플릿으로 쓴다** | 프레임워크는 막지 않는다. 관례는 "프로젝트마다 자기 서버 이름과 자기 `db1`/`db2`" 이고 원본 PROJ-1624 와 sm4 PROJ-2429 가 같은 패턴이다. 막았던 둘은 `server.conf` 블록 부재와 격리 인스턴스 전제 — 둘 다 우리 쪽이다 (§9.3) |
 
-### 10.1 ④ 의 마지막 확인 — 공식 트리에서
+### 10.1 ④ 의 확인 — 돌렸다. 경로 ② 확정
 
-이 조사는 부분 체크아웃에서 했다(머리글 참조). `conf/server.conf` 도 잘려
-있을 수 있으므로 **공식 트리에서** 아래 둘을 확인한다.
+두 체크아웃에서 각각 돌렸고 결과가 같다.
 
-```bash
-# ① 공식 트리에 PROJ_1624 서버 블록이 있는가
-grep -n -A22 "PROJ_1624_SERVER" conf/server.conf
+| 확인 | 결과 |
+|---|---|
+| `grep -n "PROJ_1624_SERVER" conf/server.conf` | **없음** |
+| `grep -n "^\[PROJ_2429_SERVER1\]" conf/server.conf` | **있음** — `:2074` (그리고 `:2124` 에 같은 이름이 한 번 더 — **중복 정의다**) |
+| `PROJ-1624-QC/repl/initialize.tc` 템플릿 | 실재 |
 
-# ② 없다면, 같은 패턴의 프로젝트 블록 하나를 템플릿으로
-grep -n -A22 "^\[PROJ_2429_SERVER1\]" conf/server.conf
+그러므로 **경로 ②** 다 — `PROJ_2429_SERVER1` 블록을 본떠 우리 블록 둘을
+더한다:
+
+```
+[NGI_SERVER1]
+ALTIBASE_SID = altibase1
+ALTIBASE_PORT_NO = %PORT_NO<n>
+ALTIBASE_REPLICATION_PORT_NO = %REPLICATION_PORT_NO<n>
+...
+ALTIBASE_HOME = $ATC_HOME/TC/Server/sm4/Project4/NativeGlobalIndexClaude/db1
 ```
 
-- **① 이 나오면**: 그 정의를 그대로 쓴다. 새 블록이 필요 없다.
-- **② 만 나오면**: 그것을 본떠 우리 블록 둘을 더한다
-  (`ALTIBASE_HOME = $ATC_HOME/TC/Server/sm4/Project4/NativeGlobalIndexClaude/db1`).
+그다음은 `PROJ-1624-QC/repl/initialize.tc` 를 복사해 서버 이름과 경로만
+바꾸는 일이다. 이것으로 `Replication` 레인의 `ConfigPending` 이 사라지고
+**427 검사 + 5 케이스**가 보류에서 풀린다.
 
-어느 쪽이든 그다음은 `PROJ-1624-QC/repl/initialize.tc` 를 복사해 이름만
-바꾸는 일이다. 이 확인이 끝나면 `Replication` 레인의 `ConfigPending` 이
-사라지고 **427 검사 + 5 케이스**가 보류에서 풀린다.
+**남은 단서 둘**:
+- 두 체크아웃 모두 **부분**이다(`TC/Server/repl4` 추적 37 개). 공식 트리의
+  `conf/server.conf` 에 `PROJ_1624_SERVER` 가 있을 가능성은 남아 있다 —
+  있으면 새 블록 없이 그것을 쓴다.
+- `%PORT_NO<n>` 자리를 고를 때 다른 프로젝트와 충돌하지 않게 확인할 것.
+  `PROJ_2429_SERVER1` 이 두 번 정의된 것을 보면 이 파일에 그런 사고가
+  실제로 있었다.
 
 ---
 
@@ -530,9 +669,16 @@ grep -n -A22 "^\[PROJ_2429_SERVER1\]" conf/server.conf
 1. **중복 판정표.** Claude 37 × Codex 116 전량. Port1624 는 매체가 갈라
    원칙적으로 중복 아님이나 **DDL·meta 배치는 3 자 확인**. 판정은
    (ㄱ) 완전 중복 / (ㄴ) 부분 중복 / (ㄷ) 중복 아님, 행 수 = 대상 쌍 수.
+   - **Codex 칸의 "오늘 그린인가" 는 빌드가 선 뒤에 채운다** (§2.1 · §5.3).
+     주제 겹침 판정은 서버 없이 먼저 끝낼 수 있다.
 2. **건지기 분해표.** 삭제될 47 `*-check.sh` 를 케이스 단위로 쪼개고,
    동적 단언마다 "`.lst` 로 어떻게 찍을지" 한 줄씩.
-3. §10 의 결정 넷.
+   - `sm-matrix-check` **G 절 61 검사**를 파티션 DDL 종류별로 재분할할지
+     여기서 정한다 (§8.2.1).
+3. 함께 판정할 것:
+   - **Codex 흡수 시 프로퍼티 못박기** 를 어떤 형태로 넣을지 (§5.4).
+   - `tools/lint-tc.py` 를 남길지 걷을지 (§4.1).
+   - 각 레인이 따르는 브리프를 케이스 주석에 어떻게 적을지 (§3.3).
 - **완료 조건**: 판정표 두 장. 스위트는 한 줄도 안 움직였다.
 
 ### Phase B — 매체 분리와 뼈대
@@ -551,9 +697,13 @@ grep -n -A22 "^\[PROJ_2429_SERVER1\]" conf/server.conf
 - **완료 조건**: 203 그린 / 5 보류, 합 208, `.lst` 무변경.
 
 ### Phase D — Codex 선별 흡수
-1. Phase A 판정대로 복사. **Codex 디렉터리는 손대지 않는다.**
-2. 복사한 케이스마다 출처 주석.
-- **완료 조건**: 흡수분 전량 그린, 판정표에 없는 복사 0, Codex 무변경.
+1. **먼저 Codex 116 을 오늘 빌드에서 돌린다** — 08-05 이후 실행 이력이 없어
+   그린 여부를 모른다 (§5.3). 붉은 것이 있으면 원인을 가른 뒤에 고른다.
+2. Phase A 판정대로 복사. **Codex 디렉터리는 손대지 않는다.**
+3. 복사한 케이스마다 **출처 주석** + **프로퍼티 못박기 추가** (§5.4).
+4. **`.lst` 재기록** — 이 Phase 에만 §8.6 의 예외가 적용된다 (§5.3).
+- **완료 조건**: 흡수분 전량 그린, 판정표에 없는 복사 0, **Codex 무변경**,
+  흡수분 전량이 자기 프로퍼티 전제를 세운다.
 
 ### Phase E — 그물 건지기 (**스크립트 삭제의 선행 조건**)
 1. 21 개를 §8.2 대로 `.tc` 화. 배치 단위 커밋.
@@ -594,3 +744,20 @@ grep -n -A22 "^\[PROJ_2429_SERVER1\]" conf/server.conf
 
 E 가 큰 이유는 §8.5 다. 동적 단언을 `.lst` 전사로 바꾸는 것은 옮기는 일이
 아니라 다시 쓰는 일이다.
+
+---
+
+## 14. 이 계획이 받지 않는 것 — 이름을 붙여 넘긴다
+
+V4 종결(J25)이 남긴 것 중 **통합의 몫이 아닌 것**이다. 조용히 사라지지
+않도록 여기 적는다.
+
+| 항목 | 무엇 | 왜 여기가 아닌가 |
+|---|---|---|
+| **O-8** | 멀티테이블 `UPDATE` 의 row movement 가 **`ERR-91015` 로 서버를 죽인다.** J25 가 08-19 HEAD 에서 재현을 재확인했고 **담당 잡이 없다** | 죽는 결함은 일반 `.tc` 로 담을 수 없다. 세 스위트 어디에도 커버가 없다. **제품 별건으로 열어야 한다** — 고쳐진 뒤에 케이스가 붙는다 |
+| **GR-11 프루닝 칸** | 비용 모델의 재료 교체(`qmgPartition::reviseAccessMethodsCost` 의 네이티브 글로벌 분기 → `mPrePruningPartRef`). J25 기록: *"판정·좌표·수용 기준이 다 있었는데 `jobs.tsv` 에 행이 없어 아무도 받지 않았다"* | 제품 코드 변경이다. 수용 기준이 `stat-bias-sweep` 24 칸 — 그 스윕도 삭제될 그물에 있으므로 **그물이 사라지기 전에** 처리해야 한다 |
+| `Concurrency/` · `Lifecycle/` | 세 스위트 모두 **0**. 계획서가 "계약이 필요한 레인" 으로 예약해 둔 자리 | 계약(다중 세션·재기동)이 서면 그때 채운다. §3.3 이 어느 브리프를 따를지 적어 두었다 |
+
+**GR-11 은 순서가 걸려 있다** — 수용 기준인 `stat-bias-sweep` 이 Phase E
+에서 건지는 목록에 없다(벤치·스윕 계열은 §9.1 "못 건지는 것"). 그러므로
+GR-11 을 넣으려면 **그물이 살아 있는 동안**이어야 한다. 이 계획보다 앞선다.
