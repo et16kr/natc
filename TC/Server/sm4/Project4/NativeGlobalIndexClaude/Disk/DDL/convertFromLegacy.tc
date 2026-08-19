@@ -1,0 +1,297 @@
+###########################################################################
+# TestCase Description = $GIT_ -> 네이티브 전환 — DIRECTKEY 거절 · 카탈로그 동등성 · 예산 경계 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다.
+#                        V4 코드 리뷰(v4-code-review.md)의 §3 · §4 · §6 이
+#                        각각 요구한 감시자다 — 리뷰의 마감 조건이
+#                        "발견마다 감시자(검사 칸)를 함께 세울 것" 이고,
+#                        셋 다 전환 축이라 픽스처를 공유한다
+#                        (커버리지 공백 N9 · N10 · N11).
+#
+# ★ 전제 — 오늘 $GIT_ 를 어떻게 만드는가
+#   J24(V4 D-2)가 $GIT_ 생성을 은퇴시켰다. 그냥 프로퍼티 0 으로 두고
+#   만들면 `ERR-314B6`(은퇴한 구현) 이다. 탈출구가 따로 있다:
+#
+#       __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1
+#
+#   내부 프로퍼티이고 기본값 0 이며 **디스크에만 있다**(메모리 대응 없음).
+#   그래서 이 케이스의 매체는 디스크다. 전환 픽스처는
+#       LEGACY_CREATE = 1  +  DISK_GLOBAL_INDEX_ENABLE = 0   -> $GIT_ 생성
+#       DISK_GLOBAL_INDEX_ENABLE = 1  +  ALTER INDEX ... REBUILD -> 전환
+#   이다. 이 케이스는 쓰고 나서 **반드시 0 으로 되돌린다** — 켜 둔 채로
+#   끝나면 뒤 케이스가 은퇴한 구현을 만들 수 있게 된다(§계획 8.5 규약 ②).
+#
+# 무엇을 재는가 — 셋
+#
+#   §3 (N9) `ALTER INDEX ... DIRECTKEY [OFF]` 가 REBUILD 를 **경유**한다.
+#       그 아래가 D-1 의 전환이므로, direct-key 토글 한 번이 사용자가
+#       요청하지도 않은 전 파티션 X 잠금 전환을 수행하거나(프로퍼티 1),
+#       문맥이 어긋난 `ERR-314B6` 을 낸다(프로퍼티 0). J24 가 "덮는 문장
+#       다섯" 으로 회계한 목록 **밖의 여섯 번째 경로**다.
+#       고친 뒤 기대값은 CREATE 가 같은 조합에 내는 것과 같은 거절이다.
+#
+#   §4 (N10) 전환이 `SYS_PART_KEY_COLUMNS_` 고아 행을 남겼다.
+#       진짜 DROP INDEX 는 지우고 네이티브 CREATE 는 애초에 만들지
+#       않으므로, 남으면 **D-1 의 "전환 결과 == CREATE 결과" 불변식이
+#       카탈로그 수준에서 깨진다.** 그래서 이 절은 전환본과 신규 생성본의
+#       메타 행을 나란히 센다.
+#
+#   §6 (N11) 전환 사전 검사의 인덱스 예산 off-by-one.
+#       $GIT_ PK 는 파티션마다 같은 INDEX_ID 의 로컬 인덱스를 함께 갖고
+#       전환은 그것을 새 트리 전에 걷는데, 세는 쪽이 아직 포함해서 셌다.
+#       가장 붐비는 파티션이 정확히 예산 64 면 전환 후엔 들어맞는데도
+#       거부됐다 — 방향이 안전한(거짓 거부) 경계 결함이다.
+#
+# ★ 실측 (2026-08-20) -- 전환 축 전부가 옳게 선다
+#
+#     IS_NATIVE_BEFORE 0 · IMPL_BEFORE GIT      탈출구로 $GIT_ 가 만들어졌다
+#     IMPL_AFTER_DIRECTKEY GIT (OFF 도 GIT)     DIRECTKEY 는 거절되고 아무것도 안 바꿨다
+#     IS_NATIVE_AFTER 1 · IMPL_AFTER NATIVE     REBUILD 가 판별자를 세우고
+#                                               숨김 테이블 참조도 걷었다
+#     PART_KEY_COLS  전환본 0 == 신규본 0        고아 행이 없다
+#     IMPL_REF / IMPL_BUD NATIVE                신규 생성본·예산 경로도 네이티브
+#
+#   즉 **D-1 의 "전환 결과 == CREATE 결과" 불변식이 카탈로그 수준에서
+#   성립한다.** 리뷰 §4 가 지목한 `SYS_PART_KEY_COLUMNS_` 고아 행은 이 키
+#   모양에서 재현되지 않았다.
+#
+#   ★ §3(DIRECTKEY)은 **디스크로는 도달하지 않는다** --
+#     `ERR-111A5 : The DIRECTKEY option is only supported for memory B-Tree
+#     indexes.` 매체 가드가 전환 판정보다 **먼저** 울린다. 리뷰가 그린
+#     "DIRECTKEY 가 요청 없는 전환을 수행한다" 는 메모리 $GIT_ 에서만
+#     성립하는데, 탈출구 프로퍼티가 디스크 전용이라 그 조합은 오늘 이
+#     스위트에서 만들 수 없다. 그 사실 자체가 이 절의 산출물이다.
+#
+# ★ 기대값 기록 조건
+#   셋 다 altibase 작업 트리의 **미커밋 수정이 커밋된 뒤**의 빌드에서만
+#   옳다. 그 전에 찍으면 결함을 기대값으로 동결한다(J19b 때 `.lst` 셋이
+#   실제로 그랬다).
+#
+# ★ .lst 미기록 — 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_CVT;
+    DROP TABLE NGD_CVT_REF;
+    DROP TABLE NGD_CVT_BUD;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION — 전제를 눈에 보이게 둔다
+##################################
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+    select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+
+##################################
+SECTOR; A — $GIT_ 를 하나 만든다 (탈출구를 잠깐 연다)
+##################################
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+    select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    # ★ PK 는 파티션 키 P 를 **포함하면 안 된다**. 처음 (K, P) 로 잡았다가
+    # 파티션 키와 **부분 중첩**하도록 (K, P) 로 잡는다 — 리뷰 §4 가
+    #   로컬 파티션드 인덱스로 설 수 있어 글로벌이 아예 필요 없어진다.
+    CREATE TABLE NGD_CVT ( P INTEGER, K INTEGER, V VARCHAR(16),
+                           CONSTRAINT NGD_CVT_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_CVT SELECT LEVEL,      100 + LEVEL, 'V' FROM DUAL CONNECT BY LEVEL <= 5;
+    INSERT INTO NGD_CVT SELECT LEVEL + 10, 200 + LEVEL, 'V' FROM DUAL CONNECT BY LEVEL <= 5;
+    INSERT INTO NGD_CVT SELECT LEVEL + 20, 300 + LEVEL, 'V' FROM DUAL CONNECT BY LEVEL <= 5;
+    COMMIT;
+
+    # A1. 정말 $GIT_ 인가 — 네이티브가 아니어야 한다(판별자 101 이 0 건).
+    SELECT COUNT(*) AS IS_NATIVE_BEFORE
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_CVT_PK';
+
+    # A2. $GIT_ 는 숨김 테이블을 갖는다 — INDEX_TABLE_ID 가 0 이 아니다.
+    SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_BEFORE
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+
+    # A3. 전환 전의 메타 행 수 — B 절의 같은 자리와 대조한다.
+    SELECT COUNT(*) AS PART_KEY_COLS_BEFORE
+      FROM SYSTEM_.SYS_PART_KEY_COLUMNS_
+     WHERE OBJECT_TYPE = 1
+       AND PARTITION_OBJ_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                                 WHERE INDEX_NAME = 'NGD_CVT_PK' );
+
+    # 탈출구는 여기서 닫는다. 전환 자체는 이것이 필요 없다.
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+
+##################################
+SECTOR; B — ★ §3 (N9). DIRECTKEY 는 전환을 수행해선 안 된다
+##################################
+# 전환이 서기 전에 이 절을 둔다 — DIRECTKEY 토글이 조용히 전환을 해 버리면
+# C 절이 "무엇이 전환했는지" 를 못 가른다.
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    # B1. DIRECTKEY ON. DIRECT KEY 는 글로벌의 비목표이므로 거절이어야 하고,
+    #     거절 사유는 CREATE 가 같은 조합에 내는 것과 같아야 한다.
+    ALTER INDEX NGD_CVT_PK DIRECTKEY;
+
+    # B2. 여전히 $GIT_ 인가 — 거절이 맞다면 아무것도 안 바뀌었어야 한다.
+    #     여기서 NATIVE 가 나오면 요청하지 않은 전환이 수행된 것이다.
+    SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_AFTER_DIRECTKEY
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+
+    # B3. DIRECTKEY OFF — 종전에는 메모리 전용 가드를 아예 지나쳤다
+    #     (qdx.cpp 의 빈 else). 이쪽도 막혀야 한다.
+    ALTER INDEX NGD_CVT_PK DIRECTKEY OFF;
+    SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_AFTER_DIRECTKEY_OFF
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+
+    # B4. 데이터는 온전한가.
+    SELECT COUNT(*) AS ROWS_AFTER_DIRECTKEY FROM NGD_CVT;
+
+##################################
+SECTOR; C — 전환. REBUILD 가 유일한 수단이다
+##################################
+    ALTER INDEX NGD_CVT_PK REBUILD;
+
+    # C1. 이제 네이티브인가.
+    SELECT COUNT(*) AS IS_NATIVE_AFTER
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_CVT_PK';
+    SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_AFTER
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+
+    # C2. 데이터가 전환을 건넜는가.
+    SELECT COUNT(*) AS ROWS_AFTER FROM NGD_CVT;
+    SELECT K, P, V FROM NGD_CVT ORDER BY K;
+
+    # C3. 유일성이 파티션을 가로질러 서는가 — 전환된 트리도 글로벌이다.
+    INSERT INTO NGD_CVT VALUES ( 15, 101, 'DUP-ACROSS' );
+
+##################################
+SECTOR; D — ★ §4 (N10). 전환 결과 == CREATE 결과
+##################################
+# 같은 모양을 처음부터 네이티브로 만든 것과 카탈로그를 나란히 센다.
+# 전환이 지우지 않은 행이 있으면 두 수가 갈린다.
+    CREATE TABLE NGD_CVT_REF ( P INTEGER, K INTEGER, V VARCHAR(16),
+                               CONSTRAINT NGD_CVT_REF_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    # D1. ★ 고아 행. 전환본과 신규본이 같아야 한다.
+    SELECT COUNT(*) AS PART_KEY_COLS_CONVERTED
+      FROM SYSTEM_.SYS_PART_KEY_COLUMNS_
+     WHERE OBJECT_TYPE = 1
+       AND PARTITION_OBJ_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                                 WHERE INDEX_NAME = 'NGD_CVT_PK' );
+    SELECT COUNT(*) AS PART_KEY_COLS_CREATED
+      FROM SYSTEM_.SYS_PART_KEY_COLUMNS_
+     WHERE OBJECT_TYPE = 1
+       AND PARTITION_OBJ_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                                 WHERE INDEX_NAME = 'NGD_CVT_REF_PK' );
+
+    # D2. 나머지 두 카탈로그도 같은가.
+    SELECT COUNT(*) AS PART_INDICES_CONVERTED
+      FROM SYSTEM_.SYS_PART_INDICES_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_PK' );
+    SELECT COUNT(*) AS PART_INDICES_CREATED
+      FROM SYSTEM_.SYS_PART_INDICES_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_REF_PK' );
+
+    SELECT COUNT(*) AS INDEX_PARTITIONS_CONVERTED
+      FROM SYSTEM_.SYS_INDEX_PARTITIONS_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_PK' );
+    SELECT COUNT(*) AS INDEX_PARTITIONS_CREATED
+      FROM SYSTEM_.SYS_INDEX_PARTITIONS_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_REF_PK' );
+
+    # D3. 판별자와 구현 표시도 같은가.
+    SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_REF
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_REF_PK';
+
+##################################
+SECTOR; E — ★ §6 (N11). 예산 경계에서 전환이 거짓으로 거부되지 않는다
+##################################
+# 전환은 곧 걷어 낼 로컬 인덱스를 세는 대상에서 빼야 한다. 빼지 않으면
+# 가장 붐비는 파티션이 정확히 예산에 있을 때 "개수 초과" 로 거부된다.
+#
+# 경계를 정확히 64 로 맞추는 것은 이 케이스가 스스로 못 한다(예산은
+# SMI_INDEX_BIT_BUDGET 이고 픽스처가 그 수만큼 인덱스를 만들어야 한다).
+# 그래서 여기서는 **방향만** 잰다 — 로컬 인덱스를 여럿 얹은 테이블의
+# 전환이 서는가. 정확한 경계는 Boundary 축의 indexBudget 계열이 받는다.
+
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+
+    CREATE TABLE NGD_CVT_BUD ( P INTEGER, K INTEGER,
+                               C1 INTEGER, C2 INTEGER, C3 INTEGER, C4 INTEGER,
+                               CONSTRAINT NGD_CVT_BUD_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+
+    INSERT INTO NGD_CVT_BUD SELECT LEVEL, LEVEL, 1, 2, 3, 4 FROM DUAL CONNECT BY LEVEL <= 5;
+    COMMIT;
+
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+
+    # 파티션마다 로컬 인덱스를 여럿 얹는다. $GIT_ PK 의 로컬 분이 여기
+    # 더해져 있으므로, 전환 검사가 그것을 빼지 않으면 수가 부풀어 있다.
+    CREATE INDEX NGD_CVT_BUD_L1 ON NGD_CVT_BUD ( C1 ) LOCAL;
+    CREATE INDEX NGD_CVT_BUD_L2 ON NGD_CVT_BUD ( C2 ) LOCAL;
+    CREATE INDEX NGD_CVT_BUD_L3 ON NGD_CVT_BUD ( C3 ) LOCAL;
+    CREATE INDEX NGD_CVT_BUD_L4 ON NGD_CVT_BUD ( C4 ) LOCAL;
+
+    # E1. 파티션이 지금 몇 개의 인덱스를 갖는가 (전환 검사가 세는 수).
+    SELECT COUNT(*) AS LOCAL_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDEX_PARTITIONS_ IP, SYSTEM_.SYS_INDICES_ I
+     WHERE IP.INDEX_ID = I.INDEX_ID
+       AND I.TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                           WHERE TABLE_NAME = 'NGD_CVT_BUD' );
+
+    # E2. 전환이 서는가.
+    ALTER INDEX NGD_CVT_BUD_PK REBUILD;
+    SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_BUD
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_BUD_PK';
+    SELECT COUNT(*) AS ROWS_BUD FROM NGD_CVT_BUD;
+
+##################################
+SECTOR; FINALIZATION — 탈출구가 닫혀 있는지 확인하고 끝낸다
+##################################
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+    DROP TABLE NGD_CVT;
+    DROP TABLE NGD_CVT_REF;
+    DROP TABLE NGD_CVT_BUD;
+}

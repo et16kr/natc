@@ -1,0 +1,351 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = R1 게이트 -- REPEATABLE READ 의 평범한 SELECT 는 병렬 글로벌 스캔을 타지 않는다 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다.
+$T0> #                        커버리지 공백 N7 의 **정정판**이다 (아래 ★).
+$T0> #
+$T0> # ★ N7 의 정정 -- 격리 수준 매트릭스는 이미 있다
+$T0> #   커버리지 문서가 "세 수준 × 글로벌 스캔이 없다" 고 적은 근거는
+$T0> #   `SET TRANSACTION` 문자열이 스위트에 3 번뿐이라는 계수였다. **그 계수가
+$T0> #   과소였다** -- Memory/Transaction/isolation.tc 가
+$T0> #       DEF RUN_AT_ISOLATION( @aLevel )
+$T0> #   하나를 세 수준 이름으로 여섯 번 부른다. 문자열로 세면 헬퍼 뒤에 숨은
+$T0> #   호출이 안 보인다. 세 수준 × 글로벌 스캔·DML 은 **덮여 있다.**
+$T0> #
+$T0> #   덮이지 않은 것은 격리 수준 자체가 아니라 **격리 × 병렬**이다. 그 자리가
+$T0> #   R1 이고, 이 케이스가 그것이다.
+$T0> #
+$T0> # 무엇을 재는가 -- 명세 §4.3 R1
+$T0> #
+$T0> #   글로벌 스캔은 로우를 읽으면 그 로우의 소유 파티션 커서에 넘겨 잠금을
+$T0> #   잡는다(owner handoff). **그 넘김은 병렬에 태울 수 없다.** 그런데 명세
+$T0> #   조사가 구멍 하나를 찾았다:
+$T0> #
+$T0> #     > owner handoff 는 병렬에 태우지 않는다. 그중 REPEATABLE READ 격리의
+$T0> #     > **평범한 SELECT** 는 오늘 어떤 병렬 배제 규칙에도 걸리지 않는
+$T0> #     > 구멍이므로 새 게이트가 필요하다 (설계 §4.3 R1).
+$T0> #
+$T0> #   즉 DML·FOR UPDATE 는 다른 이유로 이미 직렬인데, REPEATABLE READ 의
+$T0> #   맨 SELECT 만은 아무 규칙에도 안 걸려서 **병렬 코디네이터 아래로 들어갈
+$T0> #   수 있었다.** 들어가면 handoff 가 병렬로 돌아 잠금이 어긋난다.
+$T0> #
+$T0> #   ★ 실측 (2026-08-20) -- 게이트는 **노드가 아니라 슬라이싱**을 막는다
+$T0> #
+$T0> #     처음 이 케이스는 "REPEATABLE READ 에서는 플랜에
+$T0> #     PARALLEL-SCAN-COORDINATOR 가 서지 않아야 한다" 고 주장했다.
+$T0> #     **그렇지 않다.** 세 수준 모두 코디네이터 노드가 선다. 갈리는 것은
+$T0> #     그 아래다:
+$T0> #
+$T0> #       READ COMMITTED  워커마다 슬라이스 7860 / 7467 / 7467 / 7206
+$T0> #                       (합 30000) + `TID:` 칸이 **있다**
+$T0> #       SERIALIZABLE    같다
+$T0> #       REPEATABLE READ 워커마다 **ACCESS 30000** + `TID:` 칸이 **없다**
+$T0> #
+$T0> #     `TID` 가 없다는 것은 **그 워커에 스레드가 배정되지 않았다**는 뜻이고,
+$T0> #     실제로 병렬로 돌았다면 넷이 각각 30000 을 세어 답이 네 배가 됐을
+$T0> #     것이다. 답은 세 수준 모두 같다(450015000/90000/30000). 그러므로
+$T0> #     **R1 게이트는 걸려 있고, 그 서명은 "노드가 사라지는 것" 이 아니라
+$T0> #     "슬라이스와 TID 가 사라지는 것"** 이다.
+$T0> #
+$T0> #   ★ 그래서 이 케이스가 감시하는 것은 둘이다
+$T0> #     (1) REPEATABLE READ 에서 **슬라이스와 `TID` 가 나타나면** 게이트가
+$T0> #         뚫린 것이다 -- handoff 가 병렬로 도는 구멍(명세 §4.3 R1)
+$T0> #     (2) **답은 세 수준에서 같아야 한다** -- 게이트는 경로를 바꾸지
+$T0> #         정답을 바꾸지 않는다
+$T0> #
+$T0> # ★ 왜 디스크인가
+$T0> #   병렬 글로벌 스캔(GR-04)이 실증된 매체가 디스크다
+$T0> #   (parallelGlobalScan.tc). 같은 축이므로 이웃에 둔다.
+$T0> #
+$T0> # ★ 플랜을 담는 것의 대가 -- parallelGlobalScan.tc 가 실측한 것
+$T0> #   슬라이스 경계가 b-tree 분리키에서 유도되므로 분배는 결정적이지만,
+$T0> #   그 값은 **페이지 크기에 매달린다.** 기대값은 A4_64 의 것이다.
+$T0> #
+$T0> # ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> ###########################################################################
+$T0> # ★ 실측으로 배운 것: `SET TRANSACTION ISOLATION LEVEL` 은 autocommit 이
+$T0> #   켜져 있으면 ERR-41048 로 거절된다. 그래서 수준을 바꾸기 전에
+$T0> #   `ALTER SESSION SET AUTOCOMMIT = FALSE` 를 둔다 -- Memory/Transaction/
+$T0> #   isolation.tc 의 RUN_AT_ISOLATION 이 쓰는 것과 같은 관용구다.
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_PIG;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGD_PIG ( P INTEGER, K INTEGER, A INTEGER )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10000 ),
+        PARTITION P2 VALUES LESS THAN ( 20000 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> # 병렬이 실제로 설 만큼은 넣는다. parallelGlobalScan.tc 와 같은 규모다.
+$T0> INSERT INTO NGD_PIG
+        SELECT LEVEL, LEVEL, MOD( LEVEL, 7 )
+          FROM DUAL CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE INDEX NGD_PIG_G ON NGD_PIG ( K, A );
+Create success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_PIG_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- READ COMMITTED 는 병렬을 탈 수 있다 (대조군)
+$T0> ##################################
+$T0> # 이 절이 없으면 B 절은 "병렬이 애초에 안 서는 것" 과 구별되지 않는다.
+$T0> # 항진식을 피하려면 병렬이 서는 것을 먼저 보여야 한다.
+$T0> COMMIT;
+Commit success.
+$T0> ALTER SESSION SET AUTOCOMMIT = FALSE;
+Alter success.
+$T0> SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+Command executed successfully.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) INDEX( NGD_PIG, NGD_PIG_G ) */ COUNT(*)
+      FROM NGD_PIG WHERE K > 0;
+COUNT                
+-----------------------
+30000                
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARALLEL-SCAN-COORDINATOR ( TABLE: SYS.NGD_PIG, ACCESS: 30000 )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7860, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7467, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7467, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7206, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) INDEX( NGD_PIG, NGD_PIG_G ) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS ANSWER_RC
+      FROM NGD_PIG WHERE K > 0;
+ANSWER_RC                                                       
+------------------------------------------------------------------
+450015000/90000/30000                                           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- ★ R1. REPEATABLE READ 의 맨 SELECT 는 병렬로 서지 않는다
+$T0> ##################################
+$T0> COMMIT;
+Commit success.
+$T0> ALTER SESSION SET AUTOCOMMIT = FALSE;
+Alter success.
+$T0> SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+Command executed successfully.
+
+$T0> # B1. 플랜. 코디네이터 노드는 서지만 **슬라이스가 나뉘지 않고 TID 가
+$T0> #     찍히지 않는** 것이 게이트의 모습이다(위 ★ 실측). 여기서 A 절처럼
+$T0> #     슬라이스가 나뉘면 구멍이 열린 것이다.
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) INDEX( NGD_PIG, NGD_PIG_G ) */ COUNT(*)
+      FROM NGD_PIG WHERE K > 0;
+COUNT                
+-----------------------
+30000                
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARALLEL-SCAN-COORDINATOR ( TABLE: SYS.NGD_PIG, ACCESS: 30000 )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 30000, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 30000, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 30000, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 30000, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> # B2. 답은 A 절과 같아야 한다. 게이트는 경로를 바꾸지 정답을 바꾸지
+$T0> #     않는다 -- 다르면 게이트가 아니라 결함이다.
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) INDEX( NGD_PIG, NGD_PIG_G ) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS ANSWER_RR
+      FROM NGD_PIG WHERE K > 0;
+ANSWER_RR                                                       
+------------------------------------------------------------------
+450015000/90000/30000                                           
+1 row selected.
+
+$T0> # B3. 힌트 없이도 같은가.
+$T0> SELECT /*+ INDEX( NGD_PIG, NGD_PIG_G ) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS ANSWER_RR_NOHINT
+      FROM NGD_PIG WHERE K > 0;
+ANSWER_RR_NOHINT                                                
+------------------------------------------------------------------
+450015000/90000/30000                                           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- SERIALIZABLE
+$T0> ##################################
+$T0> # V1 수정이 handoff 진입을 "== REPEATABLE" 로 좁혔으므로 SERIALIZABLE 은
+$T0> # 넘김을 타지 않는다(isolation.tc 머리말). 그렇다면 R1 의 구멍도 이 수준엔
+$T0> # 없어야 한다 -- 병렬이 서도 무방하다. 그것을 전사해 둔다.
+$T0> COMMIT;
+Commit success.
+$T0> ALTER SESSION SET AUTOCOMMIT = FALSE;
+Alter success.
+$T0> SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+Command executed successfully.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) INDEX( NGD_PIG, NGD_PIG_G ) */ COUNT(*)
+      FROM NGD_PIG WHERE K > 0;
+COUNT                
+-----------------------
+30000                
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
+ GROUP-AGGREGATION ( ITEM_SIZE: BLOCKED, GROUP_COUNT: 1, BUCKET_COUNT: 1, ACCESS: 1, COST: BLOCKED )
+  PARALLEL-SCAN-COORDINATOR ( TABLE: SYS.NGD_PIG, ACCESS: 30000 )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7860, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7467, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7467, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+   PARALLEL-QUEUE ( TID: BLOCKED )
+    SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7206, DISK_PAGE_COUNT: BLOCKED, TID: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) INDEX( NGD_PIG, NGD_PIG_G ) */
+           SUM(K)||'/'||SUM(A)||'/'||COUNT(*) AS ANSWER_SER
+      FROM NGD_PIG WHERE K > 0;
+ANSWER_SER                                                      
+------------------------------------------------------------------
+450015000/90000/30000                                           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 어차피 직렬인 문장들. 게이트가 넓어 손해 보던 자리다
+$T0> ##################################
+$T0> # 명세 조사가 적은 둘째 사실: 게이트가 mParallelDegree > 1 하나만 보므로
+$T0> # DML·FOR UPDATE 처럼 **어차피 직렬로 도는** 문장이 힌트 한 줄 때문에
+$T0> # 글로벌 인덱스를 잃었다(점 조회 COST 31.82 -> 368.06). V4 가 그 차집합을
+$T0> # 회수했다면 아래 플랜에 글로벌 SCAN 이 남아 있어야 한다.
+$T0> COMMIT;
+Commit success.
+$T0> ALTER SESSION SET AUTOCOMMIT = FALSE;
+Alter success.
+$T0> SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+Command executed successfully.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = ON;
+Alter success.
+
+$T0> # D1. 점 조회에 병렬 힌트 -- 글로벌을 잃지 않아야 한다
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) */ P, K, A FROM NGD_PIG WHERE K = 12345;
+P           K           A           
+----------------------------------------
+12345       12345       4           
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 3, TUPLE_SIZE: 12, COST: BLOCKED )
+ PARALLEL-SCAN-COORDINATOR ( TABLE: SYS.NGD_PIG, ACCESS: 1 )
+  PARALLEL-QUEUE ( TID: BLOCKED )
+   SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  PARALLEL-QUEUE ( TID: BLOCKED )
+   SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  PARALLEL-QUEUE ( TID: BLOCKED )
+   SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  PARALLEL-QUEUE ( TID: BLOCKED )
+   SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$T0> # D2. FOR UPDATE
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> SELECT /*+ PARALLEL( NGD_PIG, 4 ) */ K FROM NGD_PIG WHERE K = 12345 FOR UPDATE;
+K           
+--------------
+12345       
+1 row selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 4, COST: BLOCKED )
+ SCAN ( TABLE: SYS.NGD_PIG, INDEX: SYS.NGD_PIG_G, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+$T0> ROLLBACK;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+
+$T0> # 값 확인
+$T0> SELECT P, K, A FROM NGD_PIG WHERE K = 12345;
+P           K           A           
+----------------------------------------
+12345       12345       4           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> COMMIT;
+Commit success.
+$T0> ALTER SESSION SET AUTOCOMMIT = TRUE;
+Alter success.
+$T0> DROP TABLE NGD_PIG;
+Drop success.
+

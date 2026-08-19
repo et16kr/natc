@@ -1,0 +1,319 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = iloader 왕복 — 글로벌 인덱스가 걸린 파티션드 테이블의 out/in.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N14).
+$T0> #
+$T0> # ★ 이 디렉터리는 제안이다 -- `Tool/` 신설 결정이 먼저다
+$T0> #   계획 §3.1 의 지도에 유틸리티 축의 자리가 없다. `Port1624/tool/` 은
+$T0> #   계보 보존으로 들어온 것이고 §8.4 가 그 서브트리를 MANIFEST 로
+$T0> #   동결했으므로, **신규 유틸 케이스를 거기 더하는 것은 규약 위반**이다.
+$T0> #   `Regress/` 를 신설한 것과 같은 이유(영역이 아니라 접점)로 최상위
+$T0> #   `Tool/` 을 제안하고, 이 파일이 그 첫 입주자다.
+$T0> #   결정이 다르게 나면 이 디렉터리째 옮긴다.
+$T0> #
+$T0> # 무엇을 재는가 -- 계보에 없는 유일한 유틸리티
+$T0> #
+$T0> #   `Port1624/tool/` 이 담은 것은 `aexport` · `isql` · `atomic` 셋이다.
+$T0> #   **iloader 는 스위트에도 삭제될 그물에도 없다.** 그런데 iloader 는
+$T0> #   글로벌 인덱스가 걸린 테이블에 대량 적재를 하는 실제 경로이고,
+$T0> #   `dpathInsert.tc`(APPEND 힌트)와는 **클라이언트 경로가 다르다** --
+$T0> #   그쪽은 SQL 문장이고 이쪽은 CLI 가 프로토콜로 밀어 넣는다.
+$T0> #
+$T0> #   물음 셋:
+$T0> #     1. out 이 파티션드 + 글로벌 인덱스 테이블을 온전히 뽑는가
+$T0> #     2. in 이 넣은 뒤 **글로벌 트리로 읽은 답**이 원본과 같은가
+$T0> #        (힙만 맞고 트리가 비면 COUNT(*) 로는 안 보인다)
+$T0> #     3. 글로벌 유일성을 어기는 입력이 들어오면 어떻게 되는가 --
+$T0> #        전체 실패인가 행 단위 거절인가
+$T0> #
+$T0> # 관용구
+$T0> #   `EXEC PROC1 "<명령>"; P_WAIT PROC1;`
+$T0> #   (선례: `Port1624/tool/aexport/aexport_user.tc:142`)
+$T0> #
+$T0> # ★ 환경 전제
+$T0> #   러너 환경에 `iloader` 가 PATH 에 있어야 한다. 없으면 이 케이스는
+$T0> #   그 사실을 전사하고 끝난다 -- 그것도 정보다.
+$T0> #
+$T0> # ★ 호출 규약 -- 처음 쓴 것이 세 군데 틀렸다 (실측으로 고침)
+$T0> #
+$T0> #     -d 가 **데이터 파일**이고 -f 가 **포맷 파일**이다. 처음에 둘을
+$T0> #     뒤바꿔 쓰고 -d 에 로그를 넘겼더니, iloader 는 조용히 끝나고
+$T0> #     왕복이 **0 행**이 됐다. 로그 옵션은 따로 -log 다.
+$T0> #
+$T0> #     포트는 `-port` 다. `-P` 는 없고, 대문자로 주면 -p(비밀번호)와
+$T0> #     충돌해 `ERR-91027 : Option (-P) is used more than once.` 가 난다.
+$T0> #     러너 환경의 포트와 서버 포트가 갈릴 수 있으므로 **명시한다.**
+$T0> #
+$T0> #     포맷 파일은 `formout` 이 만든다. 그리고 그 안에 **테이블 이름이
+$T0> #     박혀 있어**, 다른 테이블로 넣으려면 이름을 바꾼 사본이 필요하다.
+$T0> #
+$T0> # ★ EXEC PROC1 은 iloader 의 표준출력을 전사에 남기지 않는다.
+$T0> #   그래서 이 케이스는 **적재 결과를 SQL 로만** 판정한다 -- 그편이
+$T0> #   기계 종속 값(건수·시각·경로)이 기대값에 새지 않아 낫다.
+$T0> #
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGT_ILD;
+$T0> DROP TABLE NGT_ILD_IN;
+$T0> SKIP END;
+
+$T0> # ★ 여기에 RM 을 두지 않는다. 첫 실행에는 파일이 없고, `SKIP` 은
+$T0> #   RM 의 실패를 덮지 못해 케이스가 그 자리에서 멈춘다(실측).
+$T0> #   정리는 FINALIZATION 에서만 한다.
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGT_ILD ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGT_ILD SELECT LEVEL,      100 + LEVEL, 'A' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> INSERT INTO NGT_ILD SELECT LEVEL + 10, 200 + LEVEL, 'B' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> INSERT INTO NGT_ILD SELECT LEVEL + 20, 300 + LEVEL, 'C' FROM DUAL CONNECT BY LEVEL <= 9;
+9 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> CREATE UNIQUE INDEX NGT_ILD_G ON NGT_ILD ( K );
+Create success.
+
+$T0> # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+$T0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGT_ILD_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+$T0> # A1. 원본의 답. 왕복 뒤 이것과 대조한다.
+$T0> SELECT /*+ INDEX( NGT_ILD, NGT_ILD_G ) */ COUNT(*)          AS SRC_TOTAL    FROM NGT_ILD;
+SRC_TOTAL            
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD, NGT_ILD_G ) */ COUNT(DISTINCT K) AS SRC_DISTINCT FROM NGT_ILD;
+SRC_DISTINCT         
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD, NGT_ILD_G ) */ SUM(K)||'/'||SUM(P) AS SRC_SUM    FROM NGT_ILD;
+SRC_SUM                                    
+---------------------------------------------
+5535/405                                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; B -- out
+$T0> ##################################
+$T0> # 포맷 파일을 먼저 만든다 -- out/in 둘 다 이것을 요구한다.
+$T0> EXEC PROC1 "iloader formout -s 127.0.0.1 -u sys -p manager -port ${ALTIBASE_PORT_NO} -T NGT_ILD -f NGT_ILD.fmt";
+$T0> P_WAIT PROC1;
+
+$T0> EXEC PROC1 "iloader out -s 127.0.0.1 -u sys -p manager -port ${ALTIBASE_PORT_NO} -T NGT_ILD -f NGT_ILD.fmt -d NGT_ILD.dat";
+$T0> P_WAIT PROC1;
+
+$T0> ##################################
+$T0> SECTOR 3; C -- 빈 테이블에 in. 트리로 읽은 답이 같아야 한다
+$T0> ##################################
+$T0> CREATE TABLE NGT_ILD_IN ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE UNIQUE INDEX NGT_ILD_IN_G ON NGT_ILD_IN ( K );
+Create success.
+
+$T0> # 포맷 파일에 테이블 이름이 박혀 있으므로 대상 이름으로 바꾼 사본을 만든다.
+$T0> EXEC PROC1 "sh -c \"sed s/NGT_ILD/NGT_ILD_IN/ NGT_ILD.fmt > NGT_ILD_IN.fmt\"";
+$T0> P_WAIT PROC1;
+
+$T0> EXEC PROC1 "iloader in -s 127.0.0.1 -u sys -p manager -port ${ALTIBASE_PORT_NO} -T NGT_ILD_IN -f NGT_ILD_IN.fmt -d NGT_ILD.dat";
+$T0> P_WAIT PROC1;
+
+$T0> # C1. ★ 힙과 트리를 따로 센다. 적재가 인덱스를 갱신하지 않으면
+$T0> #     힙만 맞고 트리가 빈다 -- COUNT(*) 하나로는 안 보인다.
+$T0> SELECT COUNT(*) AS DST_TOTAL_HEAP FROM NGT_ILD_IN;
+DST_TOTAL_HEAP       
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(*)          AS DST_TOTAL    FROM NGT_ILD_IN;
+DST_TOTAL            
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(DISTINCT K) AS DST_DISTINCT FROM NGT_ILD_IN;
+DST_DISTINCT         
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ SUM(K)||'/'||SUM(P) AS DST_SUM    FROM NGT_ILD_IN;
+DST_SUM                                    
+---------------------------------------------
+5535/405                                   
+1 row selected.
+
+$T0> # C2. 파티션 배치도 같은가 -- 라우팅이 옳았는가.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(*) AS DST_P1 FROM NGT_ILD_IN PARTITION( P1 );
+DST_P1               
+-----------------------
+9                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(*) AS DST_P2 FROM NGT_ILD_IN PARTITION( P2 );
+DST_P2               
+-----------------------
+9                    
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(*) AS DST_PD FROM NGT_ILD_IN PARTITION( PD );
+DST_PD               
+-----------------------
+9                    
+1 row selected.
+
+$T0> # C3. 정렬이 파티션을 가로질러 서는가 -- 트리가 제대로 섰다는 증거다.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ K, P, V FROM NGT_ILD_IN ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         1           A                 
+102         2           A                 
+103         3           A                 
+104         4           A                 
+105         5           A                 
+106         6           A                 
+107         7           A                 
+108         8           A                 
+109         9           A                 
+201         11          B                 
+202         12          B                 
+203         13          B                 
+204         14          B                 
+205         15          B                 
+206         16          B                 
+207         17          B                 
+208         18          B                 
+209         19          B                 
+301         21          C                 
+302         22          C                 
+303         23          C                 
+304         24          C                 
+305         25          C                 
+306         26          C                 
+307         27          C                 
+308         28          C                 
+309         29          C                 
+27 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 4; D -- 글로벌 유일성을 어기는 적재
+$T0> ##################################
+$T0> # 같은 파일을 한 번 더 넣는다. 모든 키가 이미 있으므로 전부 위반이다.
+$T0> # 물음은 "무엇이라 하는가" 이고, 그 답이 이 절의 산출물이다.
+$T0> EXEC PROC1 "iloader in -s 127.0.0.1 -u sys -p manager -port ${ALTIBASE_PORT_NO} -T NGT_ILD_IN -f NGT_ILD_IN.fmt -d NGT_ILD.dat";
+$T0> P_WAIT PROC1;
+
+$T0> # D1. 행이 늘지 않았어야 한다. 늘었다면 유일성이 적재 경로에서
+$T0> #     빠졌다는 뜻이다.
+$T0> SELECT COUNT(*) AS AFTER_DUP_HEAP FROM NGT_ILD_IN;
+AFTER_DUP_HEAP       
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(*)          AS AFTER_DUP_TREE     FROM NGT_ILD_IN;
+AFTER_DUP_TREE       
+-----------------------
+27                   
+1 row selected.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ COUNT(DISTINCT K) AS AFTER_DUP_DISTINCT FROM NGT_ILD_IN;
+AFTER_DUP_DISTINCT   
+-----------------------
+27                   
+1 row selected.
+
+$T0> # D2. 트리와 힙이 여전히 일치하는가 -- 실패한 적재가 반쪽을 남기면
+$T0> #     여기서 갈린다.
+$T0> SELECT /*+ INDEX( NGT_ILD_IN, NGT_ILD_IN_G ) */ K, P FROM NGT_ILD_IN ORDER BY K;
+K           P           
+---------------------------
+101         1           
+102         2           
+103         3           
+104         4           
+105         5           
+106         6           
+107         7           
+108         8           
+109         9           
+201         11          
+202         12          
+203         13          
+204         14          
+205         15          
+206         16          
+207         17          
+208         18          
+209         19          
+301         21          
+302         22          
+303         23          
+304         24          
+305         25          
+306         26          
+307         27          
+308         28          
+309         29          
+27 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> RM "NGT_ILD.dat";
+$T0> RM "NGT_ILD.fmt";
+$T0> RM "NGT_ILD_IN.fmt";
+$T0> SKIP END;
+$T0> DROP TABLE NGT_ILD;
+Drop success.
+$T0> DROP TABLE NGT_ILD_IN;
+Drop success.
+

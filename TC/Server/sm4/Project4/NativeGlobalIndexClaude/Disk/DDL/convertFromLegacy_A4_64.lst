@@ -1,0 +1,475 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = $GIT_ -> 네이티브 전환 — DIRECTKEY 거절 · 카탈로그 동등성 · 예산 경계 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다.
+$T0> #                        V4 코드 리뷰(v4-code-review.md)의 §3 · §4 · §6 이
+$T0> #                        각각 요구한 감시자다 — 리뷰의 마감 조건이
+$T0> #                        "발견마다 감시자(검사 칸)를 함께 세울 것" 이고,
+$T0> #                        셋 다 전환 축이라 픽스처를 공유한다
+$T0> #                        (커버리지 공백 N9 · N10 · N11).
+$T0> #
+$T0> # ★ 전제 — 오늘 $GIT_ 를 어떻게 만드는가
+$T0> #   J24(V4 D-2)가 $GIT_ 생성을 은퇴시켰다. 그냥 프로퍼티 0 으로 두고
+$T0> #   만들면 `ERR-314B6`(은퇴한 구현) 이다. 탈출구가 따로 있다:
+$T0> #
+$T0> #       __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1
+$T0> #
+$T0> #   내부 프로퍼티이고 기본값 0 이며 **디스크에만 있다**(메모리 대응 없음).
+$T0> #   그래서 이 케이스의 매체는 디스크다. 전환 픽스처는
+$T0> #       LEGACY_CREATE = 1  +  DISK_GLOBAL_INDEX_ENABLE = 0   -> $GIT_ 생성
+$T0> #       DISK_GLOBAL_INDEX_ENABLE = 1  +  ALTER INDEX ... REBUILD -> 전환
+$T0> #   이다. 이 케이스는 쓰고 나서 **반드시 0 으로 되돌린다** — 켜 둔 채로
+$T0> #   끝나면 뒤 케이스가 은퇴한 구현을 만들 수 있게 된다(§계획 8.5 규약 ②).
+$T0> #
+$T0> # 무엇을 재는가 — 셋
+$T0> #
+$T0> #   §3 (N9) `ALTER INDEX ... DIRECTKEY [OFF]` 가 REBUILD 를 **경유**한다.
+$T0> #       그 아래가 D-1 의 전환이므로, direct-key 토글 한 번이 사용자가
+$T0> #       요청하지도 않은 전 파티션 X 잠금 전환을 수행하거나(프로퍼티 1),
+$T0> #       문맥이 어긋난 `ERR-314B6` 을 낸다(프로퍼티 0). J24 가 "덮는 문장
+$T0> #       다섯" 으로 회계한 목록 **밖의 여섯 번째 경로**다.
+$T0> #       고친 뒤 기대값은 CREATE 가 같은 조합에 내는 것과 같은 거절이다.
+$T0> #
+$T0> #   §4 (N10) 전환이 `SYS_PART_KEY_COLUMNS_` 고아 행을 남겼다.
+$T0> #       진짜 DROP INDEX 는 지우고 네이티브 CREATE 는 애초에 만들지
+$T0> #       않으므로, 남으면 **D-1 의 "전환 결과 == CREATE 결과" 불변식이
+$T0> #       카탈로그 수준에서 깨진다.** 그래서 이 절은 전환본과 신규 생성본의
+$T0> #       메타 행을 나란히 센다.
+$T0> #
+$T0> #   §6 (N11) 전환 사전 검사의 인덱스 예산 off-by-one.
+$T0> #       $GIT_ PK 는 파티션마다 같은 INDEX_ID 의 로컬 인덱스를 함께 갖고
+$T0> #       전환은 그것을 새 트리 전에 걷는데, 세는 쪽이 아직 포함해서 셌다.
+$T0> #       가장 붐비는 파티션이 정확히 예산 64 면 전환 후엔 들어맞는데도
+$T0> #       거부됐다 — 방향이 안전한(거짓 거부) 경계 결함이다.
+$T0> #
+$T0> # ★ 실측 (2026-08-20) -- 전환 축 전부가 옳게 선다
+$T0> #
+$T0> #     IS_NATIVE_BEFORE 0 · IMPL_BEFORE GIT      탈출구로 $GIT_ 가 만들어졌다
+$T0> #     IMPL_AFTER_DIRECTKEY GIT (OFF 도 GIT)     DIRECTKEY 는 거절되고 아무것도 안 바꿨다
+$T0> #     IS_NATIVE_AFTER 1 · IMPL_AFTER NATIVE     REBUILD 가 판별자를 세우고
+$T0> #                                               숨김 테이블 참조도 걷었다
+$T0> #     PART_KEY_COLS  전환본 0 == 신규본 0        고아 행이 없다
+$T0> #     IMPL_REF / IMPL_BUD NATIVE                신규 생성본·예산 경로도 네이티브
+$T0> #
+$T0> #   즉 **D-1 의 "전환 결과 == CREATE 결과" 불변식이 카탈로그 수준에서
+$T0> #   성립한다.** 리뷰 §4 가 지목한 `SYS_PART_KEY_COLUMNS_` 고아 행은 이 키
+$T0> #   모양에서 재현되지 않았다.
+$T0> #
+$T0> #   ★ §3(DIRECTKEY)은 **디스크로는 도달하지 않는다** --
+$T0> #     `ERR-111A5 : The DIRECTKEY option is only supported for memory B-Tree
+$T0> #     indexes.` 매체 가드가 전환 판정보다 **먼저** 울린다. 리뷰가 그린
+$T0> #     "DIRECTKEY 가 요청 없는 전환을 수행한다" 는 메모리 $GIT_ 에서만
+$T0> #     성립하는데, 탈출구 프로퍼티가 디스크 전용이라 그 조합은 오늘 이
+$T0> #     스위트에서 만들 수 없다. 그 사실 자체가 이 절의 산출물이다.
+$T0> #
+$T0> # ★ 기대값 기록 조건
+$T0> #   셋 다 altibase 작업 트리의 **미커밋 수정이 커밋된 뒤**의 빌드에서만
+$T0> #   옳다. 그 전에 찍으면 결함을 기대값으로 동결한다(J19b 때 `.lst` 셋이
+$T0> #   실제로 그랬다).
+$T0> #
+$T0> # ★ .lst 미기록 — 서버가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_CVT;
+$T0> DROP TABLE NGD_CVT_REF;
+$T0> DROP TABLE NGD_CVT_BUD;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION — 전제를 눈에 보이게 둔다
+$T0> ##################################
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+$T0> select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A — $GIT_ 를 하나 만든다 (탈출구를 잠깐 연다)
+$T0> ##################################
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
+Alter success.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+0                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # ★ PK 는 파티션 키 P 를 **포함하면 안 된다**. 처음 (K, P) 로 잡았다가
+$T0> # 파티션 키와 **부분 중첩**하도록 (K, P) 로 잡는다 — 리뷰 §4 가
+$T0> #   로컬 파티션드 인덱스로 설 수 있어 글로벌이 아예 필요 없어진다.
+$T0> CREATE TABLE NGD_CVT ( P INTEGER, K INTEGER, V VARCHAR(16),
+                           CONSTRAINT NGD_CVT_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGD_CVT SELECT LEVEL,      100 + LEVEL, 'V' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> INSERT INTO NGD_CVT SELECT LEVEL + 10, 200 + LEVEL, 'V' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> INSERT INTO NGD_CVT SELECT LEVEL + 20, 300 + LEVEL, 'V' FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> # A1. 정말 $GIT_ 인가 — 네이티브가 아니어야 한다(판별자 101 이 0 건).
+$T0> SELECT COUNT(*) AS IS_NATIVE_BEFORE
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_CVT_PK';
+IS_NATIVE_BEFORE     
+-----------------------
+0                    
+1 row selected.
+
+$T0> # A2. $GIT_ 는 숨김 테이블을 갖는다 — INDEX_TABLE_ID 가 0 이 아니다.
+$T0> SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_BEFORE
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+IMPL_BEFORE  
+---------------
+GIT     
+1 row selected.
+
+$T0> # A3. 전환 전의 메타 행 수 — B 절의 같은 자리와 대조한다.
+$T0> SELECT COUNT(*) AS PART_KEY_COLS_BEFORE
+      FROM SYSTEM_.SYS_PART_KEY_COLUMNS_
+     WHERE OBJECT_TYPE = 1
+       AND PARTITION_OBJ_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                                 WHERE INDEX_NAME = 'NGD_CVT_PK' );
+PART_KEY_COLS_BEFORE 
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 탈출구는 여기서 닫는다. 전환 자체는 이것이 필요 없다.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B — ★ §3 (N9). DIRECTKEY 는 전환을 수행해선 안 된다
+$T0> ##################################
+$T0> # 전환이 서기 전에 이 절을 둔다 — DIRECTKEY 토글이 조용히 전환을 해 버리면
+$T0> # C 절이 "무엇이 전환했는지" 를 못 가른다.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # B1. DIRECTKEY ON. DIRECT KEY 는 글로벌의 비목표이므로 거절이어야 하고,
+$T0> #     거절 사유는 CREATE 가 같은 조합에 내는 것과 같아야 한다.
+$T0> ALTER INDEX NGD_CVT_PK DIRECTKEY;
+[ERR-314AD : A native global index cannot be created with this index option or key column type: DIRECT KEY.]
+
+$T0> # B2. 여전히 $GIT_ 인가 — 거절이 맞다면 아무것도 안 바뀌었어야 한다.
+$T0> #     여기서 NATIVE 가 나오면 요청하지 않은 전환이 수행된 것이다.
+$T0> SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_AFTER_DIRECTKEY
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+IMPL_AFTER_DIRECTKEY  
+------------------------
+GIT     
+1 row selected.
+
+$T0> # B3. DIRECTKEY OFF — 종전에는 메모리 전용 가드를 아예 지나쳤다
+$T0> #     (qdx.cpp 의 빈 else). 이쪽도 막혀야 한다.
+$T0> ALTER INDEX NGD_CVT_PK DIRECTKEY OFF;
+[ERR-314AD : A native global index cannot be created with this index option or key column type: DIRECT KEY.]
+$T0> SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_AFTER_DIRECTKEY_OFF
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+IMPL_AFTER_DIRECTKEY_OFF  
+----------------------------
+GIT     
+1 row selected.
+
+$T0> # B4. 데이터는 온전한가.
+$T0> SELECT COUNT(*) AS ROWS_AFTER_DIRECTKEY FROM NGD_CVT;
+ROWS_AFTER_DIRECTKEY 
+-----------------------
+15                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C — 전환. REBUILD 가 유일한 수단이다
+$T0> ##################################
+$T0> ALTER INDEX NGD_CVT_PK REBUILD;
+Alter success.
+
+$T0> # C1. 이제 네이티브인가.
+$T0> SELECT COUNT(*) AS IS_NATIVE_AFTER
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_CVT_PK';
+IS_NATIVE_AFTER      
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_AFTER
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_PK';
+IMPL_AFTER  
+--------------
+NATIVE  
+1 row selected.
+
+$T0> # C2. 데이터가 전환을 건넜는가.
+$T0> SELECT COUNT(*) AS ROWS_AFTER FROM NGD_CVT;
+ROWS_AFTER           
+-----------------------
+15                   
+1 row selected.
+$T0> SELECT K, P, V FROM NGD_CVT ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         1           V                 
+102         2           V                 
+103         3           V                 
+104         4           V                 
+105         5           V                 
+201         11          V                 
+202         12          V                 
+203         13          V                 
+204         14          V                 
+205         15          V                 
+301         21          V                 
+302         22          V                 
+303         23          V                 
+304         24          V                 
+305         25          V                 
+15 rows selected.
+
+$T0> # C3. 유일성이 파티션을 가로질러 서는가 — 전환된 트리도 글로벌이다.
+$T0> INSERT INTO NGD_CVT VALUES ( 15, 101, 'DUP-ACROSS' );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> ##################################
+$T0> SECTOR 5; D — ★ §4 (N10). 전환 결과 == CREATE 결과
+$T0> ##################################
+$T0> # 같은 모양을 처음부터 네이티브로 만든 것과 카탈로그를 나란히 센다.
+$T0> # 전환이 지우지 않은 행이 있으면 두 수가 갈린다.
+$T0> CREATE TABLE NGD_CVT_REF ( P INTEGER, K INTEGER, V VARCHAR(16),
+                               CONSTRAINT NGD_CVT_REF_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> # D1. ★ 고아 행. 전환본과 신규본이 같아야 한다.
+$T0> SELECT COUNT(*) AS PART_KEY_COLS_CONVERTED
+      FROM SYSTEM_.SYS_PART_KEY_COLUMNS_
+     WHERE OBJECT_TYPE = 1
+       AND PARTITION_OBJ_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                                 WHERE INDEX_NAME = 'NGD_CVT_PK' );
+PART_KEY_COLS_CONVERTED 
+--------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS PART_KEY_COLS_CREATED
+      FROM SYSTEM_.SYS_PART_KEY_COLUMNS_
+     WHERE OBJECT_TYPE = 1
+       AND PARTITION_OBJ_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                                 WHERE INDEX_NAME = 'NGD_CVT_REF_PK' );
+PART_KEY_COLS_CREATED 
+------------------------
+0                    
+1 row selected.
+
+$T0> # D2. 나머지 두 카탈로그도 같은가.
+$T0> SELECT COUNT(*) AS PART_INDICES_CONVERTED
+      FROM SYSTEM_.SYS_PART_INDICES_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_PK' );
+PART_INDICES_CONVERTED 
+-------------------------
+1                    
+1 row selected.
+$T0> SELECT COUNT(*) AS PART_INDICES_CREATED
+      FROM SYSTEM_.SYS_PART_INDICES_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_REF_PK' );
+PART_INDICES_CREATED 
+-----------------------
+1                    
+1 row selected.
+
+$T0> SELECT COUNT(*) AS INDEX_PARTITIONS_CONVERTED
+      FROM SYSTEM_.SYS_INDEX_PARTITIONS_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_PK' );
+INDEX_PARTITIONS_CONVERTED 
+-----------------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS INDEX_PARTITIONS_CREATED
+      FROM SYSTEM_.SYS_INDEX_PARTITIONS_
+     WHERE INDEX_ID = ( SELECT INDEX_ID FROM SYSTEM_.SYS_INDICES_
+                         WHERE INDEX_NAME = 'NGD_CVT_REF_PK' );
+INDEX_PARTITIONS_CREATED 
+---------------------------
+0                    
+1 row selected.
+
+$T0> # D3. 판별자와 구현 표시도 같은가.
+$T0> SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_REF
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_REF_PK';
+IMPL_REF  
+------------
+NATIVE  
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E — ★ §6 (N11). 예산 경계에서 전환이 거짓으로 거부되지 않는다
+$T0> ##################################
+$T0> # 전환은 곧 걷어 낼 로컬 인덱스를 세는 대상에서 빼야 한다. 빼지 않으면
+$T0> # 가장 붐비는 파티션이 정확히 예산에 있을 때 "개수 초과" 로 거부된다.
+$T0> #
+$T0> # 경계를 정확히 64 로 맞추는 것은 이 케이스가 스스로 못 한다(예산은
+$T0> # SMI_INDEX_BIT_BUDGET 이고 픽스처가 그 수만큼 인덱스를 만들어야 한다).
+$T0> # 그래서 여기서는 **방향만** 잰다 — 로컬 인덱스를 여럿 얹은 테이블의
+$T0> # 전환이 서는가. 정확한 경계는 Boundary 축의 indexBudget 계열이 받는다.
+
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
+Alter success.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+
+$T0> CREATE TABLE NGD_CVT_BUD ( P INTEGER, K INTEGER,
+                               C1 INTEGER, C2 INTEGER, C3 INTEGER, C4 INTEGER,
+                               CONSTRAINT NGD_CVT_BUD_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> INSERT INTO NGD_CVT_BUD SELECT LEVEL, LEVEL, 1, 2, 3, 4 FROM DUAL CONNECT BY LEVEL <= 5;
+5 rows inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$T0> # 파티션마다 로컬 인덱스를 여럿 얹는다. $GIT_ PK 의 로컬 분이 여기
+$T0> # 더해져 있으므로, 전환 검사가 그것을 빼지 않으면 수가 부풀어 있다.
+$T0> CREATE INDEX NGD_CVT_BUD_L1 ON NGD_CVT_BUD ( C1 ) LOCAL;
+Create success.
+$T0> CREATE INDEX NGD_CVT_BUD_L2 ON NGD_CVT_BUD ( C2 ) LOCAL;
+Create success.
+$T0> CREATE INDEX NGD_CVT_BUD_L3 ON NGD_CVT_BUD ( C3 ) LOCAL;
+Create success.
+$T0> CREATE INDEX NGD_CVT_BUD_L4 ON NGD_CVT_BUD ( C4 ) LOCAL;
+Create success.
+
+$T0> # E1. 파티션이 지금 몇 개의 인덱스를 갖는가 (전환 검사가 세는 수).
+$T0> SELECT COUNT(*) AS LOCAL_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDEX_PARTITIONS_ IP, SYSTEM_.SYS_INDICES_ I
+     WHERE IP.INDEX_ID = I.INDEX_ID
+       AND I.TABLE_ID = ( SELECT TABLE_ID FROM SYSTEM_.SYS_TABLES_
+                           WHERE TABLE_NAME = 'NGD_CVT_BUD' );
+LOCAL_INDEX_COUNT    
+-----------------------
+10                   
+1 row selected.
+
+$T0> # E2. 전환이 서는가.
+$T0> ALTER INDEX NGD_CVT_BUD_PK REBUILD;
+Alter success.
+$T0> SELECT DECODE( INDEX_TABLE_ID, 0, 'NATIVE', 'GIT' ) AS IMPL_BUD
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGD_CVT_BUD_PK';
+IMPL_BUD  
+------------
+NATIVE  
+1 row selected.
+$T0> SELECT COUNT(*) AS ROWS_BUD FROM NGD_CVT_BUD;
+ROWS_BUD             
+-----------------------
+5                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION — 탈출구가 닫혀 있는지 확인하고 끝낸다
+$T0> ##################################
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = '__DISK_GLOBAL_INDEX_LEGACY_CREATE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> DROP TABLE NGD_CVT;
+Drop success.
+$T0> DROP TABLE NGD_CVT_REF;
+Drop success.
+$T0> DROP TABLE NGD_CVT_BUD;
+Drop success.
+

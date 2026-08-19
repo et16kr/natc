@@ -1,0 +1,253 @@
+###########################################################################
+# TestCase Description = 트리거와 row movement — :OLD 가 옳은 배열로 읽히는가 (메모리).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 공백 N12).
+#                        V4 코드 리뷰 §2 가 요구한 감시자다.
+#
+# ★ 실측 (2026-08-20, 처음 돌린 결과) -- D 절이 **그린이다**
+#
+#   이 케이스는 "리뷰 §2 의 수정 전에는 D 절이 붉다" 는 예상으로 쓰였다.
+#   돌려 보니 `:OLD` 가 **옳은 값**을 냈다 (OLD_P 11 · OLD_K 202 ·
+#   OLD_V 'D-B' -- 옮기기 전 상태 그대로).
+#
+#   ★ 이것을 "결함이 없다" 로 읽으면 안 된다. 두 해석이 열려 있다:
+#     (ㄱ) 이 경로에서는 어긋나지 않는다.
+#     (ㄴ) **픽스처가 레이아웃을 실제로 분화시키지 못했다.**
+#          `ADD COLUMN` 이 기존 로우를 새 포맷으로 다시 썼다면 논리
+#          테이블과 파티션의 배열이 같아져 결함 조건에 닿지 못한다.
+#          두 행 모두 EXTRA 가 기본값 'X' 로 보이는 것이 그 가능성을
+#          배제하지 못한다.
+#
+#   **가르려면 파티션과 논리 테이블의 컬럼 배열을 직접 비교해야 하고,
+#   그것은 이 케이스의 범위 밖이다.** 그러므로 이 `.lst` 는 **오늘의
+#   기준선**이지 리뷰 §2 의 판정이 아니다 -- 수정이 들어오면 이 값이
+#   그대로인지 확인하는 것이 이 절의 몫이다.
+#
+#   A~C 절은 그와 무관하게 오늘도 유효하다.
+#
+# 무엇을 재는가 -- 두 가지가 겹쳐 있다
+#
+#   ① 트리거 축이 스위트에 **0** 이다.
+#      `CREATE TRIGGER` 가 스위트 전량에서 0 회다. 글로벌 인덱스가 걸린
+#      테이블에서 트리거가 도는 것 자체가 검증된 적이 없다.
+#      (그물 `dml-handoff-check` 가 이 축을 갖고 있으나 아직 이식 전이다.)
+#
+#   ② 리뷰 §2 -- 멀티테이블 row movement 의 트리거가 **테이블 컬럼 배열로
+#      파티션 로우를 읽는다.**
+#
+#      `allocTriggerRowMultiTable` 은 `mColumnsForRow` 를 논리 테이블의
+#      `tableInfo->columns` 로 한 번 세운다. 형제 경로들은 PROJ-2334
+#      (메모리 파티션드 테이블의 레이아웃 분화)에 따라 실행 시 파티션의
+#      컬럼 배열로 **재지정**하는데, `updateOneRowForRowmovementMultiTable`
+#      에만 그것이 없다. 이 함수는 `mOldRow` 에 **파티션 포맷의 로우**를
+#      복사한 뒤 트리거가 그 배열의 오프셋으로 읽게 하므로, `ADD COLUMN`
+#      등으로 파티션 레이아웃이 논리 테이블과 갈라진 메모리 테이블에서
+#      `:OLD` 를 참조하는 트리거가 **쓰레기 값을 읽거나 버퍼를 넘어
+#      읽는다.**
+#
+# ★ 왜 메모리인가 -- 두 이유가 겹친다
+#   레이아웃 분화(PROJ-2334)는 **메모리 파티션드 테이블의 성질**이다.
+#   그리고 리뷰가 덧붙인 경계가 이 케이스의 모양을 정한다:
+#
+#     > 네이티브 글로벌은 레이아웃 동일성을 요구하니(ERR-1109B) 네이티브
+#     > 인덱스가 있는 테이블에서는 어긋날 수 없지만, **인덱스 없는 일반
+#     > 메모리 파티션드 테이블은 그대로 노출**된다.
+#
+#   그러므로 D 절의 테이블에는 **글로벌 인덱스를 걸지 않는다.** 걸면
+#   분화 자체가 막혀 결함에 닿지 못한다. 이 케이스가 이 스위트에 있는
+#   이유는 O-8 이 그 함수를 열어 네이티브 경로를 살렸기 때문이고,
+#   C 절이 그 연결을 잰다.
+#
+# ★ .lst 미기록 -- 위 착수 조건 참조.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TRIGGER NGM_TRG_T;
+    DROP TRIGGER NGM_TRG_D;
+    DROP TABLE NGM_TRG;
+    DROP TABLE NGM_TRG_LOG;
+    DROP TABLE NGM_TRG_B;
+    DROP TABLE NGM_TRG_DIV;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+
+    # 트리거가 적어 넣을 곳. :OLD 가 옳게 읽혔는지는 여기 남은 값으로 안다.
+    CREATE TABLE NGM_TRG_LOG ( SEQ INTEGER, TAG VARCHAR(16),
+                               OLD_P INTEGER, OLD_K INTEGER, OLD_V VARCHAR(16),
+                               NEW_P INTEGER )
+        TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE TABLE NGM_TRG ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE TABLE NGM_TRG_B ( K INTEGER, W VARCHAR(16) ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    ALTER TABLE NGM_TRG ENABLE ROW MOVEMENT;
+
+    INSERT INTO NGM_TRG VALUES ( 1,  101, 'A' );
+    INSERT INTO NGM_TRG VALUES ( 2,  102, 'B' );
+    INSERT INTO NGM_TRG VALUES ( 11, 103, 'C' );
+    INSERT INTO NGM_TRG_B VALUES ( 101, 'X' );
+    INSERT INTO NGM_TRG_B VALUES ( 102, 'Y' );
+    INSERT INTO NGM_TRG_B VALUES ( 103, 'Z' );
+    COMMIT;
+
+    CREATE INDEX NGM_TRG_G ON NGM_TRG ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    # A0. 전제 -- 네이티브 글로벌인가(판별자 101).
+    SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_TRG_G';
+
+##################################
+SECTOR; A -- 트리거가 글로벌 인덱스 테이블 위에서 선다
+##################################
+    CREATE TRIGGER NGM_TRG_T
+    BEFORE UPDATE ON NGM_TRG
+    REFERENCING OLD ROW old_row NEW ROW new_row
+    FOR EACH ROW
+    BEGIN
+        INSERT INTO NGM_TRG_LOG
+            VALUES ( 1, 'BEFORE-UPD',
+                     old_row.P, old_row.K, old_row.V, new_row.P );
+    END;
+    /
+
+    SELECT COUNT(*) AS TRIGGER_ROWS
+      FROM SYSTEM_.SYS_TRIGGERS_ WHERE TRIGGER_NAME = 'NGM_TRG_T';
+
+##################################
+SECTOR; B -- 단일 테이블 row movement 에서 :OLD 가 옳은가 (기준선)
+##################################
+    UPDATE NGM_TRG SET P = 15 WHERE K = 101;
+    COMMIT;
+
+    # B1. 트리거가 본 :OLD 가 옮기기 **전** 값이어야 한다 -- P=1, V='A'.
+    SELECT TAG, OLD_P, OLD_K, OLD_V, NEW_P FROM NGM_TRG_LOG ORDER BY OLD_K;
+
+    # B2. 이동 자체는 옳았는가.
+    SELECT /*+ INDEX( NGM_TRG, NGM_TRG_G ) */ COUNT(*) AS K101_ROWS FROM NGM_TRG WHERE K = 101;
+    SELECT /*+ INDEX( NGM_TRG, NGM_TRG_G ) */ P, K, V FROM NGM_TRG ORDER BY K;
+
+    DELETE FROM NGM_TRG_LOG;
+    COMMIT;
+
+##################################
+SECTOR; C -- ★ 멀티테이블 row movement + 트리거 (O-8 이 연 경로)
+##################################
+# O-8 이전에는 이 문장이 서버를 죽였으므로 트리거가 무엇을 보는지 물을
+# 수도 없었다. 이제 물을 수 있다.
+    UPDATE NGM_TRG a, NGM_TRG_B b
+       SET a.P = 25, a.V = 'MOVED'
+     WHERE a.K = b.K AND b.K = 102;
+    COMMIT;
+
+    # C1. 살아 있는가.
+    SELECT COUNT(*) AS ALIVE FROM NGM_TRG;
+
+    # C2. :OLD 가 옮기기 전 값인가 -- P=2, V='B'.
+    SELECT TAG, OLD_P, OLD_K, OLD_V, NEW_P FROM NGM_TRG_LOG ORDER BY OLD_K;
+
+    # C3. 이동이 옳았는가. 한 행이어야 한다.
+    SELECT /*+ INDEX( NGM_TRG, NGM_TRG_G ) */ COUNT(*) AS K102_ROWS FROM NGM_TRG WHERE K = 102;
+    SELECT /*+ INDEX( NGM_TRG, NGM_TRG_G ) */ P, K, V FROM NGM_TRG ORDER BY K;
+    SELECT /*+ INDEX( NGM_TRG, NGM_TRG_G ) */ COUNT(DISTINCT K) AS DISTINCT_K FROM NGM_TRG;
+
+    DELETE FROM NGM_TRG_LOG;
+    COMMIT;
+
+##################################
+SECTOR; D -- ★★ 분화된 레이아웃. 리뷰 §2 가 겨눈 자리다
+##################################
+# ★ 이 절의 테이블에는 **글로벌 인덱스를 걸지 않는다.** 네이티브 글로벌은
+#   레이아웃 동일성을 요구하므로(ERR-1109B) 인덱스가 있으면 분화 자체가
+#   막혀 결함에 닿지 못한다. 리뷰가 "인덱스 없는 일반 메모리 파티션드
+#   테이블은 그대로 노출된다" 고 적은 그 모양을 만든다.
+#
+# ★ 실측은 그린이었다. 위 머리말의 (ㄱ)/(ㄴ) 두 해석을 함께 읽을 것.
+
+    CREATE TABLE NGM_TRG_DIV ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    ALTER TABLE NGM_TRG_DIV ENABLE ROW MOVEMENT;
+
+    INSERT INTO NGM_TRG_DIV VALUES ( 1,  201, 'D-A' );
+    INSERT INTO NGM_TRG_DIV VALUES ( 11, 202, 'D-B' );
+    COMMIT;
+
+    # D1. 컬럼을 더해 **논리 테이블과 파티션의 레이아웃을 가른다.**
+    #     이 시점부터 파티션 로우의 오프셋이 tableInfo->columns 와 다르다.
+    ALTER TABLE NGM_TRG_DIV ADD COLUMN ( EXTRA VARCHAR(32) DEFAULT 'X' );
+    COMMIT;
+
+    SELECT P, K, V, EXTRA FROM NGM_TRG_DIV ORDER BY K;
+
+    CREATE TRIGGER NGM_TRG_D
+    BEFORE UPDATE ON NGM_TRG_DIV
+    REFERENCING OLD ROW old_row NEW ROW new_row
+    FOR EACH ROW
+    BEGIN
+        INSERT INTO NGM_TRG_LOG
+            VALUES ( 2, 'DIVERGED',
+                     old_row.P, old_row.K, old_row.V, new_row.P );
+    END;
+    /
+
+    # D2. 단일 테이블 판 -- 형제 경로에는 재지정이 있으므로 옳아야 한다.
+    #     이것이 대조군이다. 이 절이 옳고 D3 이 틀리면 결함이 확정된다.
+    UPDATE NGM_TRG_DIV SET P = 15 WHERE K = 201;
+    COMMIT;
+    SELECT TAG, OLD_P, OLD_K, OLD_V, NEW_P FROM NGM_TRG_LOG WHERE SEQ = 2 ORDER BY OLD_K;
+
+    DELETE FROM NGM_TRG_LOG;
+    COMMIT;
+
+    # D3. ★ 멀티테이블 판 -- 재지정이 없는 함수다.
+    #     :OLD 의 V 가 'D-B' 가 아니면 파티션 로우를 테이블 배열로 읽은 것이다.
+    UPDATE NGM_TRG_DIV a, NGM_TRG_B b
+       SET a.P = 25
+     WHERE a.K = b.K + 99 AND b.K = 103;
+    COMMIT;
+
+    SELECT COUNT(*) AS ALIVE_D FROM NGM_TRG_DIV;
+    SELECT TAG, OLD_P, OLD_K, OLD_V, NEW_P FROM NGM_TRG_LOG WHERE SEQ = 2 ORDER BY OLD_K;
+    SELECT P, K, V, EXTRA FROM NGM_TRG_DIV ORDER BY K;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TRIGGER NGM_TRG_T;
+    DROP TRIGGER NGM_TRG_D;
+    SKIP END;
+    DROP TABLE NGM_TRG;
+    DROP TABLE NGM_TRG_B;
+    DROP TABLE NGM_TRG_DIV;
+    DROP TABLE NGM_TRG_LOG;
+}

@@ -18,7 +18,7 @@ TestSuiteDescription  = Native Global Index
 Port1624/NativeGlobalIndexPort1624.ts   # 공식 PROJ-1624 이식 (계보 보존, 재배치 금지)
 Memory/Memory.ts                        # 메모리 — 로깅 없음, 재기동 시 리빌드
 Disk/Disk.ts                            # 디스크 — 로깅 있음, 로그로 복구
-# Tool/Tool.ts                          # 유틸리티 접점 (제안) — 첫 입주자가 미해결이라 아직 걸지 않는다
+Tool/Tool.ts                            # 유틸리티 접점 (제안 — §계획 3.1 의 Tool 결정 대기)
 #
 # ★ Replication/Replication.ts 는 여기 없다 -- 의도인지 누락인지 적혀 있지
 #   않다. 그 레인은 두 서버를 띄우고 죽이므로 기본 실행에서 빼는 판단이
