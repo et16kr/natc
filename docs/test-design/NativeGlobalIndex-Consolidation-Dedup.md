@@ -222,6 +222,60 @@ Codex Disk 58   ×   Claude (디스크 케이스 1: ddl/diskPartitionedTable)
 
 ---
 
+## 4.1 ★ Phase D 실측 — 흡수 11 을 실제로 옮겼고, 그 과정에서 둘을 알았다
+
+11 을 `NativeGlobalIndexClaude/Memory/` 로 복사해 배선했다(240 → 251, 전량
+그린). 옮기며 실측한 것 둘은 이 표의 판정보다 크다.
+
+### (1) Codex 는 오늘 빌드에서 **17 / 99** 였다 — 그러나 제품 탓이 아니었다
+
+첫 실행이 116 중 99 붉음. §5.3(제품이 세 번 바뀌었다)으로 읽기 쉬우나
+붉은 케이스의 첫 어긋남이 전부 이것이었다:
+
+```
+[ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+```
+
+`MEM_GLOBAL_INDEX_ENABLE` 이 **0** 인 상태로 돌았다. 직전에 돌린
+`NativeGlobalIndexClaude` 의 `regress/noGlobalIndexUnchanged` 가 FINALIZE 에서
+껐고, 프로퍼티는 비영속이되 **도는 인스턴스 안에서는 남는다.** 자기 전제를
+세우지 않는 Codex 가 그것을 물려받았다. 재기동으로 파일 기본값(1)을
+복원하니 **31 / 85**.
+
+계획 §5.4 가 "권고" 로 적었던 것이 **흡수의 전제**임이 이렇게 확인됐다.
+
+### (2) `INDEX_IMPL_TYPE` 은 **존재하지 않는 컬럼**이다
+
+Codex 가 **50 번** 참조한다. 카탈로그로 확인:
+
+```
+SYS_INDICES_ 에 INDEX_IMPL_TYPE  -> 0 건
+SYS_INDICES_ 에 INDEX_TABLE_ID   -> 1 건
+```
+
+그 질의들은 애초에 성공할 수 없고 `ERR-31058 : Column not found` 로 죽는다.
+남은 85 붉음의 큰 몫이 이것이다 — **"제품이 바뀌어서" 가 아니라 "케이스가
+틀려서" 붉은 쪽**이고, 계획 §5.3 이 가르라고 한 두 갈래 중 후자다.
+
+판별자는 `INDEX_TABLE_ID`(네이티브 = 0) 하나로 충분하고 Codex 질의가 이미
+그 컬럼을 함께 뽑고 있어서, 흡수본에서는 없는 컬럼만 뺐다.
+
+### (3) 흡수본에 더한 것 셋
+
+| | |
+|---|---|
+| 출처 주석 | 원본 경로와 "codex 브랜치가 관리한다" |
+| 프로퍼티 못박기 | `PREPARATION` 머리에 `alter system set MEM_GLOBAL_INDEX_ENABLE = 1;` + `v$property` 확인 |
+| 없는 컬럼 제거 | `INDEX_IMPL_TYPE` |
+
+`.lst` 는 11 전부 **재기록**했다(계획 §8.6 의 이 Phase 예외). 기록 전에
+절대 카탈로그 id · 시각 · 경로가 섞였는지 검사해 **0** 을 확인했다 —
+Port1624 의 넷이 그것 때문에 순서에 묶인 것을 막 겪은 뒤였다.
+
+**Codex 디렉터리는 한 줄도 건드리지 않았다.**
+
+---
+
 ## 5. 이 표를 닫으려면 — 남은 둘
 
 1. **Codex 116 을 오늘 빌드에서 돌린다.** 08-05 이후 실행 이력이 없어

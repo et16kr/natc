@@ -1,0 +1,146 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject Memory native DDL during an active transaction.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-TRX-004
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> # 출처                 = NativeGlobalIndexCodex/Memory/Transaction/ddlTransactionGuard.tc (통합 Phase D 흡수)
+$T0> #                        원본은 codex 브랜치가 관리한다. 고칠 일이 생기면 그쪽도 본다.
+$T0> # 흡수 시 더한 것       = (1) 프로퍼티 못박기 -- 원본은 자기 전제를 세우지 않아
+$T0> #                            앞 케이스가 남긴 값을 물려받았다(계획 §5.4)
+$T0> #                        (2) INDEX_IMPL_TYPE 제거 -- SYS_INDICES_ 에 없는 컬럼이라
+$T0> #                            원본 질의가 ERR-31058 로 죽는다. 판별자는 INDEX_TABLE_ID
+$T0> #                            (네이티브 = 0) 하나로 충분하다
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_DDL;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGM_TRX_DDL (P INTEGER, K1 VARCHAR(32), K2 VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_TRX_DDL_I ON NGM_TRX_DDL(K1)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_TRX_DDL VALUES (1, 'K-101', 'V-201');
+1 row inserted.
+$T0> INSERT INTO NGM_TRX_DDL VALUES (11, 'K-111', 'V-211');
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_TRX_DDL_%';
+BEFORE_INDEX_COUNT   
+-----------------------
+1                    
+1 row selected.
+
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> INSERT INTO NGM_TRX_DDL VALUES (21, 'K-121', 'V-221');
+1 row inserted.
+$T0> CREATE INDEX NGM_TRX_DDL_NEW ON NGM_TRX_DDL(K2)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> SELECT P, K1, K2 FROM NGM_TRX_DDL ORDER BY K1;
+P           K1                                K2                                
+------------------------------------------------------------------------------------
+1           K-101                             V-201                             
+11          K-111                             V-211                             
+21          K-121                             V-221                             
+3 rows selected.
+$T0> ROLLBACK;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> SELECT COUNT(*) AS AFTER_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_TRX_DDL_%';
+AFTER_INDEX_COUNT    
+-----------------------
+2                    
+1 row selected.
+$T0> SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_TRX_DDL_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TABLE_ID 
+-----------------
+NGM_TRX_DDL_I                                                                                                                     
+0           
+1 row selected.
+$T0> SELECT P, K1, K2 FROM NGM_TRX_DDL ORDER BY K1;
+P           K1                                K2                                
+------------------------------------------------------------------------------------
+1           K-101                             V-201                             
+11          K-111                             V-211                             
+21          K-121                             V-221                             
+3 rows selected.
+
+$T0> CREATE INDEX NGM_TRX_DDL_NEW ON NGM_TRX_DDL(K2)
+        TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-3104C : Duplicate index name]
+$T0> SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_TRX_DDL_%'
+     ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TABLE_ID 
+-----------------
+NGM_TRX_DDL_I                                                                                                                     
+0           
+NGM_TRX_DDL_NEW                                                                                                                   
+0           
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NGM_TRX_DDL;
+$T0> SKIP END;
+

@@ -1,0 +1,127 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve Memory results and identity across statistics collection.
+$T0> # Project ID           = NativeGlobalIndexCodex
+$T0> # Test ID              = NGI-QRY-008
+$T0> # Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+$T0> # 출처                 = NativeGlobalIndexCodex/Memory/Query/statisticsContinuity.tc (통합 Phase D 흡수)
+$T0> #                        원본은 codex 브랜치가 관리한다. 고칠 일이 생기면 그쪽도 본다.
+$T0> # 흡수 시 더한 것       = (1) 프로퍼티 못박기 -- 원본은 자기 전제를 세우지 않아
+$T0> #                            앞 케이스가 남긴 값을 물려받았다(계획 §5.4)
+$T0> #                        (2) INDEX_IMPL_TYPE 제거 -- SYS_INDICES_ 에 없는 컬럼이라
+$T0> #                            원본 질의가 ERR-31058 로 죽는다. 판별자는 INDEX_TABLE_ID
+$T0> #                            (네이티브 = 0) 하나로 충분하다
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_QRY_STATS;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGM_QRY_STATS (P INTEGER, K VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NGM_QRY_STATS_I ON NGM_QRY_STATS(K)
+        TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> INSERT INTO NGM_QRY_STATS VALUES (1, 'K-101', 1);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_STATS VALUES (5, 'K-105', 2);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_STATS VALUES (11, 'K-111', 3);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_STATS VALUES (15, 'K-115', 4);
+1 row inserted.
+$T0> INSERT INTO NGM_QRY_STATS VALUES (21, 'K-121', 5);
+1 row inserted.
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> SELECT /*+ INDEX(NGM_QRY_STATS, NGM_QRY_STATS_I) */ P, K, V
+      FROM NGM_QRY_STATS WHERE K >= 'K-105' ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+5           K-105                             2           
+11          K-111                             3           
+15          K-115                             4           
+21          K-121                             5           
+4 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGM_QRY_STATS_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TABLE_ID 
+-----------------
+NGM_QRY_STATS_I                                                                                                                   
+0           
+1 row selected.
+
+$T0> EXEC GATHER_TABLE_STATS('SYS', 'NGM_QRY_STATS');
+Execute success.
+
+$T0> SELECT /*+ INDEX(NGM_QRY_STATS, NGM_QRY_STATS_I) */ P, K, V
+      FROM NGM_QRY_STATS WHERE K >= 'K-105' ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+5           K-105                             2           
+11          K-111                             3           
+15          K-115                             4           
+21          K-121                             5           
+4 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGM_QRY_STATS) */ P, K, V
+      FROM NGM_QRY_STATS WHERE K >= 'K-105' ORDER BY K;
+P           K                                 V           
+--------------------------------------------------------------
+5           K-105                             2           
+11          K-111                             3           
+15          K-115                             4           
+21          K-121                             5           
+4 rows selected.
+$T0> SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID() AND INDEX_NAME = 'NGM_QRY_STATS_I';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+INDEX_TABLE_ID 
+-----------------
+NGM_QRY_STATS_I                                                                                                                   
+0           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_QRY_STATS;
+$T0> SKIP END;
+

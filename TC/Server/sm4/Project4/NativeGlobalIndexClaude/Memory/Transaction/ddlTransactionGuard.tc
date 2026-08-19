@@ -1,0 +1,87 @@
+###########################################################################
+# TestCase Description = Reject Memory native DDL during an active transaction.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-TRX-004
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+# 출처                 = NativeGlobalIndexCodex/Memory/Transaction/ddlTransactionGuard.tc (통합 Phase D 흡수)
+#                        원본은 codex 브랜치가 관리한다. 고칠 일이 생기면 그쪽도 본다.
+# 흡수 시 더한 것       = (1) 프로퍼티 못박기 -- 원본은 자기 전제를 세우지 않아
+#                            앞 케이스가 남긴 값을 물려받았다(계획 §5.4)
+#                        (2) INDEX_IMPL_TYPE 제거 -- SYS_INDICES_ 에 없는 컬럼이라
+#                            원본 질의가 ERR-31058 로 죽는다. 판별자는 INDEX_TABLE_ID
+#                            (네이티브 = 0) 하나로 충분하다
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NGM_TRX_DDL;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGM_TRX_DDL (P INTEGER, K1 VARCHAR(32), K2 VARCHAR(32))
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    )
+    TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_TRX_DDL_I ON NGM_TRX_DDL(K1)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_TRX_DDL VALUES (1, 'K-101', 'V-201');
+    INSERT INTO NGM_TRX_DDL VALUES (11, 'K-111', 'V-211');
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_TRX_DDL_%';
+
+    AUTOCOMMIT OFF;
+    INSERT INTO NGM_TRX_DDL VALUES (21, 'K-121', 'V-221');
+    CREATE INDEX NGM_TRX_DDL_NEW ON NGM_TRX_DDL(K2)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    SELECT P, K1, K2 FROM NGM_TRX_DDL ORDER BY K1;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+
+    SELECT COUNT(*) AS AFTER_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_TRX_DDL_%';
+    SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_TRX_DDL_I';
+    SELECT P, K1, K2 FROM NGM_TRX_DDL ORDER BY K1;
+
+    CREATE INDEX NGM_TRX_DDL_NEW ON NGM_TRX_DDL(K2)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_TRX_DDL_%'
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP TABLE NGM_TRX_DDL;
+    SKIP END;
+}

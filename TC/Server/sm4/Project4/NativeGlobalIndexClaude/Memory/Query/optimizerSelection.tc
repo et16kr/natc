@@ -1,0 +1,69 @@
+###########################################################################
+# TestCase Description = Compare unhinted, local, native, and full Memory scans.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-QRY-005
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+# 출처                 = NativeGlobalIndexCodex/Memory/Query/optimizerSelection.tc (통합 Phase D 흡수)
+#                        원본은 codex 브랜치가 관리한다. 고칠 일이 생기면 그쪽도 본다.
+# 흡수 시 더한 것       = (1) 프로퍼티 못박기 -- 원본은 자기 전제를 세우지 않아
+#                            앞 케이스가 남긴 값을 물려받았다(계획 §5.4)
+#                        (2) INDEX_IMPL_TYPE 제거 -- SYS_INDICES_ 에 없는 컬럼이라
+#                            원본 질의가 ERR-31058 로 죽는다. 판별자는 INDEX_TABLE_ID
+#                            (네이티브 = 0) 하나로 충분하다
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_OPT;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGM_QRY_OPT (P INTEGER, GKEY VARCHAR(32), LKEY INTEGER, V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_QRY_OPT_G ON NGM_QRY_OPT(GKEY)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_QRY_OPT_L ON NGM_QRY_OPT(LKEY) LOCAL;
+    INSERT INTO NGM_QRY_OPT VALUES (1, 'K-101', 1, 10);
+    INSERT INTO NGM_QRY_OPT VALUES (5, 'K-105', 5, 20);
+    INSERT INTO NGM_QRY_OPT VALUES (11, 'K-111', 1, 30);
+    INSERT INTO NGM_QRY_OPT VALUES (15, 'K-115', 5, 40);
+    INSERT INTO NGM_QRY_OPT VALUES (21, 'K-121', 1, 50);
+
+##################################
+SECTOR; TEST
+##################################
+    ALTER SESSION SET EXPLAIN PLAN = ON;
+    SELECT P, GKEY, LKEY, V FROM NGM_QRY_OPT
+     WHERE GKEY BETWEEN 'K-105' AND 'K-121' ORDER BY GKEY;
+    SELECT /*+ INDEX(NGM_QRY_OPT, NGM_QRY_OPT_G) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_OPT WHERE GKEY BETWEEN 'K-105' AND 'K-121' ORDER BY GKEY;
+    SELECT /*+ FULL SCAN(NGM_QRY_OPT) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_OPT WHERE GKEY BETWEEN 'K-105' AND 'K-121' ORDER BY GKEY;
+    SELECT /*+ INDEX(NGM_QRY_OPT, NGM_QRY_OPT_L) */ P, GKEY, LKEY, V
+      FROM NGM_QRY_OPT WHERE LKEY = 1 ORDER BY GKEY;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGM_QRY_OPT;
+    SKIP END;
+}

@@ -1,0 +1,133 @@
+###########################################################################
+# TestCase Description = Build and rebuild a Memory native global index on 65 partitions.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-BND-005
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+# SQL/iSQL references  = altidev4_gi/docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+#                        altidev4_gi/docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# 출처                 = NativeGlobalIndexCodex/Memory/Boundary/participantCount65.tc (통합 Phase D 흡수)
+#                        원본은 codex 브랜치가 관리한다. 고칠 일이 생기면 그쪽도 본다.
+# 흡수 시 더한 것       = (1) 프로퍼티 못박기 -- 원본은 자기 전제를 세우지 않아
+#                            앞 케이스가 남긴 값을 물려받았다(계획 §5.4)
+#                        (2) INDEX_IMPL_TYPE 제거 -- SYS_INDICES_ 에 없는 컬럼이라
+#                            원본 질의가 ERR-31058 로 죽는다. 판별자는 INDEX_TABLE_ID
+#                            (네이티브 = 0) 하나로 충분하다
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_BND_PART65;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGM_BND_PART65 (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P01 VALUES LESS THAN (1),
+        PARTITION P02 VALUES LESS THAN (2),
+        PARTITION P03 VALUES LESS THAN (3),
+        PARTITION P04 VALUES LESS THAN (4),
+        PARTITION P05 VALUES LESS THAN (5),
+        PARTITION P06 VALUES LESS THAN (6),
+        PARTITION P07 VALUES LESS THAN (7),
+        PARTITION P08 VALUES LESS THAN (8),
+        PARTITION P09 VALUES LESS THAN (9),
+        PARTITION P10 VALUES LESS THAN (10),
+        PARTITION P11 VALUES LESS THAN (11),
+        PARTITION P12 VALUES LESS THAN (12),
+        PARTITION P13 VALUES LESS THAN (13),
+        PARTITION P14 VALUES LESS THAN (14),
+        PARTITION P15 VALUES LESS THAN (15),
+        PARTITION P16 VALUES LESS THAN (16),
+        PARTITION P17 VALUES LESS THAN (17),
+        PARTITION P18 VALUES LESS THAN (18),
+        PARTITION P19 VALUES LESS THAN (19),
+        PARTITION P20 VALUES LESS THAN (20),
+        PARTITION P21 VALUES LESS THAN (21),
+        PARTITION P22 VALUES LESS THAN (22),
+        PARTITION P23 VALUES LESS THAN (23),
+        PARTITION P24 VALUES LESS THAN (24),
+        PARTITION P25 VALUES LESS THAN (25),
+        PARTITION P26 VALUES LESS THAN (26),
+        PARTITION P27 VALUES LESS THAN (27),
+        PARTITION P28 VALUES LESS THAN (28),
+        PARTITION P29 VALUES LESS THAN (29),
+        PARTITION P30 VALUES LESS THAN (30),
+        PARTITION P31 VALUES LESS THAN (31),
+        PARTITION P32 VALUES LESS THAN (32),
+        PARTITION P33 VALUES LESS THAN (33),
+        PARTITION P34 VALUES LESS THAN (34),
+        PARTITION P35 VALUES LESS THAN (35),
+        PARTITION P36 VALUES LESS THAN (36),
+        PARTITION P37 VALUES LESS THAN (37),
+        PARTITION P38 VALUES LESS THAN (38),
+        PARTITION P39 VALUES LESS THAN (39),
+        PARTITION P40 VALUES LESS THAN (40),
+        PARTITION P41 VALUES LESS THAN (41),
+        PARTITION P42 VALUES LESS THAN (42),
+        PARTITION P43 VALUES LESS THAN (43),
+        PARTITION P44 VALUES LESS THAN (44),
+        PARTITION P45 VALUES LESS THAN (45),
+        PARTITION P46 VALUES LESS THAN (46),
+        PARTITION P47 VALUES LESS THAN (47),
+        PARTITION P48 VALUES LESS THAN (48),
+        PARTITION P49 VALUES LESS THAN (49),
+        PARTITION P50 VALUES LESS THAN (50),
+        PARTITION P51 VALUES LESS THAN (51),
+        PARTITION P52 VALUES LESS THAN (52),
+        PARTITION P53 VALUES LESS THAN (53),
+        PARTITION P54 VALUES LESS THAN (54),
+        PARTITION P55 VALUES LESS THAN (55),
+        PARTITION P56 VALUES LESS THAN (56),
+        PARTITION P57 VALUES LESS THAN (57),
+        PARTITION P58 VALUES LESS THAN (58),
+        PARTITION P59 VALUES LESS THAN (59),
+        PARTITION P60 VALUES LESS THAN (60),
+        PARTITION P61 VALUES LESS THAN (61),
+        PARTITION P62 VALUES LESS THAN (62),
+        PARTITION P63 VALUES LESS THAN (63),
+        PARTITION P64 VALUES LESS THAN (64),
+        PARTITION P65 VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE UNIQUE INDEX NGM_BND_PART65_I
+        ON NGM_BND_PART65(K) TABLESPACE SYS_TBS_MEM_DATA;
+    INSERT INTO NGM_BND_PART65 VALUES (0, 100);
+    INSERT INTO NGM_BND_PART65 VALUES (32, 132);
+    INSERT INTO NGM_BND_PART65 VALUES (64, 164);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT /*+ INDEX(NGM_BND_PART65, NGM_BND_PART65_I) */ P, K
+      FROM NGM_BND_PART65 ORDER BY K;
+    ALTER INDEX NGM_BND_PART65_I REBUILD;
+    SELECT /*+ INDEX(NGM_BND_PART65, NGM_BND_PART65_I) */ COUNT(*)
+      FROM NGM_BND_PART65 WHERE K BETWEEN 100 AND 164;
+    SELECT COUNT(*) AS PARTITION_COUNT
+      FROM SYSTEM_.SYS_TABLE_PARTITIONS_
+     WHERE TABLE_ID = (SELECT TABLE_ID
+                         FROM SYSTEM_.SYS_TABLES_
+                        WHERE USER_ID = USER_ID()
+                          AND TABLE_NAME = 'NGM_BND_PART65');
+    SELECT INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_BND_PART65_I';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_BND_PART65;
+    SKIP END;
+}

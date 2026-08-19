@@ -1,0 +1,118 @@
+###########################################################################
+# TestCase Description = Reject multiple Memory native index creates in one statement.
+# Project ID           = NativeGlobalIndexCodex
+# Test ID              = NGI-NEG-009
+# Verification Status  = RuntimeVerified; A4_64 oracle recorded.
+# 출처                 = NativeGlobalIndexCodex/Memory/Unsupported/ddlCombination.tc (통합 Phase D 흡수)
+#                        원본은 codex 브랜치가 관리한다. 고칠 일이 생기면 그쪽도 본다.
+# 흡수 시 더한 것       = (1) 프로퍼티 못박기 -- 원본은 자기 전제를 세우지 않아
+#                            앞 케이스가 남긴 값을 물려받았다(계획 §5.4)
+#                        (2) INDEX_IMPL_TYPE 제거 -- SYS_INDICES_ 에 없는 컬럼이라
+#                            원본 질의가 ERR-31058 로 죽는다. 판별자는 INDEX_TABLE_ID
+#                            (네이티브 = 0) 하나로 충분하다
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_NEG_DDLCOMB_TRY;
+    DROP TABLE NGM_NEG_DDLCOMB;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+    select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+
+    CREATE TABLE NGM_NEG_DDLCOMB (P INTEGER, K VARCHAR(32), V INTEGER)
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION P2 VALUES LESS THAN (20),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_NEG_DDLCOMB_OK ON NGM_NEG_DDLCOMB(K);
+    INSERT INTO NGM_NEG_DDLCOMB VALUES (1, 'K-101', 201);
+    INSERT INTO NGM_NEG_DDLCOMB VALUES (11, 'K-111', 211);
+
+##################################
+SECTOR; TEST
+##################################
+    SELECT COUNT(*) AS BEFORE_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_DDLCOMB_%';
+
+    CREATE TABLE NGM_NEG_DDLCOMB_TRY
+    (
+        P INTEGER,
+        K VARCHAR(32),
+        V INTEGER,
+        CONSTRAINT NGM_NEG_DDLCOMB_PK PRIMARY KEY(K),
+        CONSTRAINT NGM_NEG_DDLCOMB_UK UNIQUE(V)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+
+    SELECT COUNT(*) AS AFTER_REJECT_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_DDLCOMB_%';
+    SELECT COUNT(*) AS FAILED_TABLE_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME = 'NGM_NEG_DDLCOMB_TRY';
+    SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME = 'NGM_NEG_DDLCOMB_OK';
+    SELECT COUNT(*) AS HIDDEN_FALLBACK_COUNT
+      FROM SYSTEM_.SYS_TABLES_
+     WHERE USER_ID = USER_ID()
+       AND TABLE_NAME LIKE '$GIT_NGM_NEG_DDLCOMB_%';
+    SELECT COUNT(*) AS HIDDEN_FALLBACK_INDEX_COUNT
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND (INDEX_NAME LIKE '$GIK_NGM_NEG_DDLCOMB_%'
+            OR INDEX_NAME LIKE '$GIR_NGM_NEG_DDLCOMB_%');
+    SELECT /*+ INDEX(NGM_NEG_DDLCOMB, NGM_NEG_DDLCOMB_OK) */ P, K, V
+      FROM NGM_NEG_DDLCOMB ORDER BY K;
+    INSERT INTO NGM_NEG_DDLCOMB VALUES (21, 'K-121', 221);
+    SELECT /*+ INDEX(NGM_NEG_DDLCOMB, NGM_NEG_DDLCOMB_OK) */ P, K, V
+      FROM NGM_NEG_DDLCOMB ORDER BY K;
+
+    CREATE TABLE NGM_NEG_DDLCOMB_TRY
+    (
+        P INTEGER,
+        K VARCHAR(32),
+        V INTEGER,
+        CONSTRAINT NGM_NEG_DDLCOMB_PK PRIMARY KEY(K)
+    )
+    PARTITION BY RANGE(P)
+    (
+        PARTITION P1 VALUES LESS THAN (10),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NGM_NEG_DDLCOMB_UK ON NGM_NEG_DDLCOMB_TRY(V);
+    SELECT INDEX_NAME, INDEX_TABLE_ID
+      FROM SYSTEM_.SYS_INDICES_
+     WHERE USER_ID = USER_ID()
+       AND INDEX_NAME LIKE 'NGM_NEG_DDLCOMB_%'
+     ORDER BY INDEX_NAME;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLE NGM_NEG_DDLCOMB_TRY;
+    DROP TABLE NGM_NEG_DDLCOMB;
+    SKIP END;
+}

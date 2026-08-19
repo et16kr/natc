@@ -263,6 +263,31 @@ Codex 의 `.lst` 는 **2026-08-02~08-05 기록**이고, 그 뒤 제품이 세 �
 
 실측: Codex 116 케이스에서 `GLOBAL_INDEX_ENABLE` 참조 **0 건**.
 
+> **[Phase D 실측, 2026-08-19] 이 위험이 현실로 나타났다.**
+>
+> Codex 116 을 오늘 빌드에서 처음 돌렸더니 **17 PASS / 99 FAIL** 이었다.
+> 원인을 §5.3(제품이 세 번 바뀌었다)으로 읽기 쉬우나 **아니었다.** 붉은
+> 케이스의 첫 어긋남이 전부 이것이다:
+>
+> ```
+> [ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+> ```
+>
+> 즉 `MEM_GLOBAL_INDEX_ENABLE` 이 **0** 인 상태에서 돌았다. 직전에 돌린
+> `NativeGlobalIndexClaude` 의 `regress/noGlobalIndexUnchanged` 가 FINALIZE
+> 에서 `DISABLE_GLOBAL_INDEX()` 로 끄고 끝났고, 프로퍼티는 비영속이되
+> **도는 인스턴스 안에서는 남는다.** 자기 전제를 세우지 않는 Codex 가 그
+> 값을 그대로 물려받은 것이다.
+>
+> 재기동으로 파일 기본값(**1**)을 복원한 뒤 다시 잰다. 이 절의 요구는
+> 이제 권고가 아니라 **흡수의 전제**다 — 못박지 않은 케이스는 앞에 무엇이
+> 돌았는지에 따라 다른 것을 잰다.
+>
+> **곁가지로 확인된 것**: `include/globalIndexEnv.i` 의 헤더 주석이
+> "파일 값(기본 0)" 이라고 적고 있는데 **낡았다.** `altibase.properties` 는
+> `MEM_/DISK_GLOBAL_INDEX_ENABLE` 둘 다 `default = 1` 이다(2026-08-06 전환).
+> §7 자족화 때 함께 고친다.
+
 §8.5 규약 ②("케이스마다 자기 전제를 세운다")의 정면 위반이다. J24 로
 프로퍼티 0 의 뜻이 "거절" 이 된 만큼, **흡수할 때 프로퍼티 못박기를 넣는
 것이 필수 작업**이다. 넣지 않으면 기본값이 움직이는 날 조용히 다른 것을
