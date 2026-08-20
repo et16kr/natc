@@ -4,6 +4,12 @@
 - 흡수: `NativeGlobalIndexPort1624` 전량 + `NativeGlobalIndexCodex` **선별** +
   제품 저장소 밖 그물(`altibase/scripts/global-index/`)에서 **건질 수 있는 것**
 - 실측 기준: 2026-08-19
+
+> **★ 부족한 TC 의 현황은 `NativeGlobalIndex-Coverage-Gaps.md` §0 현황판**을
+> 본다 (2026-08-20 기준: 실행 단위 271 · 263/8 · 통째로 빈 축 다섯 Z1~Z5 ·
+> 미이식 그물 34 개 단언 1,454). 이 문서의 우선순위 서술이 그것과 어긋나면
+> **현황판이 맞다.**
+
 - 상태: **집행 중** — Phase A~D 완료(판정표는 `-Dedup.md`, Codex 흡수는
   ~30 이 아니라 **11** 로 확정), Phase E 진행 중(분해표는 `-Salvage-Map.md`,
   의존 없는 11 중 3 이식됨). **부족 TC 판정은 `-Coverage-Gaps.md`** —
