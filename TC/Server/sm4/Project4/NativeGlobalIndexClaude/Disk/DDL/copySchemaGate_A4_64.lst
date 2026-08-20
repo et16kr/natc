@@ -1,0 +1,283 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 스키마 복사가 지나는 두 게이트 — 프로퍼티와 $GIT_ 은퇴 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **결함 둘을 고치고 세운 감시자**다.
+$T0> #                        방법: `NativeGlobalIndex-TC-Method.md` 수-1(형제 훑기).
+$T0> #                        메모리 짝은 `Memory/Create/createPathSweep.tc` D 절.
+$T0> #
+$T0> # ★ 왜 디스크에도 있어야 하는가 — 이 파일이 없어서 회귀가 지나갔다
+$T0> #
+$T0> #   `CREATE TABLE ... FROM TABLE SCHEMA` 를 재는 케이스는 이 트리에 셋
+$T0> #   있었고(createPathSweep · createTableFromSchema · createIndexError)
+$T0> #   **셋 다 메모리**였다. 그래서 프로퍼티 게이트를 이 경로에 처음 넣은
+$T0> #   수정이 디스크를 통째로 막았는데도 스위트가 전부 초록이었다:
+$T0> #
+$T0> #     qdbCopySwap::validateCreateTableFromTableSchema 가
+$T0> #     getTableTypeCountInPartInfoList 의 첫 인자(논리 테이블의 매체, **입력**)
+$T0> #     를 0 으로 넘겼다. (0 & SMI_TABLE_TYPE_MASK) 는 SMI_TABLE_META 이고
+$T0> #     그 함수는 META 를 **메모리로 센다**. 전 메모리 원본은 우연히 맞고,
+$T0> #     전 디스크 원본은 논리 테이블 하나가 메모리로 섞여 **hybrid** 가 되어
+$T0> #     DISK_GLOBAL_INDEX_ENABLE = 1 인데도 ERR-313D0 이었다.
+$T0> #
+$T0> #   A 절이 그 회귀의 감시자다. A 가 빨개지면 게이트가 매체를 잘못 세고
+$T0> #   있는 것이고, 프로퍼티와 무관하게 디스크 복사가 막힌 것이다.
+$T0> #
+$T0> # ★★ 무엇을 재는가 — 게이트 둘
+$T0> #
+$T0> #   이 경로는 원본의 인덱스를 **그대로 복제**한다. 그래서 인덱스 정의의
+$T0> #   성질에 걸린 제한(휘발성·혼합 매체 ERR-314AB, 함수 기반·압축 키
+$T0> #   ERR-314AD, 인덱스 비트 예산 ERR-314AC, 키 길이 상한 ERR-311E0)은
+$T0> #   복사본이 새로 어길 수 없다 — 복사본의 테이블스페이스·컬럼·인덱스
+$T0> #   플래그·개수가 원본과 같은 값이기 때문이다(실측·소스 확인 2026-08-20).
+$T0> #
+$T0> #   새는 것은 **정의에 없고 서버 상태에 있는 두 가지**뿐이었다. 둘 다
+$T0> #   "지금 CREATE 하면 무엇이 서는가" 를 묻는 값이고, 복사 경로만 묻지
+$T0> #   않았다:
+$T0> #
+$T0> #     A/B  MEM_/DISK_GLOBAL_INDEX_ENABLE     -> ERR-313D0
+$T0> #     C    __DISK_GLOBAL_INDEX_LEGACY_CREATE -> ERR-314B6 ($GIT_ 은퇴, V4 D-2)
+$T0> #
+$T0> #   C 절의 실측(2026-08-20, 수정 전): 같은 설정에서 CREATE INDEX 는
+$T0> #   ERR-314B6 로 거절되는데 스키마 복사 한 번에 **$GIT_ 숨김 테이블이
+$T0> #   하나 늘었다.** 은퇴 회계가 네 자리라던 것(idpDescResource.cpp 의
+$T0> #   __DISK_GLOBAL_INDEX_LEGACY_CREATE 주석)이 그만큼 샌 것이다.
+$T0> #
+$T0> # ★ 규약 — 내부 스위치는 반드시 되돌린다
+$T0> #   __DISK_GLOBAL_INDEX_LEGACY_CREATE 를 켠 채로 끝내면 뒤 케이스가
+$T0> #   은퇴한 구현을 만들 수 있게 된다(§계획 8.5 규약 ②). C 절 안에서 끄고
+$T0> #   FINALIZATION 이 한 번 더 끈다.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_CPS_A;
+$T0> DROP TABLE NGD_CPS_B;
+$T0> DROP TABLE NGD_CPS_C1;
+$T0> DROP TABLE NGD_CPS_C2;
+$T0> DROP TABLE NGD_CPS_SRC;
+$T0> DROP TABLE NGD_CPS_GIT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION -- 전 디스크 원본에 네이티브 글로벌 인덱스
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGD_CPS_SRC ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> # 파티션 키 P 를 포함하지 않는 키 -> 글로벌이어야만 설 수 있다
+$T0> CREATE UNIQUE INDEX NGD_CPS_SRC_G ON NGD_CPS_SRC ( K ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> # 전제 -- 정말 네이티브 글로벌인가(판별자 101)
+$T0> SELECT COUNT(*) AS SRC_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGD_CPS_SRC_G';
+SRC_IS_NATIVE_GLOBAL 
+-----------------------
+1                    
+1 row selected.
+
+$T0> INSERT INTO NGD_CPS_SRC VALUES ( 1,  101, 'A' );
+1 row inserted.
+$T0> INSERT INTO NGD_CPS_SRC VALUES ( 11, 102, 'B' );
+1 row inserted.
+$T0> INSERT INTO NGD_CPS_SRC VALUES ( 21, 103, 'C' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- ★ 게이트 ON. 디스크 복사는 **되어야 한다** (회귀 감시자)
+$T0> ##################################
+$T0> CREATE TABLE NGD_CPS_A FROM TABLE SCHEMA NGD_CPS_SRC USING PREFIX AA;
+Create success.
+
+$T0> SELECT COUNT(*) AS A_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = 'NGD_CPS_A';
+A_TABLE_CREATED      
+-----------------------
+1                    
+1 row selected.
+
+$T0> # 복사본의 인덱스도 네이티브 글로벌이어야 한다 -- 로컬로 낮춰 만들면
+$T0> # 복사의 계약(원본과 같은 스키마)이 깨진 것이다.
+$T0> SELECT COUNT(*) AS A_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_TABLES_ T
+     WHERE P.INDEX_ID = I.INDEX_ID AND I.TABLE_ID = T.TABLE_ID
+       AND P.PARTITION_TYPE = 101 AND T.TABLE_NAME = 'NGD_CPS_A';
+A_IS_NATIVE_GLOBAL   
+-----------------------
+1                    
+1 row selected.
+
+$T0> # 복사본은 비어 있고, 파티션을 가로지르는 유일성이 실제로 선다
+$T0> INSERT INTO NGD_CPS_A VALUES ( 1,  500, 'x' );
+1 row inserted.
+$T0> INSERT INTO NGD_CPS_A VALUES ( 21, 500, 'y' );
+[ERR-11058 : The row already exists in a unique index.]
+$T0> SELECT COUNT(*) AS A_ROWS FROM NGD_CPS_A;
+A_ROWS               
+-----------------------
+1                    
+1 row selected.
+$T0> ROLLBACK;
+Rollback success.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 게이트 OFF. 거절되어야 한다
+$T0> ##################################
+$T0> # ★ 디스크에서는 형제와 **오류 코드가 다르다.** 둘 다 거절이지만 이유가
+$T0> #   다른 게이트에서 나온다:
+$T0> #
+$T0> #     CREATE INDEX  프로퍼티 0 이면 남는 구현이 $GIT_ 뿐인데 그것이
+$T0> #                   은퇴했으므로 ERR-314B6 (qdx::validate 의 은퇴 게이트)
+$T0> #     스키마 복사   원본이 이미 네이티브이므로 은퇴 게이트에 닿지 않고
+$T0> #                   프로퍼티 게이트가 먼저 잡는다 -> ERR-313D0
+$T0> #
+$T0> #   메모리에서는 둘 다 ERR-313D0 으로 같다(createPathSweep A/D 절).
+$T0> #   코드를 맞추는 것은 설계 결정이라 여기서는 **실측대로 못박기만 한다** --
+$T0> #   재는 것은 "복사가 거절되고 테이블이 생기지 않는다" 이다.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+
+$T0> # 형제가 같은 설정에서 무엇을 내는지 전사에 남긴다
+$T0> CREATE INDEX NGD_CPS_SRC_G2 ON NGD_CPS_SRC ( V ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create NGD_CPS_SRC_G2.]
+
+$T0> CREATE TABLE NGD_CPS_B FROM TABLE SCHEMA NGD_CPS_SRC USING PREFIX BB;
+[ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+
+$T0> SELECT COUNT(*) AS B_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = 'NGD_CPS_B';
+B_TABLE_CREATED      
+-----------------------
+0                    
+1 row selected.
+
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- $GIT_ 은퇴 게이트 (V4 D-2)
+$T0> ##################################
+$T0> # 은퇴한 구현을 원본으로 두고 복사한다. 복사는 **새 숨김 인덱스 테이블을
+$T0> # 짓는다** -- 그것이 D-2 가 닫은 일이다.
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 1;
+Alter success.
+
+$T0> CREATE TABLE NGD_CPS_GIT ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    ( PARTITION P1 VALUES LESS THAN ( 10 ), PARTITION PD VALUES DEFAULT )
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> CREATE INDEX NGD_CPS_GIT_G ON NGD_CPS_GIT ( K ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$T0> # 전제 -- 정말 은퇴한 구현인가($GIT_ 숨김 테이블이 있다)
+$T0> SELECT COUNT(*) AS C_SRC_IS_GIT
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = '$GIT_NGD_CPS_GIT_G';
+C_SRC_IS_GIT         
+-----------------------
+1                    
+1 row selected.
+
+$T0> # 스위치 1 -- 하위 호환 그물은 종전대로 복사할 수 있어야 한다
+$T0> CREATE TABLE NGD_CPS_C1 FROM TABLE SCHEMA NGD_CPS_GIT USING PREFIX CC;
+Create success.
+
+$T0> SELECT COUNT(*) AS C1_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = 'NGD_CPS_C1';
+C1_TABLE_CREATED     
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT COUNT(*) AS C1_GIT_MADE
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = '$GIT_CCNGD_CPS_GIT_G';
+C1_GIT_MADE          
+-----------------------
+1                    
+1 row selected.
+
+$T0> # ★ 스위치 0 -- 여기가 표적이다. 이 절은 형제와 **같은 오류**여야 한다
+$T0> #   (둘 다 은퇴 게이트에서 나온다).
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+
+$T0> # 기준 오류를 여기서 정한다
+$T0> CREATE INDEX NGD_CPS_GIT_G2 ON NGD_CPS_GIT ( V ) TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create NGD_CPS_GIT_G2.]
+
+$T0> CREATE TABLE NGD_CPS_C2 FROM TABLE SCHEMA NGD_CPS_GIT USING PREFIX DD;
+[ERR-314B6 : The hidden index table implementation of a global non-partitioned index has been retired and cannot be used to create NGD_CPS_C2.]
+
+$T0> SELECT COUNT(*) AS C2_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = 'NGD_CPS_C2';
+C2_TABLE_CREATED     
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 1 이면 은퇴한 구현이 복사 한 번으로 새로 만들어진 것이다
+$T0> SELECT COUNT(*) AS C2_GIT_MADE
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = '$GIT_DDNGD_CPS_GIT_G';
+C2_GIT_MADE          
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_CPS_C2;
+$T0> DROP TABLE NGD_CPS_C1;
+$T0> DROP TABLE NGD_CPS_B;
+$T0> SKIP END;
+$T0> DROP TABLE NGD_CPS_GIT;
+Drop success.
+$T0> DROP TABLE NGD_CPS_A;
+Drop success.
+$T0> DROP TABLE NGD_CPS_SRC;
+Drop success.
+

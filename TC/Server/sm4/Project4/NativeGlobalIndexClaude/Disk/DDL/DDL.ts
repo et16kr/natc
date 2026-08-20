@@ -87,4 +87,10 @@ ddl_truncate_partition.tc               # DDL/truncate_partition.tc
 ddl_security_column.tc                  # DDL/security_column.tc
 ddl_global_index_table.tc               # DDL/global_index_table.tc
 ddl_partitioned_mview.tc                # DDL/partitioned_mview.tc
+#
+# ★ 아래는 **맨 뒤여야 한다.** 위 이식분 다수가 절대 카탈로그 id
+#   (`__SYS_PART_IDX_ID_<n>`)를 기대값에 담고 있어, 앞에 케이스를 끼우면
+#   그 id 가 전부 밀린다. 새 케이스는 이 줄 아래에 붙인다.
+#
+copySchemaGate.tc                       # 스키마 복사의 게이트 둘 — 프로퍼티 · $GIT_ 은퇴 (신규)
 -------------------------------------------------------------------------------

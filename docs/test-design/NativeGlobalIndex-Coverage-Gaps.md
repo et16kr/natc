@@ -16,9 +16,15 @@
 
 | | |
 |---|---:|
-| 실행 단위 | **271** |
-| 통과 / 실패 | **263 / 8** |
-| `.tc` · `.sql` · `.lst` | 166 · 160 · 275 |
+| 실행 단위 | **273** |
+| 통과 / 실패 | **267 / 6** |
+| `.tc` · `.sql` · `.lst` | 167 · 160 · 276 |
+
+> **계수는 실행 환경의 함수다** (2026-08-20 실측). 위 값은
+> `clean UTF8 UTF16` + `packages/catproc.sql` 설치 뒤 한 번 돌린 것이다.
+> 기본 `clean`(KO16KSC5601)으로 돌리면 문자셋 의존 케이스 둘과
+> `DBMS_STATS` 의존 하나가 더 붉어 **263 / 9** 가 된다. 재현 절차는
+> `NativeGlobalIndex-Defect-CopySwapGate.md` §6.
 
 영역 분포 — Disk 259(DDL 117 · DML 47 · Query 39 · Bugs 21 · Create 12 ·
 Transaction 10 · Catalog 8 · **Recovery 4** · Boundary 1) ·
@@ -48,7 +54,7 @@ Memory 43 · Tool 7 · Replication 4.
 | 축 | 스위트 | 비고 |
 |---|---:|---|
 | `GLOBAL_INDEX_EXCHANGE_REMAP` | 1 | `replacePartitionRemap.tc` 하나 |
-| `__DISK_GLOBAL_INDEX_LEGACY_CREATE` | 3 | 전환 축 |
+| `__DISK_GLOBAL_INDEX_LEGACY_CREATE` | 4 | 전환 축 + 스키마 복사의 은퇴 게이트 |
 | 테이블스페이스 OFFLINE | 1 | |
 | AGING | 1 | |
 | `NVARCHAR` 키 | 1 | 디스크 판 없음 |
@@ -59,27 +65,55 @@ Memory 43 · Tool 7 · Replication 4.
 삭제 예정 그물 47 중 **13 만 이식됐다.** 남은 34 에 위 Z1·Z2·Z3·Z5 가
 전부 들어 있고, 나머지는 카탈로그·DDL·플랜·FK 계열이다(§Salvage-Map).
 
-### 0.5 ★ 결함 후보 1 건 (2026-08-20)
+### 0.5 ★ 서버 결함 3 건 (2026-08-20, 전부 수정 · 검증)
 
-| 결함 | 무엇 | 보고 |
+| # | 무엇 | 감시자 |
 |---|---|---|
-| **CopySwap 게이트 누락** | 프로퍼티가 0 인데 `CREATE TABLE ... FROM TABLE SCHEMA` 가 **작동하는 네이티브 글로벌 인덱스를 만든다.** 양쪽 매체 모두. 형제 셋(`CREATE INDEX`·`ADD CONSTRAINT`·`CREATE TABLE + PK`)은 전부 거절한다 | `NativeGlobalIndex-Defect-CopySwapGate.md` |
+| D1 | 프로퍼티가 0 인데 `CREATE TABLE ... FROM TABLE SCHEMA` 가 **작동하는 네이티브 글로벌 인덱스를 만든다.** 양쪽 매체 모두. 형제 셋(`CREATE INDEX`·`ADD CONSTRAINT`·`CREATE TABLE + PK`)은 전부 거절한다 | `Memory/Create/createPathSweep.tc` D 절 |
+| D2 | **D1 의 수정이 전 디스크 복사를 통째로 막았다.** 매체를 세면서 논리 테이블의 매체를 0 으로 넘겨 `SMI_TABLE_META` 가 메모리로 세어졌고, 전 디스크 원본이 hybrid 로 보였다 | `Disk/DDL/copySchemaGate.tc` A 절 |
+| D3 | `$GIT_` 은퇴 게이트(V4 D-2)도 같은 경로가 지나친다. `CREATE INDEX` 는 `ERR-314B6` 인데 스키마 복사 한 번에 `$GIT_` 숨김 테이블이 하나 늘었다 | `Disk/DDL/copySchemaGate.tc` C 절 |
 
-감시자는 `Memory/Create/createPathSweep.tc` D 절이고 **`.lst` 를 찍지 않았다** —
-지금 동작을 굳히면 스위트가 결함 편을 든다. 수정 뒤에 찍는다.
+보고: `NativeGlobalIndex-Defect-CopySwapGate.md`
 
-**찾은 방법**: `NativeGlobalIndex-TC-Method.md` 수-1(형제 훑기) — 검증기를
-부르는 자리를 소스에서 세니 셋이었고, 인덱스를 만들 수 있는 문장은 그보다
-많았다. **첫 시도에서 나왔다.**
+**찾은 방법**: D1 은 `NativeGlobalIndex-TC-Method.md` 수-1(형제 훑기) —
+검증기를 부르는 자리를 소스에서 세니 셋이었고, 인덱스를 만들 수 있는
+문장은 그보다 많았다. **첫 시도에서 나왔다.** D3 도 같은 방법을 은퇴
+게이트에 다시 적용한 것이다.
 
-### 0.6 오늘 실패하는 8 건 — 원인별
+### 0.5.1 ★ 방법 교훈 — **매체 비대칭이 사각지대를 만든다**
+
+D2 는 **수정이 만든 회귀**이고, 스위트가 전부 초록인 채로 지나갔다.
+이유가 단순하다: `FROM TABLE SCHEMA` 를 재는 케이스가 셋 있었는데
+(`createPathSweep`·`createTableFromSchema`·`createIndexError`) **셋 다
+메모리**였다. 디스크 판이 하나도 없었다.
+
+이 프로젝트의 게이트는 거의 전부 매체마다 따로다(`MEM_`/`DISK_`,
+그리고 디스크에만 있는 `__DISK_GLOBAL_INDEX_LEGACY_CREATE`). 그러므로
+**한 매체에서만 재는 케이스는 절반만 재는 것**이고, 판정식이 매체를 세는
+자리라면 나머지 절반이 통째로 죽어도 초록이다.
+
+규약으로 올린다: **게이트를 재는 케이스는 매체 짝을 함께 만든다.**
+§0.3 의 "디스크 판 없음" 두 줄(`NVARCHAR` 키 · `RANGE_USING_HASH`)이
+같은 종류의 빚이다.
+
+### 0.6 오늘 실패하는 6 건 — 원인별 (**서버 회귀 0**)
 
 | 원인 | 건 | 무엇 |
 |---|---:|---|
-| 절대 카탈로그 id | 4 | `createIndexLocal` ×3 · `createTableAsSelect` — `__SYS_PART_IDX_ID_<n>` 을 기대값에 담아 실행 이력에 매인다. **항구적 수리는 자기 객체로 범위를 좁히는 것**(BUG-35460 선례) |
-| 문자집합 | 2 | `pdtBug_BUG-9`(한글 리터럴 길이) · `qc_JoinTest`(EUC-KR 바이트) |
-| LOB 컬럼 폭 | 1 | `alterColumnLob_basic` |
+| 절대 카탈로그 id | 4 | `createIndexLocal` ×3 · `createTableAsSelect` — `__SYS_PART_IDX_ID_<n>` 과 `TABLE_ID` 를 기대값에 담아 실행 이력에 매인다. **항구적 수리는 자기 객체로 범위를 좁히는 것**(BUG-35460 선례) |
+| 오라클 인코딩 | 1 | `qc_JoinTest` — `.lst` 가 EUC-KR 바이트인데 러너 출력은 UTF-8. 어느 DB 문자셋으로도 초록이 되지 않는다 |
 | 복제 비활성 | 1 | `replicationReject` — `REPLICATION_PORT_NO = 0`(읽기 전용). 켜려면 재기동 |
+
+> **환경을 맞추면 셋이 사라진다** (2026-08-20 실측). `clean` 의 기본
+> 문자셋이 `KO16KSC5601` 인데 `pdtBug_BUG-9`·`alterColumnLob_basic` 의
+> 오라클은 `UTF8` 기준이고, `statisticsAndHeader` 는 `createdb` 가 설치하지
+> 않는 `DBMS_STATS` 를 부른다. `clean UTF8 UTF16` + `catproc.sql` 로
+> **263 / 9 → 267 / 6**(새 케이스 포함). 남은 6 에 서버 회귀는 없다 —
+> 판정 근거는 `-Defect-CopySwapGate.md` §5.3.
+>
+> `Disk/Recovery/Recovery.ts` 의 `clean` 이 DB 를 지우므로 **연속 실행의
+> 둘째 회부터는 문자셋도 패키지도 되돌아간다.** 위 계수는 매 실행 전에
+> 환경을 다시 맞춘 값이다.
 
 ### 0.7 착수 순서
 
@@ -89,7 +123,7 @@ Memory 43 · Tool 7 · Replication 4.
 | 2 | **Z3 memberNo 회수** | GR-09 한 트랙 전체가 0. `GLOBAL_INDEX_AUTO_RECLAIM` 을 부르는 케이스가 없다 |
 | 3 | **Z5 동시성** | 파티션 간 유니크는 글로벌 인덱스의 존재 이유인데 경합을 안 잰다 |
 | 4 | **Z4 4K 축** | 상한·경계·격자가 전부 페이지 크기 함수인데 오라클이 한 크기뿐 |
-| 5 | 실패 8 건 수리 | 절대 id 넷이 먼저 — 고치면 실행 순서 제약도 함께 풀린다 |
+| 5 | 실패 6 건 수리 | 절대 id 넷이 먼저 — 고치면 실행 순서 제약도 함께 풀린다. 그다음이 `qc_JoinTest` 오라클 인코딩 |
 | 6 | 나머지 이식 | |
 | 7 | **Z2 FIT** | 계약(`docs/FIT_GUIDE.md`)이 먼저다 |
 | 8 | 복제 확장 | 그물 15 절 중 2 절만 덮었다. **기본 매체가 먼저**다 |
