@@ -415,15 +415,30 @@ atsclnt TC/Server/sm4/Project4/NativeGlobalIndexClaude/Memory/Create/createPathS
       **GREEN 273/273**.
 - [ ] `ERR-313D0` 의 문구가 디스크 파티션드 테이블에 나오면 오해를 부른다.
       매체별 오류 코드 정리는 설계 결정이라 손대지 않았다(§4).
-- [ ] **`restartCatalogSurvival.sql` 의 `--+SYSTEM clean;` 이 격리
-      인스턴스의 계약을 깬다.** 인자 없는 `clean` 은 DB 를
-      `KO16KSC5601` 로 다시 만들고 시스템 패키지를 지운다 — `testdb.sh` 가
-      `server create UTF8 UTF8` + `DBMS_STATS` 로 세운 것을 한 케이스가
-      되돌린다. 같은 실행 안에서 그 뒤에 도는 `Memory/` · `Tool/` 이
-      그 위에서 돈다. 지금 초록인 것은 `natc-check.sh` 가 매 실행 전에
-      인스턴스를 다시 짓기 때문이다. 그 케이스가 자기가 부순 것을
-      되돌리게 하는 것이 수리다(`clean UTF8 UTF8` + 패키지 재설치를
-      **자기 측정 뒤에** — 앞에 두면 자기 절대 `TABLE_ID` 가 밀린다).
+- (정정) `restartCatalogSurvival.sql` 의 `--+SYSTEM clean;` 을 결함으로
+      적었다가 내린다 (2026-08-21). `--+SYSTEM clean` 은 ATAF 의 정상
+      관용구이고, 표준 하네스에서는 auto-init 이 어차피 DB 를 다시 만드니
+      비용은 시간뿐이다.
+
+      **사실만 남기면**: 이 스위트는 비표준 인스턴스(UTF8 + 시스템 패키지)
+      위에서 돌고 `clean` 은 기본 구성(`KO16KSC5601`, 패키지 없음)으로
+      다시 만든다. 그래서 한 실행의 전반부와 후반부가 서로 다른 DB
+      구성에서 돈다. **오늘 그 차이를 읽는 케이스는 없다** -- clean 뒤에
+      오는 `Memory/` · `Tool/` 전체에 비ASCII SQL 리터럴이 0 건이고,
+      `DBMS_STATS` 를 쓰는 케이스는 `statisticsAndHeader` 하나뿐인데 그것은
+      `Disk/Query` 라 clean **앞**에서 돈다(실측). 오라클도 각자 자기가 도는
+      구성에서 찍혀 자기정합적이고, 이 상태로 GREEN 273/273 이다.
+
+      남는 것은 **순서 의존** 하나다 -- 케이스를 단독 실행하면 clean 앞
+      구성에서 돈다. 한글 데이터나 통계에 의존하는 케이스를 `Recovery`
+      뒤에 놓게 되는 날 드러난다. 그때 그 케이스가 자기 전제를 세우면 된다.
+
+      ★ 왜 결함으로 적었었나 -- `tool_aexport_initialize.tc` 가 원본의
+      `stdClean()` 을 **바로 이 이유로 제거**한 PORT EDIT 을 갖고 있어서,
+      같은 기계장치를 다시 넣은 것을 "앞의 판단을 못 물려받았다" 로 읽었다.
+      두 자리는 상황이 다르다 -- aexport 뒤 세 케이스는 DDL 을 덤프해
+      비교하므로 인스턴스 구성에 실제로 의존하고, `restartCatalogSurvival`
+      뒤는 아니다. **기계장치가 같다고 결과가 같다고 추정한 것이 틀렸다.**
 - [ ] 이 하네스는 `.tc` 바이트를 **EUC-KR 로 읽는다.** 이식분의 한글 SQL
       리터럴은 EUC-KR 이어야 하고, UTF-8 로 두면 `ERR-31001` 이 난다.
       `ALTIBASE_NLS_USE=UTF8` 이 셸과 STAFProc 환경에 있는데도 그렇다 —
