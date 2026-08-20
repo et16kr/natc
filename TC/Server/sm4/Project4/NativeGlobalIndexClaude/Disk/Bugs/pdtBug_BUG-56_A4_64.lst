@@ -1,0 +1,3869 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###########################################################################
+--# ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Bugs/BUG-56/BUG-56.sql
+--#
+--# Body below is byte-identical to the original. The one line this port
+--# adds is the premise: the original measures these statements on the
+--# $GIT_ hidden-table implementation, this file measures the same
+--# statements on the native global index (F07 -- see include/pinNative.sql).
+--###########################################################################
+--###########################################################################
+--# NativeGlobalIndexPort1624 - the premise of every ported .sql case.
+--#
+--# A .sql case cannot CALL a DEF the way a .tc case calls PIN_DISK_NATIVE(),
+--# so the same two statements are pulled in per case with ATC's own include
+--# directive:
+--#
+--#     --+LOAD_SQL <relative path>/include/pinNative.sql;
+--#
+--# ATC inlines this file into the case transcript between BEGIN/END markers,
+--# which is exactly what F07 asks for: the case states its own premise at the
+--# head of its own transcript instead of inheriting whatever the instance
+--# happens to be configured with.
+--#
+--#     DISK_GLOBAL_INDEX_ENABLE = 1  -> native  (this suite)
+--#     DISK_GLOBAL_INDEX_ENABLE = 0  -> $GIT_   (the original suite)
+--#
+--# The readout below is not decoration. It is the tooth: if the property is
+--# ever 0 when a case runs, this one line differs and the case is red before
+--# it has measured anything, instead of quietly measuring the other
+--# implementation (disk-natc.md 6 records nine assertions that drifted that
+--# way).
+--#
+--# ASCII only, on purpose: 87 of the ported case bodies are EUC-KR and their
+--# bytes must stay untouched, so nothing this port adds may introduce a
+--# second encoding into a transcript.
+--###########################################################################
+
+$P0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$P0> SELECT CAST(VALUE1 AS VARCHAR(10)) DISK_GLOBAL_INDEX_ENABLE
+     FROM V$PROPERTY WHERE NAME = 'DISK_GLOBAL_INDEX_ENABLE';
+DISK_GLOBAL_INDEX_ENABLE  
+----------------------------
+1           
+1 row selected.
+
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+# ==> [pdtBug_BUG-56_query.sql] BEGIN <=
+--+SKIP BEGIN; 
+$P0> DROP TABLE T1;
+$P0> DROP TABLE T2;
+$P0> DROP TABLE T3;
+$P0> DROP TABLE T4;
+--+SKIP END; 
+
+$P0> CREATE TABLE T1 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T2 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T3 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$P0> CREATE TABLE T4 ( I1 VARCHAR(3) VARIABLE, I2 VARCHAR(3) FIXED ) PARTITION BY RANGE(I1) ( PARTITION P1 VALUES DEFAULT TABLESPACE PDT_TBS ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+
+$P0> CREATE INDEX T1_I1 ON T1(I1);
+Create success.
+$P0> CREATE INDEX T1_I2 ON T1(I2);
+Create success.
+
+$P0> INSERT INTO T1 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (4, 2);
+1 row inserted.
+$P0> INSERT INTO T1 VALUES (2, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T2 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 4);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (4, 8);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T2 VALUES (5, 4);
+1 row inserted.
+
+$P0> INSERT INTO T3 VALUES (1, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (0, 3);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (4, 1);
+1 row inserted.
+$P0> INSERT INTO T3 VALUES (3, NULL);
+1 row inserted.
+
+$P0> INSERT INTO T4 VALUES (1, NULL);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 1);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (3, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (2, 2);
+1 row inserted.
+$P0> INSERT INTO T4 VALUES (5, 4);
+1 row inserted.
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=ON;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=1;
+Alter success.
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+3    1    3    2    3         
+3    1    3    2    3    1    
+4    2    4    8    4    1    
+7 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    [ FIXED KEY ]
+    AND
+     OR
+      T1.I1 > '0'
+    [ FILTER SERIAL EXECUTE ]
+    T1.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T3.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T3.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T2.I1
+   PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      '0' < T2.I1 [+]
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3, T4 
+                   WHERE T1.I1 = T2.I1 AND T1.I1 = T3.I1 
+                   AND T1.I1 > '0' AND T1.I2 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    1         
+1    1    1    1    1    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+3    1    3    2    3         1         
+3    1    3    2    3    1    1         
+4    2    4    8    4    1    1         
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+3    1    3    2    3         2    1    
+3    1    3    2    3    1    2    1    
+4    2    4    8    4    1    2    1    
+1    1    1         1    1    3    2    
+1    1    1    1    1    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+3    1    3    2    3         3    2    
+3    1    3    2    3    1    3    2    
+4    2    4    8    4    1    3    2    
+1    1    1         1    1    2    2    
+1    1    1    1    1    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+3    1    3    2    3         2    2    
+3    1    3    2    3    1    2    2    
+4    2    4    8    4    1    2    2    
+1    1    1         1    1    5    4    
+1    1    1    1    1    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+3    1    3    2    3         5    4    
+3    1    3    2    3    1    5    4    
+4    2    4    8    4    1    5    4    
+35 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: NL, COST: BLOCKED )
+  PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+   SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    SCAN ( TABLE: SYS.T1, INDEX: SYS.T1_I1, GLOBAL-INDEX, RANGE SCAN, ACCESS: 35, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FIXED KEY ]
+     AND
+      OR
+       T1.I1 > '0'
+     [ FILTER SERIAL EXECUTE ]
+     T1.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 30, COST: BLOCKED )
+     [ FILTER ]
+     T1.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 4, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T3.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T3.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 35, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T2.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+------------------------------------------------------------
+
+
+$P0> SELECT * FROM T1, T2, T3 
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  
+-------------------------------------------------
+1    1    1         1    1    
+1    1    1    1    1    1    
+1    1    3    2    3    1    
+1    1    4    8    4    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 6, TUPLE_SIZE: 35, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+    [ PARTITION KEY ]
+    AND
+     OR
+      T3.I1 > '0'
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+     [ FILTER SERIAL EXECUTE ]
+     AND
+      T3.I1 > '0'
+      T3.I2 > '0'
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T2.I1 = T3.I1
+    PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       '0' < T2.I1 [+]
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      '0' < T2.I1 [+]
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I1 = T3.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> SELECT * FROM T1, T2, T3, T4
+                   WHERE T1.I1 = T3.I2 AND T2.I1 = T3.I1 AND T1.I2 = T4.I2
+                   AND T3.I2 > '0' AND T3.I1 > '0';
+T1.I1  T1.I2  T2.I1  T2.I2  T3.I1  T3.I2  T4.I1  T4.I2  
+-----------------------------------------------------------------
+1    1    1         1    1    2    1    
+1    1    1    1    1    1    2    1    
+1    1    3    2    3    1    2    1    
+1    1    4    8    4    1    2    1    
+4 rows selected.
+------------------------------------------------------------
+PROJECT ( COLUMN_COUNT: 8, TUPLE_SIZE: 47, COST: BLOCKED )
+ JOIN ( METHOD: HASH, COST: BLOCKED )
+  JOIN ( METHOD: HASH, COST: BLOCKED )
+   JOIN ( METHOD: HASH, COST: BLOCKED )
+    PARTITION-COORDINATOR ( TABLE: SYS.T3, PARTITION: 1/1, FULL SCAN, ACCESS: 3, COST: BLOCKED )
+     [ PARTITION KEY ]
+     AND
+      OR
+       T3.I1 > '0'
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+      [ FILTER SERIAL EXECUTE ]
+      AND
+       T3.I1 > '0'
+       T3.I2 > '0'
+    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+     [ FILTER ]
+     T2.I1 = T3.I1
+     PARTITION-COORDINATOR ( TABLE: SYS.T2, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+      [ PARTITION KEY ]
+      AND
+       OR
+        '0' < T2.I1 [+]
+      SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+       [ FILTER SERIAL EXECUTE ]
+       '0' < T2.I1 [+]
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+    [ FILTER ]
+    T1.I1 = T3.I2
+    PARTITION-COORDINATOR ( TABLE: SYS.T1, PARTITION: 1/1, FULL SCAN, ACCESS: 8, COST: BLOCKED )
+     SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   [ FILTER ]
+   T1.I2 = T4.I2
+   PARTITION-COORDINATOR ( TABLE: SYS.T4, PARTITION: 1/1, FULL SCAN, ACCESS: 5, COST: BLOCKED )
+    SCAN ( PARTITION: P1, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+------------------------------------------------------------
+
+$P0> ALTER SESSION SET EXPLAIN PLAN=OFF;
+Alter success.
+$P0> ALTER SESSION SET TRCLOG_DETAIL_PREDICATE=0;
+Alter success.
+
+$P0> DROP TABLE T1;
+Drop success.
+$P0> DROP TABLE T2;
+Drop success.
+$P0> DROP TABLE T3;
+Drop success.
+$P0> DROP TABLE T4;
+Drop success.
+
+# ==> [pdtBug_BUG-56_query.sql] END <=
+

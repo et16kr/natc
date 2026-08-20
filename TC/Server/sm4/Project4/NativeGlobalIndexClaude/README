@@ -1,214 +1,192 @@
-Native Global Index for Memory Partitioned Table
+Native Global Index (disk) -- PROJ-1624 이식
 
-  상태: 완성. .tc 37 개, .lst 37 개, 전 케이스 PASS.
-        (PASS 37 / FAIL 0 / FATAL 0 / ERROR 0, 두 번 연속)
+  상태: 배치 1~5 완료 (185 케이스 걸림 / 5 보류). 잔여 배치 18 은
+        altidev4/docs/analysis/claude-global-index/v4-natc-port-3.md 11 절.
 
-        .lst 는 전부 실제 실행 결과로 만들었다. 추측으로 쓴 것은 없다.
-        만들기 전에 두 번 돌려 출력이 바이트 단위로 같은 것을 확인했다.
-
-        시나리오와 기대 결과, 실행 요건은 TEST_SCENARIOS.md 에 있다.
-
-  ddl/alterIndexRebuild.tc 가 겨냥한 결함(ALTER INDEX ... REBUILD 가
-  서버를 내리던 것)은 고쳐졌고, 이 케이스도 ddl/ddl.ts 에 들어가 있다.
-  경위는 TEST_SCENARIOS.md §7.
+  원본: TC/Server/qp4/Project3/PROJ-1624-GlobalIndex (596 파일)
+  자매: TC/Server/sm4/Project4/NativeGlobalIndexClaude (메모리 쪽, 37 .tc)
 
 
-[무엇을 검증하는가]
+[무엇을 재는가]
 
-메모리 파티션드 테이블에 대해, 하나의 b-tree 가 모든 파티션의 로우를 직접
-가리키는 네이티브 글로벌 인덱스.
+원본 PROJ-1624 는 **디스크 파티션드 테이블 위의 non-partitioned index** 를
+검증한다. 그 구현이 숨김 테이블 $GIT_ 였다. 같은 문장이 오늘은 프로퍼티
+하나로 갈린다:
 
-구버전 PROJ-1624(qp4/Project3/PROJ-1624-GlobalIndex)와의 차이:
+  DISK_GLOBAL_INDEX_ENABLE = 0  ->  $GIT_ 숨김 테이블 (원본이 재는 것)
+  DISK_GLOBAL_INDEX_ENABLE = 1  ->  네이티브 b-tree  (이 스위트가 재는 것)
 
-  - 구버전은 숨김 테이블 $GIT_ 와 그 위의 b-tree 2개로 글로벌 인덱스를
-    흉내 냈다. 신버전은 b-tree 하나다.
-  - 구버전 테스트는 전부 디스크 파티션드 테이블이다(파티션드 테이블 생성
-    173곳이 모두 tablespace sys_tbs_disk_data). 당시 서버가 메모리
-    파티션드 테이블의 글로벌 인덱스를 전면 금지했기 때문이다.
-    이 스위트가 검증하는 조합은 한 번도 테스트된 적이 없다.
-  - 메모리 파티션드 테이블에 파티션 키를 포함하지 않는 PK/UK 를 만들 수
-    있게 되는 것이 이 프로젝트의 대표 성과다.
+파일 기본값은 2026-08-06 부터 1 이다. 그래도 **케이스마다 자기 전제를
+세운다** -- 기본값에 기대면 그 값이 움직이는 날 "네이티브를 잰다"고 적어
+놓고 $GIT_ 를 재게 된다. 원본 PROJ-1624 와 NATC ddl/diskPartitionedTable.tc
+가 실제로 그렇게 어긋났었다(disk-natc.md 6).
 
 
-[정합성을 어떻게 검사하는가]
+[왜 원본을 고치지 않고 복제했는가]
 
-구버전의 핵심 검증 도구는 베이스 테이블과 숨김 테이블 $GIT_ 를
-FULL OUTER JOIN 해서 한쪽에만 있는 행을 찾는 것이었다. 네이티브에는
-조인할 테이블이 없고 인덱스 내용을 SQL 로 볼 수 없다.
+  1. 원본은 회사 공식 스위트이고, $GIT_ 경로가 살아 있는 동안(GR-14 ③
+     생성 금지 전까지) 그 경로의 유일한 회귀 그물이다. 자리에서 고치면
+     그 그물이 사라진다.
+  2. 기대값이 병행 불가다. 플랜 모양이 통째로 바뀌고
+     (PCRD + per-partition RID SCAN  ->  SCAN ... GLOBAL-INDEX),
+     $GIT_ 객체가 사라지며, 카탈로그 행이 달라진다. 한 .tc 안에 프로퍼티
+     축을 넣으면 한 .lst 에 두 전사가 들어가므로 결국 원본 .lst 를 다시
+     찍어야 한다 -- 피하려던 그 변경이다.
+  3. 원본의 정합성 검사는 이식 자체가 불가능하다. 아래 참조.
 
-대신 세 가지를 조합한다(include/checkGlobalIndex.i):
+  결과적으로 두 스위트가 같은 문장에 대한 on/off 짝이 된다. 명세 GR-12 가
+  말하는 "이식/병행"의 병행은 스위트 단위로 성립한다.
 
-  1. 인덱스 경유 결과와 풀스캔 결과의 양방향 차집합 (CHECK_INDEX_SCAN)
-     힌트로 접근 경로를 갈라서 두 결과가 완전히 같은지 본다.
-     힌트가 실제로 먹었는지 플랜으로 확인해야 의미가 있다.
 
-  2. 카운트와 집계의 교차 확인 (CHECK_INDEX_COUNT)
-     인덱스가 키를 빠뜨리거나 유령 키를 갖고 있으면 합계가 어긋난다.
+[정합성을 어떻게 검사하는가 -- 원본과 무엇이 다른가]
 
-  3. 유니크 제약을 살아 있는 검사기로 사용
-     인덱스가 어느 파티션의 키를 빠뜨리면 중복 삽입이 성공해 버린다.
-     실패해야 할 삽입이 실패하는지가 곧 인덱스 완전성의 증거다.
-     unique/ 그룹 전체가 이 원리로 동작한다.
+원본의 핵심 도구는 힙과 "$GIT_T1_IDX1" 의 FULL OUTER JOIN 이었다.
+그것은 두 가지 이유로 이식할 수 없다.
+
+  1. 조인할 테이블이 없다. 네이티브는 b-tree 하나이고 SQL 로 내용을 볼 수
+     없다.
+
+  2. ★ 원본의 그 검사는 한 번도 동작한 적이 없다. 힙 쪽 SELECT 가
+     cast(_prowid as bigint) 를 쓰는데 디스크 테이블은 _PROWID 를 지원하지
+     않는다. 원본 .lst 22 개에 785 자리가 전부
+       [ERR-31385 : _PROWID is not supported.]
+     로 굳어 있다. 즉 "이 패턴이 울리는 변경"이 존재하지 않는 감시자였다.
+
+대신 세 겹을 쓴다(include/checkGlobalIndex.i, 메모리 쪽 자매 스위트와 같은
+원리):
+
+  1. 인덱스 경유 결과와 풀스캔 결과의 양방향 차집합    -- 행의 유무
+  2. count / sum 교차 확인                             -- 중복과 유령
+  3. 힌트가 실제로 그 글로벌 인덱스를 잡았다는 플랜 증거
+
+3 이 없으면 1·2 는 "풀스캔 minus 풀스캔"이 되어 무조건 0행이다. 그래서
+인덱스마다 플랜을 먼저 전사에 남긴다.
+
+여기에 판별자 한 줄을 더한다(include/globalIndexEnv.i 의 SHOW_INDEX_MEDIA):
+인덱스마다 NATIVE-GLOBAL / LOCAL / GIT-HIDDEN-TABLE 중 무엇인지 카탈로그로
+찍는다. 프로퍼티가 반대로 놓이면 여기가 먼저 운다.
+
+
+[원본에서 드러난 사실 둘 -- 이식하며 확인했다]
+
+  - T1_PK(i2,i1) 과 T1_UK(i3,i2,i1) 은 파티션 키 i1 을 포함하므로 두 구현
+    어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본 check_global_index.i 가
+    "$GIT_T1_PK" / "$GIT_T1_UK" 를 조회한 것은 없는 테이블을 겨눈 것이다.
+    (그 질의도 어차피 위의 ERR-31385 로 먼저 죽는다.)
+
+  - 원본 basic/select.tc 의 LIST 섹터는
+      create index t3_idx1 on t1(i2, i3);
+    처럼 t3 의 인덱스를 t1 에 만든다. t3 섹터가 인덱스 없는 테이블을 재고
+    있었다. 이 스위트는 t3 에 만든다.
+
+두 가지 모두 v3-natc-port.md 3 절에 근거와 함께 적혀 있다.
 
 
 [디렉터리]
 
-  include/      공용 헬퍼
-    globalIndexEnv.i        프로퍼티 on/off (MEM_GLOBAL_INDEX_ENABLE)
-    createMemPartTable.i    메모리 파티션드 테이블 생성, 데이터 채우기
-    checkGlobalIndex.i      정합성 검사 (게이트 열림/닫힘 두 갈래)
-    selectMeta.i            카탈로그 조회
-
-  tools/        서버 없이 도는 검사기
-    lint-tc.py              INCLUDE 해석, DEF/CALL 이름·인자 수, 중괄호·
-                            SKIP·NODISPLAY 짝, 알려진 비문법 SQL, .ts 참조,
-                            .lst 유무. 스위트 루트에서 python3 로 실행한다.
-
-  ddl/          생성·삭제, 거부 조합, 인덱스 예산, ALTER INDEX, 컬럼 DDL,
-                제약, cascade drop, ALL INDEX/TBS, 디스크 회귀, 스키마 복제
-  meta/         카탈로그 표현. 숨김 객체가 없는지, 판별자 행이 있는지
-  unique/       PK / UK. 파티션 간 유일성
-  dml/          삽입, 제자리 갱신, 삭제, 로우 이동, append 적재, NULL, 격리 수준
-  partition/    ADD / DROP / TRUNCATE / SPLIT / MERGE / REPLACE / COALESCE
-  scan/         스캔, 정렬 보존, 호스트 변수, 조인·필터, 잠금
-  tablespace/   파티션이 서로 다른 메모리 테이블스페이스에 있는 구성
-  datatype/     variable 길이 키 컬럼, 함수 기반 인덱스, 타입별 키
-  regress/      글로벌 인덱스가 없는 경로가 그대로인지, 프로퍼티 런타임 전환
-  repl/         복제와 글로벌 인덱스의 상호 거부
-  deferred/     이 프레임워크로 다룰 수 없는 항목 목록
+  include/
+    globalIndexEnv.i     .tc 의 전제(DISK_GLOBAL_INDEX_ENABLE=1)와 판별자
+    checkGlobalIndex.i   정합성 검사 3겹
+    checkFunctionIndex.i 그 3겹의 함수 기반 키 확장 (배치 4, bugs/function_index)
+    pinNative.sql        .sql 의 전제. --+LOAD_SQL 로 케이스마다 끌어온다
+  NEEDS_FRESH_INSTANCE   이 스위트는 이력 없는 DB 를 요구한다 (그 안에 이유)
+  basic/                 1차 배치 16 케이스
+                         select / insert / update / delete / move / null
+  pdt/                   2차 배치 -- 공식 PROJ-1624-QC/PDT 121 케이스
+                         (114 를 걸고 7 을 보류. 보류 이유는 그 .ts 주석에)
+  design/                3차 배치 -- 공식 design/ 16 케이스
+                         플랜 / 선택도 / 조인 / 순서 보존 / 필터 / 잠금
+  bugs/                  4차 배치 -- 공식 bugs/ 6 케이스
+  tool/                  4차 배치 -- 공식 tool/isql 1 + tool/atomic 1
+                         (tool/aexport 4 는 E-4 로 보류. 이유는 tool.ts 안에)
+  DDL/                   5차 배치 -- 공식 DDL/ 25 케이스
+                         create/drop/alter index, 이름, 컬럼 DDL, 제약,
+                         파티션 DDL 전종, 보안 컬럼, 구체화 뷰
+                         desc_global_index.i  원본을 대신하는 네 겹 (아래)
+                         check_global_index.i 원본을 대신하는 세 겹 (아래)
 
 
-[구버전 대비 커버리지]
+[.sql 케이스는 전제를 어떻게 세우는가]
 
-구버전 PROJ-1624 의 항목 중 이 스위트가 이어받은 것과 뺀 것.
+.sql 은 isql 스크립트라 DEF/CALL 이 없다. 대신 ATC 자신의 인클루드
+지시자를 쓴다:
 
-  이어받음
-    DDL          create/drop/alter index, 인덱스 이름·예약 이름, 인덱스
-                 tablespace 옵션, add/drop/rename/modify column,
-                 add/drop constraint, 파티션 DDL 전종, truncate/drop table,
-                 drop user cascade, drop tablespace including contents
-    meta         카탈로그 표현(방향이 반대가 됨 - 아래 참조)
-    design       plan, indexable predicate, join predicate·method,
-                 subquery key range, constant filter, host variable,
-                 preserved order, table lock
-    basic        select, insert/update/delete/move, dpath insert,
-                 null value, constraint
-    bugs         function based index, rollup/cube preserved order,
-                 maxvalue 파티션 경계
+  --+LOAD_SQL ../../../include/pinNative.sql;
 
-  뺌 (대상이 없어짐)
-    DDL/DML on global index table
-                 숨김 테이블 $GIT_ 자체에 대한 DDL·DML·권한 시험.
-                 네이티브에는 그런 객체가 없다.
-    meta         "$GIT_ 가 이렇게 보인다"의 검증. 반대로 "숨김 객체가
-                 없는지"를 확인하는 것으로 바뀌었다.
+ATC 가 그 파일을 케이스 전사에 인라인하므로, .tc 의 CALL PIN_DISK_NATIVE()
+와 똑같이 "케이스가 자기 전제를 자기 전사 첫머리에 적는다"(F07)가 성립한다.
+프로퍼티가 0 이면 그 한 줄이 어긋나 케이스가 아무것도 재기 전에 붉어진다.
 
-  아직 안 함
-    replication  수신 측 반영. 인스턴스 2 개가 필요하다.
-                 DDL 게이트만 repl/replicationReject.tc 가 본다.
-                 거부는 하나도 남지 않았다 -- V2 J18 이 전면 거부를,
-                 V3 B-4 가 PK 조건을, V4 C-2 가 마지막 조합(글로벌 PK
-                 + row movement)을 걷었다. 그 파일은 이제 전부 성공
-                 단언이다. TEST_SCENARIOS.md §6.
-                 receiver 쪽 반영은 replication-check.sh N4b 가 잰다.
-    tool         isql desc 출력, aexport. 출력 형태가 확정되면 추가한다.
-    performance  $GIT_ 대비 측정. 서버 안정화 후 별도로 만든다.
-                 (deferred/README 참조)
-    동시성/크래시/재기동
-                 TC_GUIDE 가 reference-gated 로 묶은 영역이라 이 스위트
-                 에서 만들지 않는다. 프로젝트 하네스가 다룬다.
-                 (TEST_SCENARIOS.md §8)
+스위트 앞에 전제 케이스를 하나 세우는 안은 버렸다 -- 케이스를 단독으로
+돌리면 전제가 서지 않고, 앞 케이스가 프로퍼티를 건드리면 뒤 케이스가
+조용히 다른 것을 재게 된다. 근거는 v4-natc-port.md 1 절.
 
 
-[특히 위험해서 일부러 만든 조합]
+[이식의 규칙]
 
-  파티션이 서로 다른 메모리 테이블스페이스에 있는 구성
-    (tablespace/multiTablespace.tc, dml/rowMovement.tc,
-     unique/crossPartition.tc, datatype/variableColumn.tc)
+케이스 본문은 원본과 바이트 동일하다. 이식이 더하는 것은 출처 머리글과
+전제 한 줄뿐이고, 그 밖의 변경은 전부 케이스 안에 선언된다.
 
-    로우 식별자는 테이블스페이스 안에서만 유일하다. 서로 다른
-    테이블스페이스의 두 로우가 같은 식별자를 가질 수 있으므로, 키 값이
-    같을 때의 순서 판정이 로우 식별자 단독이면 두 키를 같은 것으로
-    오인한다. 탐색과 삭제가 엉뚱한 슬롯에 도달한다.
+선언된 편집은 이 모양이다:
 
-  variable 길이 키 컬럼 + 다중 테이블스페이스
-    (datatype/variableColumn.tc)
+  ##########################################################################
+  # PORT EDIT: <한 줄 제목>
+  # <왜 필요한가, 무엇을 대신하는가, 이빨은 무엇인가>
+  ##########################################################################
+  <대체 본문 (없을 수도 있다)>
+  ##########################################################################
+  # PORT EDIT END
+  ##########################################################################
 
-    variable 컬럼의 값이 로우 밖 조각에 저장되면, 그 조각을 읽을 때
-    컬럼 서술자의 테이블스페이스 정보를 쓴다. 인덱스는 서술자를 하나만
-    갖고 있으므로 다른 파티션 로우의 값을 엉뚱한 곳에서 읽을 수 있다.
-    크래시가 아니라 조용한 오독이라 특히 위험하다.
+오늘 있는 것은 넷이다.
 
-    ★ 서버는 이 조합을 "고쳐서 읽는" 대신 "플랜을 열지 않는" 것으로
-      닫았다. 그래서 이 조합에서는 index 힌트를 줘도 글로벌 인덱스
-      스캔이 선택되지 않고, 차집합 비교가 "풀스캔 minus 풀스캔"이
-      되어 아무것도 시험하지 않는다. 이 파일의 초판이 그 함정에
-      빠져 있었다.
+  pdt/Design/CREATE_TABLE/RangePartTable.sql  DB 를 지우는 절을 뺐다
+                                              (v4-natc-port.md 6.3)
+  design/table_lock.tc                        v$lock 에서 사라지는 것을
+                                              값으로 적는다 (v4-natc-port-2.md 3)
+  bugs/function_index.tc                      원본이 자기 안에 들고 있던
+                                              정합성 검사를 대신한다 (같은 문서 4)
+  bugs/BUG-35460/BUG-35460.tc                 카탈로그 나열을 이 케이스의 것으로
+                                              좁히고 진짜 비선두 인덱스로 다시
+                                              묻는다 (같은 문서 5)
 
-      지금은 CHECK_INDEX_SCAN_CLOSED_GATE 로 플랜 부재를 명시하고,
-      정합성은 유니크 제약과 풀스캔 집계로만 판정한다. 자세한 조건은
-      TEST_SCENARIOS.md §4.
+배치 5 는 편집을 하나도 쓰지 않았다. 대신 **선언된 헬퍼 대체**를 썼다 --
+케이스 본문의 INCLUDE 줄과 CALL 자리는 원본 그대로이고, 그 이름의 파일
+**내용**만 네이티브용으로 갈아 끼운다. 같은 이름, 같은 인자의 DEF 를
+다시 정의하므로 25 개 케이스 본문이 한 바이트도 움직이지 않는다.
 
-  DROP / TRUNCATE PARTITION 직후의 스캔
-    (partition/dropPartition.tc)
+  DDL/desc_global_index.i    원본: desc "$GIT_X" + 그 테이블의 내용 덤프
+                             대체: 네 겹 -- 숨김 테이블 부재(값 0) / 판별자
+                                   (PARTITION_TYPE=101) / 도는 서버의
+                                   X$DISK_BTREE_HEADER / 키 컬럼
+  DDL/check_global_index.i   원본: 힙과 "$GIT_X" 의 FULL OUTER JOIN.
+                                   _PROWID 때문에 한 번도 돈 적이 없다
+                                   (원본 DDL/ .lst 에 ERR-31385 176 자리)
+                             대체: 세 겹 -- 양방향 차집합 / count·sum /
+                                   플랜 증거. t1_idx1 의 술어는 파티션 키
+                                   OR 체인이라 J19b 회귀를 여기서 되받는다
 
-    메모리 인덱스의 리프 슬롯은 로우를 가리키는 생 포인터다. 키를 지우기
-    전에 페이지가 회수되면 그 슬롯은 재사용된 메모리를 가리킨다.
+  근거와 수는 v4-natc-port-3.md 3·4. natc-port-check.sh 의 G 절이 이 대체를
+  사후 검증한다 -- 선언되지 않은 .i 는 바이트 동일이어야 하고, 선언된 대체는
+  반대로 바이트 동일이면 안 되며, 원본의 DEF 를 이름과 인자 수까지 다시
+  정의해야 한다.
 
-
-[완성 절차]
-
-상세한 순서와 각 단계의 기대 결과는 TEST_SCENARIOS.md §9 에 있다.
-요약하면:
-
-  0. python3 tools/lint-tc.py 가 0 을 반환하는지 (서버 없이 가능)
-  1. KO16KSC5601 인스턴스를 띄우고 ataf start
-  2. meta/nativeCatalog.tc 하나만 atsclnt 로 돌려 접속·INCLUDE 확인
-  3. ddl/ -> meta/ -> unique/ -> dml/ -> scan/ -> datatype/
-     -> partition/ -> regress/ -> repl/
-  4. 각 단계에서 .out 을 눈으로 읽고, 의도한 결과일 때만
-     caseName_A4_64.lst 로 복사한다. 추측으로 작성하지 않는다.
-
-
-[확정된 사항]
-
-초판이 "미확정"으로 남겨 두었던 것들. 전부 소스에서 확인했다.
-근거 파일:줄은 TEST_SCENARIOS.md 참조.
-
-  - 프로퍼티 이름       MEM_GLOBAL_INDEX_ENABLE  (맞음)
-                        런타임 변경 가능하지만 비영속이다. 재기동하면
-                        파일 값(기본 0)으로 돌아간다.
-  - 플랜 표기           ", GLOBAL-INDEX"  (맞음)
-                        .tc 는 이 문자열을 하드코딩하지 않으므로
-                        수정할 것이 없다. .lst 에만 들어간다.
-  - 판별자 PARTITION_TYPE = 101  (맞음)
-  - 거부 케이스의 에러 코드   TEST_SCENARIOS.md §3 의 표
-                        V2 가 걷어낸 거부 네 가지(SPLIT/MERGE 계열,
-                        컬럼 DDL, TRUNCATE TABLE·스키마 복제, FK)는
-                        이제 성공해야 한다.
-  - index 힌트로 강제   대체로 되지만, TEST_SCENARIOS.md §4 의 세 조합
-                        에서는 되지 않는다. checkGlobalIndex.i 를
-                        OPEN_GATE / CLOSED_GATE 두 갈래로 나눠 대응했다.
+그 규칙은 altidev4/scripts/global-index/natc-port-check.sh 가 원본 트리와
+대조해 사후 검증한다 -- 규칙대로 다시 만든 파일이 디스크의 것과 같아야
+한다. 검사기는 편집 본문의 사본을 갖지 않는다: 양쪽을 같은 자리표시자로
+접고 나머지를 견주므로, 편집 밖의 모든 바이트는 여전히 원본에 못박힌다.
 
 
-[남은 것]
+[돌리는 법]
 
-  - 디렉터리 이름. 프로젝트 ID 가 배정되면 그것을 쓰고, 각 .tc 헤더의
-    "# Project ID = Native Global Index (memory)" 도 함께 바꾼다.
-    지금의 Project4 도 임의다.
-  - add partition ... values default 는 **지원되지 않는다**. qcply.y 의
-    add_partition_spec 에서 그 가지가 통째로 주석 처리돼 있고 옆에
-    /* todo : default partition */ 이 달려 있다. 같은 이유로 리스트
-    파티션드 테이블에는 ADD PARTITION 자체를 쓸 수 없다(VALUES 뒤에
-    올 수 있는 것이 LESS THAN 뿐이다).
-  - tool  isql desc 출력, aexport. 형태가 확정되면 추가한다.
+  altidev4/scripts/global-index/natc-check.sh --suite NativeGlobalIndexPort1624
+
+  오프라인 검사(서버 없이):
+  altidev4/scripts/global-index/natc-port-check.sh
+  python3 ../NativeGlobalIndexClaude/tools/lint-tc.py
 
 
-[참고]
+[.lst 를 어떻게 만들었는가]
 
-  시나리오·기대 결과 TEST_SCENARIOS.md   <- 먼저 읽을 것
-  오프라인 검사      tools/lint-tc.py
-  설계 구상          ~/work/natc/docs/GLOBAL_INDEX_TC_PLAN.md
-  TC 작성 규약       ~/work/natc/docs/TC_GUIDE.md
-  구버전 테스트      TC/Server/qp4/Project3/PROJ-1624-GlobalIndex
-  서버 설계       altidev4/docs/analysis/claude-global-index/
+전부 실제 ATC 실행 결과다. 추측으로 쓴 것은 없다. 두 번 돌려 출력이 바이트
+단위로 같은 것을 확인하고 <case>_A4_64.lst 로 굳혔다.

@@ -1,12 +1,15 @@
 TestSuiteDescription  = Native Global Index - Tool
 ###############################################################################
 #
-# ★ 이 레인은 제안이다 -- 계획 §3.1 에 유틸리티 축의 자리가 없다.
-#   Port1624/tool/ 은 MANIFEST 로 동결된 계보라 신규 유틸을 더할 수 없고,
-#   Regress/ 와 같은 이유(영역이 아니라 접점)로 최상위에 둔다.
-#   결정이 다르게 나면 이 디렉터리째 옮긴다.
-#
-#   매체 트리 밖이므로 케이스가 자기 매체·프로퍼티 전제를 스스로 세운다.
+# PROJ-1624 이식분은 **원본 실행 순서**를 지킨다 -- 알파벳순으로 늘어놓으면
+#   서로에게 기대는 케이스들이 어긋난다(실측: Duplicate index name · FK 의존).
+#   원본 경로는 각 케이스 첫 주석과 MANIFEST 가 보존한다.
 #
 iloaderRoundTrip.tc                     # iloader out/in 왕복 (신규 N14)
+tool_isql_global_index.tc               # tool/isql/global_index.tc
+tool_aexport_initialize.tc              # tool/aexport/initialize.tc
+tool_aexport_aexport_all.tc             # tool/aexport/aexport_all.tc
+tool_aexport_aexport_user.tc            # tool/aexport/aexport_user.tc
+tool_aexport_aexport_obj.tc             # tool/aexport/aexport_obj.tc
+tool_atomic_atomic_test.tc              # tool/atomic/atomic_test.tc
 -------------------------------------------------------------------------------
