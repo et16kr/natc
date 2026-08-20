@@ -38,6 +38,22 @@ DEF PIN_DISK_NATIVE()
 # the value into the transcript, so the case states what it measures
 # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
 #
+# PORT EDIT: 한글 리터럴은 EUC-KR 바이트다 (2026-08-21 복원)
+#
+#   이 하네스는 .tc 의 바이트를 **EUC-KR 로 읽어** DB 문자셋(UTF8)으로
+#   변환한다. 그래서 원본과 이 포트의 몸통은 EUC-KR 이어야 맞고, 위
+#   PORT EDIT 가 못박은 8/4/5/3 도 그 전제에서 나온 값이다
+#   (컬럼·조인이 4 바이트 -> 6 바이트가 되어 VARCHAR(5) 에 안 들어간다).
+#
+#   df87aaa 가 이 파일을 UTF-8 로 옮기면서 한글 21 곳을 **파괴적으로**
+#   변환했다(컬럼 -> U+FFFD ÷ U+FFFD, T/티 -> T/Ƽ 처럼 대체문자 없이
+#   조용히 바뀐 것도 있다). 그 결과 리터럴이 8~18 바이트가 되어 실패가
+#   3 건에서 6 건으로 늘고 행 수가 7/3/5/3 으로 내려앉았다 -- 위 PORT EDIT
+#   가 "다른 테이블을 조용히 재는 것" 을 막으려고 못박아 둔 바로 그 사고다.
+#   원본에서 바이트를 그대로 되살렸다(개수 2·4·1·1·6·7 이 원본과 같다).
+#
+#   ★ 이 여섯 리터럴을 UTF-8 로 바꾸면 안 된다. 클라이언트가 EUC-KR 로
+#     읽으므로 이중 변환이 되어 ERR-31001(parse error) 이 난다 -- 실측했다.
 # Project ID           = Native Global Index (disk) - PROJ-1624 port
 ###########################################################################
 
@@ -116,21 +132,21 @@ CREATE INDEX J3_I12345 ON J3 ( I1, I2, I3, I4, I5 );
 CREATE INDEX J4_I12345 ON J4 ( I1, I2, I3, I4, I5 );
 
 INSERT INTO J1 VALUES (    1,   'AAA', '27-OCT-2006', NULL, NULL );
-INSERT INTO J1 VALUES ( NULL,  '�÷�',          NULL, 'A1',    0 );
+INSERT INTO J1 VALUES ( NULL,  '�÷�',          NULL, 'A1',    0 );
 INSERT INTO J1 VALUES (  100,   'AAA', '27-OCT-2006', 'A2',   -1 );
 INSERT INTO J1 VALUES (   -2,   '123', '30-JUN-2003', 'A3',  2.5 );
-INSERT INTO J1 VALUES ( 3E+6,  '����',          NULL, 'A2', NULL ); 
+INSERT INTO J1 VALUES ( 3E+6,  '����',          NULL, 'A2', NULL ); 
 INSERT INTO J1 VALUES (    2,    NULL, '15-MAR-2000', 'A4', -1.2 );
-INSERT INTO J1 VALUES ( NULL,  '��_A', '01-JAN-1998', 'A4',  100 );
+INSERT INTO J1 VALUES ( NULL,  '��_A', '01-JAN-1998', 'A4',  100 );
 INSERT INTO J1 VALUES ( -555,  'T/Ƽ', '20-APR-2001', 'A3', 10.5 );
 INSERT INTO J1 VALUES ( 3333, '%^&__', '01-JAN-1998', NULL,   42 );
 INSERT INTO J1 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
 
 INSERT INTO J2 VALUES (   -2,  'AAA', '01-JAN-1998', 'A4', NULL );
 INSERT INTO J2 VALUES ( NULL,   NULL,          NULL, NULL, NULL );
-INSERT INTO J2 VALUES (    1, '�÷�', '30-JUN-2003', 'A1', -1.2 );
+INSERT INTO J2 VALUES (    1, '�÷�', '30-JUN-2003', 'A1', -1.2 );
 INSERT INTO J2 VALUES (    9,  '123', '15-MAR-2000', 'A9',    9 );
-INSERT INTO J2 VALUES (  350, 'S/��',          NULL, NULL, 9999 );
+INSERT INTO J2 VALUES (  350, 'S/��',          NULL, NULL, 9999 );
 
 INSERT INTO J3 VALUES (   -2,   'AAA', '01-JAN-1998', 'A4', NULL );
 INSERT INTO J3 VALUES ( -555,  'T/Ƽ', '20-APR-2001', 'A3', 10.5 ); 
@@ -222,7 +238,7 @@ SELECT * FROM J1, J2 WHERE J1.I1 LIKE J2.I1
                        AND J2.I1 BETWEEN 1 AND 2; 
 
 ### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
-SELECT * FROM J1, J2 WHERE J1.I2 <= J2.I2 AND J1.I2 =ANY ( 'A', '�÷�' );
+SELECT * FROM J1, J2 WHERE J1.I2 <= J2.I2 AND J1.I2 =ANY ( 'A', '�÷�' );
 SELECT * FROM J1, J2 WHERE J1.I3 > J2.I3 AND J2.I3 IS NULL;
 SELECT * FROM J1, J2 WHERE J1.I2 = J2.I2 
                        AND UNIQUE (SELECT I2 FROM J2 WHERE I2='AAA');
@@ -245,7 +261,7 @@ SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I3 >= '30-JUN-2003';
 SELECT * FROM J1, J2 WHERE J1.I2 != J2.I2 AND J2.I3 != NULL;
 SELECT * FROM J1, J2 WHERE J1.I2 BETWEEN J2.I2 AND J2.I2 AND J2.I3 IS NOT NULL;
 
-SELECT * FROM J1, J2 WHERE J1.I3 IN (J2.I3) AND J2.I2 IN ( 'A', '�÷�' );
+SELECT * FROM J1, J2 WHERE J1.I3 IN (J2.I3) AND J2.I2 IN ( 'A', '�÷�' );
 SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3 AND J1.I2 IS NULL;
 
 ### with Other Predicate(Join Column Predicates on Both Tables_First Indexed Column)
@@ -277,7 +293,7 @@ SELECT * FROM J1, J2 WHERE J1.I3 >=ANY (J2.I3)
           AND J1.I1 !=ALL (-1,-2,0,1000) AND J2.I1 BETWEEN 1 AND 2;
 
 ### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
-SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2='����' AND J2.I2 NOT LIKE NULL;
+SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2='����' AND J2.I2 NOT LIKE NULL;
 SELECT * FROM J1, J2 WHERE J1.I1>J2.I1 AND J1.I2='AAA' AND J2.I3 IS NOT NULL;
 SELECT * FROM J1, J2 WHERE J1.I1=J2.I1
                        AND J1.I3 IS NOT NULL AND J2.I3!='01-JAN-1998';
@@ -287,8 +303,8 @@ SELECT * FROM J1, J2 WHERE J1.I2 >=ALL (J2.I2)
                        AND J2.I3 LIKE '01-JAN-1998'; 
 
 SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3
-                       AND J1.I2 NOT BETWEEN 'AAA' AND '������'
-                       AND J2.I2 <ANY ('AAA', '������');
+                       AND J1.I2 NOT BETWEEN 'AAA' AND '������'
+                       AND J2.I2 <ANY ('AAA', '������');
 
 ###################################
 #SECTOR; 2 Join Predicate
@@ -722,7 +738,7 @@ SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1=J4.I1
 
 ### with Other Predicate(Join Column Predicates on Both Tables_Non-First Indexed Column)
 SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I4
-                                   AND J3.I2='����' AND J4.I4='A3';
+                                   AND J3.I2='����' AND J4.I4='A3';
 SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I3 IN ( J4.I3)
                                    AND J3.I3 IS NULL AND J4.I3 IS NOT NULL;
 
@@ -734,7 +750,7 @@ SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I4=J4.I4
 
 ### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
 SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I1>=J4.I1 
-                                   AND J3.I2='�÷�' AND J4.I4='A3';
+                                   AND J3.I2='�÷�' AND J4.I4='A3';
 SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I4
                                    AND J3.I3 IS NULL AND J4.I5=1;
 SELECT * FROM J3 LEFT OUTER JOIN J4 ON J3.I2=J4.I4
@@ -844,7 +860,7 @@ SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1=J4.I1
 
 ### with Other Predicate(Join Column Predicates on Both Tables_Non-First Indexed Column)
 SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I4
-                                   AND J3.I2='����' AND J4.I4='A3';
+                                   AND J3.I2='����' AND J4.I4='A3';
 SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I3 IN ( J4.I3)
                                    AND J3.I3 IS NULL AND J4.I3 IS NOT NULL;
 
@@ -856,7 +872,7 @@ SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I4=J4.I4
 
 ### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
 SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I1>=J4.I1 
-                                   AND J3.I2='�÷�' AND J4.I4='A3';
+                                   AND J3.I2='�÷�' AND J4.I4='A3';
 SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I4
                                    AND J3.I3 IS NULL AND J4.I5=1;
 SELECT * FROM J3 FULL OUTER JOIN J4 ON J3.I2=J4.I4

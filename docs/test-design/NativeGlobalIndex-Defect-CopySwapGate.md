@@ -4,7 +4,8 @@
 - 방법: `NativeGlobalIndex-TC-Method.md` **수-1 형제 훑기**
 - 감시자: `TC/.../NativeGlobalIndexClaude/Memory/Create/createPathSweep.tc` (D 절)
           `TC/.../NativeGlobalIndexClaude/Disk/DDL/copySchemaGate.tc` (A·B·C 절)
-- 상태: **결함 셋 수정 완료 / 양쪽 매체 검증 완료.** 후속 감사(§8)도 닫았다.
+- 상태: **결함 셋 수정 완료 / 양쪽 매체 검증 완료.** 후속 감사도 닫았고,
+  스위트는 정식 실행기에서 **GREEN 273/273** 이다 (2026-08-21).
 
 ---
 
@@ -406,17 +407,27 @@ atsclnt TC/Server/sm4/Project4/NativeGlobalIndexClaude/Memory/Create/createPathS
 
 ## 7. 남은 것
 
-- [ ] **`df87aaa` 가 남긴 오라클 8 개를 다시 찍는다.** 정식 실행기에서
-      6 개가 붉다. 넷(절대 카탈로그 id)은 `natc-check.sh` 의 신선 인스턴스에서
-      찍으면 그대로 결정적이 된다.
-- [ ] `qc_JoinTest` 는 오라클만으로 부족하다 — 이식본 `.tc` 의 한글 리터럴이
-      손상돼 있다(`컬럼`·`조인`·`가_A`·`T/티`·`S/하`·`하하하`가 U+FFFD 와
-      `÷`·`Ƽ` 로 바뀌었다). 원본
-      `TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/JoinTest.tc`
-      가 EUC-KR 로 온전하므로 `iconv -f EUC-KR` 로 되살린 뒤 UTF-8 로 다시
-      찍는다.
+- [x] ~~`df87aaa` 가 남긴 오라클 8 개~~ **닫힘 (2026-08-21).** 다섯을 신선
+      인스턴스에서 재기록했고, `qc_JoinTest` 는 재기록이 아니라 **한글
+      복원**이 답이었다 — 그 커밋이 EUC-KR → UTF-8 변환에서 리터럴 21 곳을
+      파괴해 케이스가 재는 행 집합이 8/4/5/3 에서 7/3/5/3 으로 줄어 있었다.
+      원본 바이트로 되살리자 8/4/5/3 으로 돌아왔다. `natc-check.sh`
+      **GREEN 273/273**.
 - [ ] `ERR-313D0` 의 문구가 디스크 파티션드 테이블에 나오면 오해를 부른다.
       매체별 오류 코드 정리는 설계 결정이라 손대지 않았다(§4).
-- [ ] `df87aaa` 같은 사고를 막는 규약 — **`.tc`·`.sql` 을 고치는 커밋은
-      대응 `.lst` 를 같은 커밋에서 다시 찍는다.** 이번 것은 243 대 233 이라
-      세기만 해도 잡혔다.
+- [ ] **`restartCatalogSurvival.sql` 의 `--+SYSTEM clean;` 이 격리
+      인스턴스의 계약을 깬다.** 인자 없는 `clean` 은 DB 를
+      `KO16KSC5601` 로 다시 만들고 시스템 패키지를 지운다 — `testdb.sh` 가
+      `server create UTF8 UTF8` + `DBMS_STATS` 로 세운 것을 한 케이스가
+      되돌린다. 같은 실행 안에서 그 뒤에 도는 `Memory/` · `Tool/` 이
+      그 위에서 돈다. 지금 초록인 것은 `natc-check.sh` 가 매 실행 전에
+      인스턴스를 다시 짓기 때문이다. 그 케이스가 자기가 부순 것을
+      되돌리게 하는 것이 수리다(`clean UTF8 UTF8` + 패키지 재설치를
+      **자기 측정 뒤에** — 앞에 두면 자기 절대 `TABLE_ID` 가 밀린다).
+- [ ] 이 하네스는 `.tc` 바이트를 **EUC-KR 로 읽는다.** 이식분의 한글 SQL
+      리터럴은 EUC-KR 이어야 하고, UTF-8 로 두면 `ERR-31001` 이 난다.
+      `ALTIBASE_NLS_USE=UTF8` 이 셸과 STAFProc 환경에 있는데도 그렇다 —
+      ATAF 가 spawn 하는 isql 에 닿지 않는 것으로 보인다. 하네스 쪽
+      판단이 필요하다.
+- [ ] `.tc`·`.sql` 을 고치는 커밋은 대응 `.lst` 를 같은 커밋에서 다시
+      찍는다. 인코딩을 바꾸는 커밋은 한글 개수를 원본과 대조한다.

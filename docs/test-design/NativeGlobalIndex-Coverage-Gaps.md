@@ -17,22 +17,17 @@
 | | |
 |---|---:|
 | 실행 단위 | **273** |
-| 통과 / 실패 | **267 / 6** |
+| 통과 / 실패 | **273 / 0** |
 | `.tc` · `.sql` · `.lst` | 167 · 160 · 276 |
 
-> **정식 실행기로 잰 값이다** (2026-08-20).
+> **정식 실행기로 잰 값이다** (2026-08-21, GREEN 273/273).
 > `altidev4/scripts/global-index/natc-check.sh` — 격리 인스턴스
 > `~/.ngi-testdb`(UTF8 + 시스템 패키지)를 짓고 `--auto-init=OFF` 로 돈다.
 >
-> **맨손 `atsclnt <NativeGlobalIndex.ts>` 로 돌리면 264 / 9 가 된다.**
-> 개발용 인스턴스는 문자셋이 `KO16KSC5601` 이고 `DBMS_STATS` 가 없어
-> `pdtBug_BUG-9` · `alterColumnLob_basic` · `statisticsAndHeader` 셋이 더
-> 붉다. 서버의 문제가 아니라 실행 방법의 문제다 —
+> **맨손 `atsclnt <NativeGlobalIndex.ts>` 로 돌리지 말 것.** 개발용
+> 인스턴스는 문자셋이 `KO16KSC5601` 이고 `DBMS_STATS` 가 없어 세 케이스가
+> 실패로 보인다. 서버의 문제가 아니라 실행 방법의 문제다 —
 > `NativeGlobalIndex-Defect-CopySwapGate.md` §5.3.1.
-
-영역 분포 — Disk 259(DDL 117 · DML 47 · Query 39 · Bugs 21 · Create 12 ·
-Transaction 10 · Catalog 8 · **Recovery 4** · Boundary 1) ·
-Memory 43 · Tool 7 · Replication 4.
 
 ### 0.2 ★ 통째로 비어 있는 축
 
@@ -100,26 +95,47 @@ D2 는 **수정이 만든 회귀**이고, 스위트가 전부 초록인 채로 �
 §0.3 의 "디스크 판 없음" 두 줄(`NVARCHAR` 키 · `RANGE_USING_HASH`)이
 같은 종류의 빚이다.
 
-### 0.6 오늘 실패하는 6 건 — **전부 커밋 하나가 뿌리다 (서버 회귀 0)**
+### 0.6 실패 6 건을 닫았다 — 뿌리는 커밋 하나였다 (2026-08-21)
 
 `df87aaa` *"Fold every helper into the case that uses it, and delete the
 shared includes"* 가 `.tc`·`.sql` **243 개**를 고치면서 `.lst` 를 **233 개**만
-다시 찍었다. **남겨진 10 개가 오늘의 실패 전부를 설명한다.**
+다시 찍었다. 남겨진 10 개가 실패 전부였다.
 
-| 증상 | 건 | 케이스 |
+| 무엇이 낡았나 | 건 | 수리 |
 |---|---:|---|
-| 절대 카탈로그 id (`__SYS_PART_IDX_ID_1933` ↔ `254`, `TABLE_ID 289` ↔ `406`) | 4 | `createIndexLocal_Range/Hash/List` · `createTableAsSelect_RangePartTable` |
-| 삭제된 공유 인클루드의 **주석 전사**가 오라클에 남아 있다 | 1 | `replicationReject` (주석 외 차이 0) |
-| 위 + 원본이 EUC-KR 이라 오라클도 EUC-KR 바이트, 게다가 이식본 `.tc` 의 한글 리터럴이 손상됨 | 1 | `qc_JoinTest` |
+| 절대 카탈로그 id (`__SYS_PART_IDX_ID_2205` ↔ `526`, `TABLE_ID 289` ↔ `406`) | 4 | 신선 인스턴스에서 재기록 → 결정적 |
+| 삭제된 공유 인클루드의 **주석 전사**가 오라클에 남음 | 1 | 재기록 (`replicationReject`, 주석 외 차이 0 이었다) |
+| **한글이 파괴적으로 재인코딩됨** | 1 | 아래 |
 
-남겨진 10 중 나머지 넷: `pdtBug_BUG-9` 와 `alterColumnLob_basic` 은 오라클이
-낡았지만 **정식 인스턴스(UTF8)에서는 여전히 들어맞아** 초록이고,
-`Port1624/include/pinNative.sql` 은 인클루드라 오라클이 없으며,
-`Port1624/pdt/Design/DELETE/RangePartTable.sql` 은 MANIFEST 가 `held` 로
-적어 둔 의도적 보류다(비결정적 FK 보고).
+나머지 넷: `pdtBug_BUG-9`·`alterColumnLob_basic` 은 오라클이 낡았지만 정식
+인스턴스(UTF8)에서 여전히 들어맞아 초록이었고, `include/pinNative.sql` 은
+인클루드라 오라클이 없으며, `DELETE/RangePartTable.sql` 은 MANIFEST 가
+`held` 로 적어 둔 의도적 보류다.
+
+#### 0.6.1 `qc_JoinTest` — 파일 인코딩이 테스트 데이터다
+
+`df87aaa` 는 이 파일을 EUC-KR 에서 UTF-8 로 옮기면서 한글 리터럴 **21 곳을
+파괴**했다(`컬럼` → `<U+FFFD>÷<U+FFFD>`, `T/티` → `T/Ƽ` 처럼 대체문자 없이
+조용히 바뀐 것도 있다). 리터럴이 4 바이트에서 8~18 바이트가 되어
+`VARCHAR(5)` 실패가 3 건에서 6 건으로 늘고, 케이스가 재는 행 수가
+**8/4/5/3 → 7/3/5/3** 으로 내려앉았다.
+
+**그 케이스의 PORT EDIT 가 바로 그것을 막으려고 행 수를 못박아 두었고,
+설계대로 빨간불이 됐다.** 그래서 여기서 `.out` 을 그냥 찍으면 안 됐다 —
+찍었으면 줄어든 행 집합을 오라클로 굳혀 감시자를 무력화했을 것이다.
+
+원본에서 바이트를 그대로 되살렸다(개수 2·4·1·1·6·7 이 원본과 같다).
+행 수가 8/4/5/3 으로 돌아왔다.
+
+> ★ **이 하네스는 `.tc` 의 바이트를 EUC-KR 로 읽어 DB 문자셋으로 변환한다.**
+> 그래서 이식분의 한글 SQL 리터럴은 **EUC-KR 이어야 한다.** UTF-8 로 두면
+> 이중 변환이 되어 `ERR-31001`(parse error) 이 난다 — 최소 케이스로
+> 실측했다(UTF8 DB 에서 실패, KO16KSC5601 DB 에서는 통과).
+> 한글이 없는 **새 케이스는 UTF-8 로 쓰면 된다.**
 
 > **규약으로 올린다**: `.tc`·`.sql` 을 고치는 커밋은 대응 `.lst` 를 **같은
 > 커밋에서 다시 찍는다.** 이번 것은 243 대 233 이라 세기만 해도 잡혔다.
+> 인코딩을 바꾸는 커밋은 **한글 개수를 원본과 대조**한다.
 
 ### 0.7 착수 순서
 
@@ -129,7 +145,7 @@ shared includes"* 가 `.tc`·`.sql` **243 개**를 고치면서 `.lst` 를 **233
 | 2 | **Z3 memberNo 회수** | GR-09 한 트랙 전체가 0. `GLOBAL_INDEX_AUTO_RECLAIM` 을 부르는 케이스가 없다 |
 | 3 | **Z5 동시성** | 파티션 간 유니크는 글로벌 인덱스의 존재 이유인데 경합을 안 잰다 |
 | 4 | **Z4 4K 축** | 상한·경계·격자가 전부 페이지 크기 함수인데 오라클이 한 크기뿐 |
-| 5 | 실패 6 건 수리 | **`df87aaa` 가 남긴 오라클 8 개를 다시 찍는 것이 전부다.** 넷(절대 id)은 `natc-check.sh` 의 신선 인스턴스에서 찍으면 결정적이 된다. `qc_JoinTest` 만 `.tc` 의 한글 복원이 먼저다 |
+| ~~5~~ | ~~실패 6 건 수리~~ | **닫혔다 (2026-08-21). GREEN 273/273.** §0.6 |
 | 6 | 나머지 이식 | |
 | 7 | **Z2 FIT** | 계약(`docs/FIT_GUIDE.md`)이 먼저다 |
 | 8 | 복제 확장 | 그물 15 절 중 2 절만 덮었다. **기본 매체가 먼저**다 |

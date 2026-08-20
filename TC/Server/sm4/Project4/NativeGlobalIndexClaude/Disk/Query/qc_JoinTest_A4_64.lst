@@ -29,32 +29,6 @@ $T0> #
 $T0> # 전제를 세우고, 세운 값을 전사에 남긴다.
 $T0> # 전사가 자기 전제를 적게 하는 것이 목적이므로 v$property 조회를 뺄 수 없다.
 $T0> #
-
-$T0> #
-$T0> # 파일 기본값(1)으로 되돌린다. 다음 케이스에 0 이 새지 않게 한다.
-$T0> #
-
-$T0> #
-$T0> # 인덱스가 어느 구현인지 카탈로그로 판별해 전사에 남긴다.
-$T0> #
-$T0> #   NATIVE GLOBAL : SYS_PART_INDICES_.PARTITION_TYPE = 101, INDEX_TABLE_ID = 0
-$T0> #   LOCAL         : IS_PARTITIONED = 'T', SYS_INDEX_PARTITIONS_ 에 행
-$T0> #   $GIT_ GLOBAL  : INDEX_TABLE_ID != 0 (숨김 테이블 OID)
-$T0> #
-$T0> # ★ 이 절이 이 스위트의 이빨이다. 프로퍼티가 0 이면 CREATE INDEX 로 만든
-$T0> #   인덱스가 $GIT_ 로 내려가 KIND 가 통째로 바뀌고, 같은 문장을 재고 있다는
-$T0> #   착각이 여기서 깨진다.
-$T0> #
-$T0> # ★ 원본 fixture 의 T1_PK(i2,i1) / T1_UK(i3,i2,i1) 은 파티션 키 i1 을
-$T0> #   포함하므로 두 구현 어느 쪽에서도 글로벌이 아니라 LOCAL 이다. 원본
-$T0> #   check_global_index.i 가 "$GIT_T1_PK" 를 조회한 것은 존재하지 않는
-$T0> #   테이블을 겨눈 것이었다 -- v3-natc-port.md 3.2.
-$T0> #
-
-$T0> #
-$T0> # 숨김 테이블이 하나도 없다는 것을 남긴다.
-$T0> # 네이티브 경로에서는 $GIT_ 가 만들어지지 않는다.
-$T0> #
 $T0> ###########################################################################
 $T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/JoinTest.tc
 $T0> #
@@ -63,6 +37,22 @@ $T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
 $T0> # the value into the transcript, so the case states what it measures
 $T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
 $T0> #
+$T0> # PORT EDIT: 한글 리터럴은 EUC-KR 바이트다 (2026-08-21 복원)
+$T0> #
+$T0> #   이 하네스는 .tc 의 바이트를 **EUC-KR 로 읽어** DB 문자셋(UTF8)으로
+$T0> #   변환한다. 그래서 원본과 이 포트의 몸통은 EUC-KR 이어야 맞고, 위
+$T0> #   PORT EDIT 가 못박은 8/4/5/3 도 그 전제에서 나온 값이다
+$T0> #   (컬럼·조인이 4 바이트 -> 6 바이트가 되어 VARCHAR(5) 에 안 들어간다).
+$T0> #
+$T0> #   df87aaa 가 이 파일을 UTF-8 로 옮기면서 한글 21 곳을 **파괴적으로**
+$T0> #   변환했다(컬럼 -> U+FFFD ÷ U+FFFD, T/티 -> T/Ƽ 처럼 대체문자 없이
+$T0> #   조용히 바뀐 것도 있다). 그 결과 리터럴이 8~18 바이트가 되어 실패가
+$T0> #   3 건에서 6 건으로 늘고 행 수가 7/3/5/3 으로 내려앉았다 -- 위 PORT EDIT
+$T0> #   가 "다른 테이블을 조용히 재는 것" 을 막으려고 못박아 둔 바로 그 사고다.
+$T0> #   원본에서 바이트를 그대로 되살렸다(개수 2·4·1·1·6·7 이 원본과 같다).
+$T0> #
+$T0> #   ★ 이 여섯 리터럴을 UTF-8 로 바꾸면 안 된다. 클라이언트가 EUC-KR 로
+$T0> #     읽으므로 이중 변환이 되어 ERR-31001(parse error) 이 난다 -- 실측했다.
 $T0> # Project ID           = Native Global Index (disk) - PROJ-1624 port
 $T0> ###########################################################################
 
