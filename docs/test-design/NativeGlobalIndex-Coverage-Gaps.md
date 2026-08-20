@@ -770,3 +770,31 @@ SELECT 를 다시 돌려 답이 같은지** 볼 뿐이고, 복구가 무엇을 �
 
 **아직 하나뿐이다.** §10.2 가 센 redo 6 종·undo 3 종·미디어 복구·멤버 집합
 재구성은 여전히 0 이고, 그물 단언 310 이 이 레인으로 들어와야 한다.
+
+### 10.8 `Disk/Recovery/` 세 케이스 — redo 와 undo 를 처음으로 쟀다 (2026-08-20)
+
+| 케이스 | 무엇을 재나 | 실측 |
+|---|---|---|
+| `restartRedoReplay.sql` | `server kill`(크래시) → `start` 뒤 **커밋된 키가 redo 로 되살아나는가** | 트리 22 = 힙 22 = distinct 22 · 삭제 키 0 · 이동 1 행 · **멤버 집합 3 재구성** · 재기동 뒤에도 삽입 가능(23) |
+| `restartUndoRollback.sql` | 언두 핸들러 셋 — `ROLLBACK` 과 **크래시 복구**가 되돌리는가 | 롤백 9→12→**9** · 삭제 롤백 복원 9 · **미커밋인 채 크래시 10→9** · 트리 = 힙 · 걷힌 키 재사용 가능 |
+| `restartCatalogSurvival.sql` | `kill`→`clean`→`start`→재생성 뒤 카탈로그 | 원본에서 잘려 나갔던 절(§10.7) |
+
+**이것이 redo 여섯 종과 undo 세 종이 처음으로 실행된 자리다.** 결과는 전부
+옳았다 -- 즉 이 축은 "결함이 있었는데 못 찾던" 것이 아니라 **"옳은지
+아무도 확인한 적 없던"** 것이었고, 이제 감시자가 섰다.
+
+**`clean` 이 드러낸 실행 계약**: `restartCatalogSurvival` 의 `clean` 은
+destroydb+createdb 라 **실행이 끝난 뒤 DB 가 비어 있다.** `atsclnt` 를
+맨손으로 두 번 돌리면 둘째 실행에서 `pdtBug_INITIALIZE` 와
+`statisticsAndHeader` 가 어긋난다(실측). 이 스위트의 계약은 **auto-init
+ON**(계획 §8.7)이고, 그 안에서는 매 실행 DB 가 새로 만들어지므로 문제가
+아니다.
+
+**곁가지 -- `statisticsAndHeader` 의 조건**: 그 케이스는 `DBMS_STATS` 를
+부르는데 `createdb` 는 그 패키지를 설치하지 않는다(`dbms_stats.plb` 는
+`dbms_concurrent_exec` 에 의존한다). **신선한 DB 에서는 항상 붉다.**
+러너 초기화가 패키지를 넣거나 케이스가 그 의존을 걷어야 한다.
+
+**남은 것**: 미디어 복구(ARCHIVELOG · `ALTER DATABASE RECOVER DATABASE`,
+그물 `media-recovery-check` 65 단언)와 FIT 크래시 주입
+(`crash-injection-check` 77 · `disk-crash-check` 138)은 여전히 0 이다.

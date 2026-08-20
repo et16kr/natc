@@ -1,0 +1,254 @@
+ 
++----------------------------------------------------------------------+
+--+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$P0> --+PROCESS P0;
+--###########################################################################
+--# 언두 -- 롤백과 크래시가 글로벌 인덱스 키를 되돌리는가 (디스크).
+--#
+--# 출처: 없음. 새로 쓴 것이다 (커버리지 §10.2).
+--#
+--# WHAT IT MEASURES -- 언두 핸들러 셋
+--#   sdnUpdate.h 가 선언한 것은 셋이다:
+--#     undo_SDR_SDN_GIDX_INSERT_UNIQUE_KEY
+--#     undo_SDR_SDN_GIDX_INSERT_DUP_KEY
+--#     undo_SDR_SDN_GIDX_DELETE_KEY_WITH_NTA
+--#   이 셋은 두 경로로 불린다 -- 사용자의 ROLLBACK, 그리고 **크래시 뒤
+--#   재기동 복구가 미커밋 트랜잭션을 되돌릴 때**. 이 케이스는 둘 다 밟는다.
+--#
+--#   A  ROLLBACK 이 삽입한 키를 걷는가        (undo INSERT_*)
+--#   B  ROLLBACK 이 삭제한 키를 되살리는가    (undo DELETE_KEY_WITH_NTA)
+--#   C  ★ 미커밋인 채로 죽으면 재기동이 되돌리는가 -- 같은 핸들러가
+--#      복구 경로에서 불린다. 사용자 ROLLBACK 과 결과가 같아야 한다
+--#   D  되돌린 뒤 트리와 힙이 일치하는가 -- 반쪽이 남으면 여기서 갈린다
+--#
+--# ★ `clean` 을 쓰지 않는다. 미커밋 로그가 남아 있어야 C 절이 성립한다.
+--#
+--# ★ 이 레인은 TC_GUIDE 의 Hard Stops("server restart") 밖이다 (계획 §3.3).
+--###########################################################################
+
+--+SECTOR 1; PREPARATION
+
+--+SKIP BEGIN; 
+$P0> DROP TABLE NGD_UND;
+--+SKIP END; 
+
+$P0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$P0> SELECT NAME, VALUE1 FROM V$PROPERTY WHERE NAME = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$P0> CREATE TABLE NGD_UND ( P INTEGER, K INTEGER, V VARCHAR(16) )
+     PARTITION BY RANGE ( P )
+     (
+         PARTITION P1 VALUES LESS THAN ( 10 ),
+         PARTITION P2 VALUES LESS THAN ( 20 ),
+         PARTITION PD VALUES DEFAULT
+     ) TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+
+$P0> CREATE UNIQUE INDEX NGD_UND_G ON NGD_UND ( K );
+Create success.
+
+$P0> SELECT COUNT(*) AS IS_NATIVE_GLOBAL
+       FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+      WHERE P.INDEX_ID = I.INDEX_ID
+        AND P.PARTITION_TYPE = 101
+        AND I.INDEX_NAME = 'NGD_UND_G';
+IS_NATIVE_GLOBAL     
+-----------------------
+1                    
+1 row selected.
+
+-- 기준선 -- 커밋된 아홉 행
+$P0> INSERT INTO NGD_UND SELECT LEVEL,      100 + LEVEL, 'BASE' FROM DUAL CONNECT BY LEVEL <= 3;
+3 rows inserted.
+$P0> INSERT INTO NGD_UND SELECT LEVEL + 10, 200 + LEVEL, 'BASE' FROM DUAL CONNECT BY LEVEL <= 3;
+3 rows inserted.
+$P0> INSERT INTO NGD_UND SELECT LEVEL + 20, 300 + LEVEL, 'BASE' FROM DUAL CONNECT BY LEVEL <= 3;
+3 rows inserted.
+$P0> COMMIT;
+Commit success.
+
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS BASE_TREE FROM NGD_UND;
+BASE_TREE            
+-----------------------
+9                    
+1 row selected.
+$P0> SELECT COUNT(*)                                    AS BASE_HEAP FROM NGD_UND;
+BASE_HEAP            
+-----------------------
+9                    
+1 row selected.
+
+--+SECTOR 2; A -- ROLLBACK 이 삽입 키를 걷는가
+
+$P0> AUTOCOMMIT OFF;
+Set autocommit off success.
+
+$P0> INSERT INTO NGD_UND VALUES ( 4,  901, 'ROLLED' );
+1 row inserted.
+$P0> INSERT INTO NGD_UND VALUES ( 14, 902, 'ROLLED' );
+1 row inserted.
+$P0> INSERT INTO NGD_UND VALUES ( 24, 903, 'ROLLED' );
+1 row inserted.
+
+-- 되돌리기 전 -- 자기 트랜잭션에서는 보인다
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS IN_TX_TREE FROM NGD_UND;
+IN_TX_TREE           
+-----------------------
+12                   
+1 row selected.
+
+$P0> ROLLBACK;
+Rollback success.
+
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS AFTER_RB_TREE FROM NGD_UND;
+AFTER_RB_TREE        
+-----------------------
+9                    
+1 row selected.
+$P0> SELECT COUNT(*)                                    AS AFTER_RB_HEAP FROM NGD_UND;
+AFTER_RB_HEAP        
+-----------------------
+9                    
+1 row selected.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS ROLLED_KEYS_GONE
+       FROM NGD_UND WHERE K BETWEEN 901 AND 903;
+ROLLED_KEYS_GONE     
+-----------------------
+0                    
+1 row selected.
+
+--+SECTOR 3; B -- ROLLBACK 이 삭제 키를 되살리는가
+
+$P0> DELETE FROM NGD_UND WHERE K IN ( 101, 202, 303 );
+3 rows deleted.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS AFTER_DEL_TREE FROM NGD_UND;
+AFTER_DEL_TREE       
+-----------------------
+6                    
+1 row selected.
+
+$P0> ROLLBACK;
+Rollback success.
+
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS RESTORED_TREE FROM NGD_UND;
+RESTORED_TREE        
+-----------------------
+9                    
+1 row selected.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ K, P, V  FROM NGD_UND WHERE K IN ( 101, 202, 303 ) ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         1           BASE              
+202         12          BASE              
+303         23          BASE              
+3 rows selected.
+
+--+SECTOR 4; C -- ★ 미커밋인 채로 죽으면 재기동이 되돌리는가
+
+-- 커밋하지 않는다. 이 상태로 서버를 죽인다.
+$P0> INSERT INTO NGD_UND VALUES ( 5,  801, 'CRASHED' );
+1 row inserted.
+$P0> INSERT INTO NGD_UND VALUES ( 15, 802, 'CRASHED' );
+1 row inserted.
+$P0> DELETE FROM NGD_UND WHERE K = 102;
+1 row deleted.
+
+-- 죽기 직전의 자기 시야
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS BEFORE_CRASH_TREE FROM NGD_UND;
+BEFORE_CRASH_TREE    
+-----------------------
+10                   
+1 row selected.
+
+--+SYSTEM server kill;
+--+SYSTEM server start;
+
+$P0> SET LINESIZE 200;
+
+-- 재기동 복구가 미커밋을 되돌렸어야 한다 -- 기준선 아홉 행 그대로.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*)          AS AFTER_CRASH_TREE     FROM NGD_UND;
+AFTER_CRASH_TREE     
+-----------------------
+9                    
+1 row selected.
+$P0> SELECT COUNT(*)                                             AS AFTER_CRASH_HEAP     FROM NGD_UND;
+AFTER_CRASH_HEAP     
+-----------------------
+9                    
+1 row selected.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(DISTINCT K) AS AFTER_CRASH_DISTINCT FROM NGD_UND;
+AFTER_CRASH_DISTINCT 
+-----------------------
+9                    
+1 row selected.
+
+-- 미커밋 삽입 키가 남지 않았는가
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS CRASHED_INSERTS_GONE
+       FROM NGD_UND WHERE K IN ( 801, 802 );
+CRASHED_INSERTS_GONE 
+-----------------------
+0                    
+1 row selected.
+
+-- 미커밋 삭제 키가 되살아났는가
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ K, P, V AS CRASHED_DELETE_BACK
+       FROM NGD_UND WHERE K = 102;
+K           P           CRASHED_DELETE_BACK  
+-------------------------------------------------
+102         2           BASE              
+1 row selected.
+
+--+SECTOR 5; D -- 되돌린 뒤 트리와 힙이 일치하는가
+
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ K, P, V FROM NGD_UND ORDER BY K;
+K           P           V                 
+----------------------------------------------
+101         1           BASE              
+102         2           BASE              
+103         3           BASE              
+201         11          BASE              
+202         12          BASE              
+203         13          BASE              
+301         21          BASE              
+302         22          BASE              
+303         23          BASE              
+9 rows selected.
+
+-- 유일성이 언두를 건넜는가 -- 걷힌 키를 다시 쓸 수 있어야 한다
+$P0> INSERT INTO NGD_UND VALUES ( 6, 801, 'REUSED' );
+1 row inserted.
+$P0> COMMIT;
+Commit success.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ K, P, V  FROM NGD_UND WHERE K = 801;
+K           P           V                 
+----------------------------------------------
+801         6           REUSED            
+1 row selected.
+$P0> SELECT /*+ INDEX( NGD_UND, NGD_UND_G ) */ COUNT(*) AS FINAL_TREE FROM NGD_UND;
+FINAL_TREE           
+-----------------------
+10                   
+1 row selected.
+$P0> SELECT COUNT(*)                                    AS FINAL_HEAP FROM NGD_UND;
+FINAL_HEAP           
+-----------------------
+10                   
+1 row selected.
+
+--+SECTOR 6; FINALIZATION
+
+$P0> AUTOCOMMIT ON;
+Set autocommit on success.
+$P0> DROP TABLE NGD_UND;
+Drop success.
+
