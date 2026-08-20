@@ -103,7 +103,7 @@ NativeGlobalIndexClaude/
     Disk/
         Catalog/ Create/ Query/ DML/ DDL/
         Transaction/ Boundary/ Unsupported/
-        Concurrency/ Lifecycle/       ← 계약이 필요한 레인 (오늘 비어 있다)
+        Concurrency/ Recovery/       ← 계약이 필요한 레인 (오늘 비어 있다)
         Regress/                      ← 회귀 게이트 (신설)
     Memory/
         (같은 영역)
@@ -121,7 +121,7 @@ NativeGlobalIndexClaude/
 전제인 레인이라 자기 축이다. 다만 **루트 `.ts` 배선이 아직 없다**(§9.4 결함 ①).
 
 영역 10 개는 Codex 가 이미 쓰는 것을 그대로 가져온다(`Concurrency`·
-`Lifecycle` 은 Codex 에서도 비어 있다 — 다중 세션·재기동 계약이 필요한
+`Recovery` 은 Codex 에서도 비어 있다 — 다중 세션·재기동 계약이 필요한
 자리로 예약돼 있다). **`Regress` 만 신설**한다 — Claude 의
 `regress/noGlobalIndexUnchanged`·`propertyRuntimeChange` 가 영역이 아니라
 게이트라서 8 개 영역 어디에도 안 들어간다.
@@ -146,7 +146,7 @@ NativeGlobalIndexClaude/
 
 이 하나가 여러 영역의 뜻을 갈라 놓는다.
 
-- **`Lifecycle/` 이 서로 다른 것을 잰다.** 디스크는 복구·미디어 리커버리·
+- **`Recovery/` 이 서로 다른 것을 잰다.** 디스크는 복구·미디어 리커버리·
   재기동 후 트리 정합이고, 메모리는 **리빌드 정합**이다 — 글로벌 인덱스는
   여러 파티션의 로우를 입력으로 삼으므로 **모든 멤버 파티션의 복구가 끝난
   뒤에** 빌드가 시작돼야 한다. 순서가 어긋나면 미완료 로우를 인덱싱한다.
@@ -179,7 +179,7 @@ topology, HDB/XDB, WhiteBox, fault injection, external processes" 를 만나면
 | 레인 | 따르는 것 | 비고 |
 |---|---|---|
 | `Catalog`·`Create`·`Query`·`DML`·`DDL`·`Transaction`·`Boundary`·`Unsupported`·`Regress` | **`docs/TC_GUIDE.md`** | 일반 SQL regression. 이 계획의 대부분 |
-| `Lifecycle/`(재기동·복구) | TC_GUIDE **범위 밖** — 별도 계약 필요 | Hard Stops 의 "server restart" |
+| `Recovery/`(재기동·복구) | TC_GUIDE **범위 밖** — 별도 계약 필요 | Hard Stops 의 "server restart" |
 | `Concurrency/`(다중 세션) | TC_GUIDE **범위 밖** | |
 | FIT 계열(크래시 주입) | **`docs/FIT_GUIDE.md`** | `stdFit.i`·`##fail`/`##success` |
 | 복제(`Deferred/Replication`) | **`repl4` 의 실사용 패턴** (§9.3) | Hard Stops 의 "multi-server topology" |
@@ -395,7 +395,7 @@ qc/select_meta.i
 |---|---:|---|
 | SQL 전용 검사 | **21** | **○ 건진다** — 서버 + `isql` 만 쓴다 |
 | SQL 검사 (부분 의존) | 7 | **◐ 절 단위로 건진다** |
-| 재기동·크래시 | 8 | **△ `Lifecycle/` · FIT 레인** — 계약이 따로다 |
+| 재기동·크래시 | 8 | **△ `Recovery/` · FIT 레인** — 계약이 따로다 |
 | 복제 2 인스턴스 | 5 | **◐ ConfigPending** — 진단이 바뀌었다 (§9.3) |
 | C++ 단위 테스트 | 28 / 29 | **✗ 못 건진다** (§9.1) |
 | 정적 소스 감사 | 4 | **✗ 대상 아님** (§9.1) |
@@ -418,7 +418,7 @@ qc/select_meta.i
 | `dml-handoff-check` · `fk-routing-check` | `Disk/DML/` | |
 | `tbsonline-check` | `Disk/Boundary/` | |
 | `4k-native-index-check` | `Disk/Boundary/` | 4K 축 — 페이지 크기 전제를 케이스가 세울 수 있는지 확인 필요 |
-| `o1-legacy-corrupt-check` | `Disk/Lifecycle/` | 은퇴 경로 |
+| `o1-legacy-corrupt-check` | `Disk/Recovery/` | 은퇴 경로 |
 | `sm-matrix-check` | **9 절을 분해** | §8.2.1 |
 
 ### 8.2.1 `sm-matrix-check` 분해 — 절 이름이 곧 영역이다
@@ -431,10 +431,10 @@ qc/select_meta.i
 |---|---:|---|---|
 | A | 15 | Comparator — 다른 테이블스페이스의 같은 rowOID | `Disk/Boundary/` |
 | B | 17 | var 컬럼 colSpace | `Disk/DML/` |
-| C | 16 | insert / delete / ager | `Disk/DML/` (ager 절은 `Disk/Lifecycle/`) |
+| C | 16 | insert / delete / ager | `Disk/DML/` (ager 절은 `Disk/Recovery/`) |
 | D | 21 | in-place update undo | `Disk/DML/` |
 | E | 7 | 파티션 간 유니크 · **동시 세션** | `Disk/Create/` + **`Concurrency/` (막힘)** |
-| F | 14 | 빌드: 여러 파티션 · 빈 것 · **재기동 리빌드** | `Disk/Create/` + **`Disk/Lifecycle/` (막힘)** |
+| F | 14 | 빌드: 여러 파티션 · 빈 것 · **재기동 리빌드** | `Disk/Create/` + **`Disk/Recovery/` (막힘)** |
 | **G** | **61** | 파티션 DDL | `Disk/DDL/` — 크므로 DDL 종류별 재분할 검토 |
 | H | 15 | 회귀 — 프로퍼티 off | `Disk/Regress/` |
 | I | 11 | 트랜잭션 격리 수준 | `Disk/Transaction/` |
@@ -450,7 +450,7 @@ qc/select_meta.i
 | `sql-level-check` | 370 | 최대 건. 절 단위로 나눠 `Disk/Query`·`DML`·`DDL` 로 분산 |
 | `disk-review-fix-check` | 128 | FIT 절과 골든 절 |
 | `disk-matrix-check` | — | 골든 참조 |
-| `media-recovery-check` | — | 재기동 절 → `Lifecycle/` |
+| `media-recovery-check` | — | 재기동 절 → `Recovery/` |
 | `memberoverflow-check` | — | `ngi_cli` 절 — **떼지 않아도 된다**(아래) |
 | `multibuild-check` · `write-concurrency-check` | — | `ngi_cli` 절은 유지, 다중 세션 절만 → `Concurrency/` |
 
@@ -735,7 +735,7 @@ delete+insert 로 갈려도, 수신 측 행 수와 값이 송신과 같으면 �
 | 6 | **DDL 복제 축 통째** | `REPLICATION_DDL_ENABLE_LEVEL` 0/1/2 · `REPLICATION_SQL_APPLY_ENABLE` · `REPLICATION_DDL_SYNC`. 함정 둘이 실측돼 있다 — **시스템 레벨이어야 하고**(세션 `ALTER` 로는 부족, `ERR-61184`) **양쪽에 걸어야 한다**(피어가 `ERR-61187` 로 거절). §9.3 이 "글로벌 인덱스 DDL 케이스는 0/1 두 축으로 갈라 잰다" 고 못박은 그 축이고, O 절(GR-07)이 통째로 여기 있다 |
 | 7 | **매체가 하나** — `SYS_TBS_DISK_DATA` 뿐 | 그물 M 절이 *"the same six questions asked of the DISK native global index"* 다 — 메모리가 나머지 반쪽이라는 뜻이다. 스위트의 1 급 축이 매체인데(§3.2) 이 레인엔 메모리 픽스처 예시가 없다 |
 | 8 | **파티션 단위 복제**(`FROM t PARTITION p TO t PARTITION p`)와 **`ALTER REPLICATION … SYNC`** | 각각 C·D 절. SYNC 는 끝난 뒤에도 sender 가 돌므로 **`STOP` 없이 `DROP` 하면 `ERR-610FE`** 다 |
-| 9 | 재기동 결합(부팅 순서 리빌드) | G 절. **이 레인의 계약 밖**이다 — `Lifecycle/` 로 이름 붙여 넘길 것(§3.3) |
+| 9 | 재기동 결합(부팅 순서 리빌드) | G 절. **이 레인의 계약 밖**이다 — `Recovery/` 로 이름 붙여 넘길 것(§3.3) |
 
 #### 그래서 무엇을 하면 충분해지는가
 
@@ -869,7 +869,7 @@ ALTIBASE_HOME = $ATC_HOME/TC/Server/sm4/Project4/NativeGlobalIndexClaude/db1
 ### Phase E — 그물 건지기 (**스크립트 삭제의 선행 조건**)
 1. 21 개를 §8.2 대로 `.tc` 화. 배치 단위 커밋.
 2. 부분 7 을 절 단위로. 못 옮기는 절은 §9.1 에 적는다.
-3. `Lifecycle`·`Concurrency`·FIT 레인은 계약을 세운 뒤 별건.
+3. `Recovery`·`Concurrency`·FIT 레인은 계약을 세운 뒤 별건.
 - **완료 조건**: 옮긴 검사 수가 원본 검사 수와 맞고, 못 옮긴 것마다 이유가
   적혀 있다.
 
@@ -918,7 +918,7 @@ V4 종결(J25)이 남긴 것 중 **통합의 몫이 아닌 것**이다. 조용�
 | **O-8** | 멀티테이블 `UPDATE` 의 row movement 가 **`ERR-91015` 로 서버를 죽인다.** J25 가 08-19 HEAD 에서 재현을 재확인했고 **담당 잡이 없다** | ~~죽는 결함은 일반 `.tc` 로 담을 수 없다 … 고쳐진 뒤에 케이스가 붙는다~~ → **고쳐졌다** (같은 날, altibase `5504aad9e` — `v4-multitable-rowmove.md`). 조건이 성립했으므로 **케이스 몫이 통합으로 돌아왔다** — `-Coverage-Gaps.md` §6 의 N8. 그물 쪽 감시자(`rowmovement-order-check` J 절, 177→247)도 삭제 대상이라 건지기 우선순위가 맨 앞으로 올라갔다 |
 | **V4 코드 리뷰 감시자** | 리뷰(`v4-code-review.md`, `3092935e0`)가 확정 10 건을 냈고 §3·§4·§6·§7 의 수정이 진행 중이다 | 제품 수정 자체는 이 계획 밖. 다만 리뷰의 마감 조건("발견마다 감시자를 세울 것")의 **감시자 자리가 이 스위트**다 — `-Coverage-Gaps.md` §6 의 N9~N12 로 받았다. 케이스를 못 세우는 발견(§7·§8·§9·§10)은 같은 절 6.2 에 사유와 함께 적었다 |
 | **GR-11 프루닝 칸** | 비용 모델의 재료 교체(`qmgPartition::reviseAccessMethodsCost` 의 네이티브 글로벌 분기 → `mPrePruningPartRef`). J25 기록: *"판정·좌표·수용 기준이 다 있었는데 `jobs.tsv` 에 행이 없어 아무도 받지 않았다"* | 제품 코드 변경이다. 수용 기준이 `stat-bias-sweep` 24 칸 — 그 스윕도 삭제될 그물에 있으므로 **그물이 사라지기 전에** 처리해야 한다 |
-| `Concurrency/` · `Lifecycle/` | 세 스위트 모두 **0**. 계획서가 "계약이 필요한 레인" 으로 예약해 둔 자리 | 계약(다중 세션·재기동)이 서면 그때 채운다. §3.3 이 어느 브리프를 따를지 적어 두었다 |
+| `Concurrency/` · `Recovery/` | 세 스위트 모두 **0**. 계획서가 "계약이 필요한 레인" 으로 예약해 둔 자리 | 계약(다중 세션·재기동)이 서면 그때 채운다. §3.3 이 어느 브리프를 따를지 적어 두었다 |
 
 **GR-11 은 순서가 걸려 있다** — 수용 기준인 `stat-bias-sweep` 이 Phase E
 에서 건지는 목록에 없다(벤치·스윕 계열은 §9.1 "못 건지는 것"). 그러므로

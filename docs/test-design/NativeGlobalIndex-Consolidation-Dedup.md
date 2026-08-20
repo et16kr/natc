@@ -94,7 +94,7 @@ Codex 영역 순서로 적는다. "Claude 대응" 이 비면 (ㄷ)이다.
 | `Create/keyAndConstraint` | `ddl/createIndex` · `datatype/variableColumn` | ㄴ | 제목 |
 | `Create/keyShapeBoundary` | `dml/nullValue` · `datatype/variableColumn` · `scan/preservedOrder` | ㄴ | 제목 |
 | `Create/tableConstraintForms` | `unique/primaryKey`(PK IN CREATE TABLE) | **ㄱ 유력** | 제목 |
-| `Create/alterConstraintLifecycle` | `ddl/constraint` | ㄴ | 제목 |
+| `Create/alterConstraintRecovery` | `ddl/constraint` | ㄴ | 제목 |
 | `Create/duplicateBuildAbort` | `ddl/constraint`(ADD CONSTRAINT ON DUPLICATE DATA) | ㄴ | 제목 |
 | `Create/functionBased` | `datatype/functionIndex` | **ㄱ 유력** | 제목 |
 | `Create/sameMediaTablespaces` | `tablespace/multiTablespace` | **ㄱ 유력** | 제목 |
@@ -296,4 +296,4 @@ Port1624 의 넷이 그것 때문에 순서에 묶인 것을 막 겪은 뒤였�
 | 없는 것 | 확인 |
 |---|---|
 | `MERGE INTO` | **세 스위트 전부 0 건**(Claude 37 · Codex 116 · **Port1624 208 실행 단위 포함**). V4 A-7(J11)이 `MOVE`·`MERGE`·`INSERT…SELECT` 를 글로벌 플랜의 통과 목록에 넣었는데 **그 축을 재는 `.tc` 가 NATC 어디에도 없다.** 삭제될 그물의 `sql-level-check` K 절 22 칸이 오늘 그것을 재는 유일한 자리이므로, 계획 §8.3 의 `sql-level-check` 분해에서 이 절을 놓치면 검증이 통째로 사라진다 |
-| `Concurrency/` · `Lifecycle/` | 세 스위트 모두 0 — 계획 §9.2 의 보류 레인 |
+| `Concurrency/` · `Recovery/` | 세 스위트 모두 0 — 계획 §9.2 의 보류 레인 |

@@ -182,7 +182,7 @@ PARALLEL-SCAN-COORDINATOR ( TABLE: SYS.NGD_PAR_ANS, ACCESS: 12224 )
 
 ## 4. 재기동 절만 떼면 건질 수 있는 것 — 11 더
 
-R 만 켜져 있고 F·C·G 가 꺼진 것들이다. **재기동 절을 `Disk/Lifecycle/` 로
+R 만 켜져 있고 F·C·G 가 꺼진 것들이다. **재기동 절을 `Disk/Recovery/` 로
 분리하면 나머지 본문이 건져진다.**
 
 | 스크립트 | 단언 | 재기동 절이 재는 것 |
@@ -195,11 +195,11 @@ R 만 켜져 있고 F·C·G 가 꺼진 것들이다. **재기동 절을 `Disk/Li
 | `tbsonline-check` | 86 | |
 | `rowmovement-order-check` | ~~23~~ **자랐다** | ★ 같은 날 altibase `5504aad9e`(O-8 수정)가 **J 절**(멀티테이블 문장 축)을 더해 177 → 247 검사. 이제 **O-8 의 유일한 감시자**다. J 절은 재기동(I 절)과 무관 — **절 분리만으로 오늘 건질 수 있고, 우선순위 맨 앞**이다 (`-Coverage-Gaps.md` §6.2) |
 | `sm-matrix-check` | 157 | §계획 8.2.1 의 9 절 분해와 겹친다 |
-| `media-recovery-check` | 61 | 미디어 복구 — 본디 `Lifecycle/` |
+| `media-recovery-check` | 61 | 미디어 복구 — 본디 `Recovery/` |
 | `memberoverflow-check` | 22 | |
 | `catalog-check` | 33 | 재기동 + `altibase_boot.log` grep |
 
-합 **828 단언**. 다만 `Lifecycle/` 은 TC_GUIDE 범위 밖이라 계약이 먼저다
+합 **828 단언**. 다만 `Recovery/` 은 TC_GUIDE 범위 밖이라 계약이 먼저다
 (계획 §3.3).
 
 ---
@@ -209,7 +209,7 @@ R 만 켜져 있고 F·C·G 가 꺼진 것들이다. **재기동 절을 `Disk/Li
 | 구간 | 스크립트 | 단언 | 상태 |
 |---|---:|---:|---|
 | 의존 없음 (§2) | 11 | 234 | **바로 착수 가능** |
-| 재기동 절 분리 후 (§4) | 11 | 828 | `Lifecycle/` 계약 뒤 |
+| 재기동 절 분리 후 (§4) | 11 | 828 | `Recovery/` 계약 뒤 |
 | FIT · 골든 · `ngi_cli` 혼합 | 8 | ~700 | 절 단위로 갈라야 한다 |
 | 정적 소스 감사 · 러너 | 17 | — | **건지지 않는다** (계획 §9.1) |
 

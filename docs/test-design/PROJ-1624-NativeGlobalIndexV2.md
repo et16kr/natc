@@ -315,7 +315,7 @@ unsupported case는 다음 순서로 검증한다.
         DML/
         DDL/
         Unsupported/
-        Lifecycle/
+        Recovery/
       Memory/
         Catalog/
         Create/
@@ -323,9 +323,9 @@ unsupported case는 다음 순서로 검증한다.
         DML/
         DDL/
         Unsupported/
-        Lifecycle/
+        Recovery/
 
-일반 SQL source prototype은 매체별 suite에 연결한다. Lifecycle은 restart와
+일반 SQL source prototype은 매체별 suite에 연결한다. Recovery은 restart와
 fault 환경 계약이 확정되기 전까지 README 시나리오만 유지하고 기본 suite에
 연결하지 않는다. compatibility, replication, performance도 실행 환경이
 확정될 때 별도 SM suite로 추가한다.
@@ -513,7 +513,7 @@ case manifest를 만들 때 최소한 다음 column을 둔다.
 | --- | --- |
 | Test ID | NGIV2-* 안정 ID |
 | media | Memory, Disk, Both, Legacy Hidden |
-| layer | SQL, Lifecycle, RP, Internal/FIT |
+| layer | SQL, Recovery, RP, Internal/FIT |
 | feature | create/query/DML/DDL/recovery 등 |
 | oracle | catalog/result/plan/error/restart |
 | legacy source | 재사용한 구버전 file 또는 신규 |
