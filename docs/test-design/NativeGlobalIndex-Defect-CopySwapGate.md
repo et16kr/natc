@@ -303,52 +303,82 @@ DDL 문장 텍스트를 `qciMisc::runDDLforInternal` 로 다시 실행한다
 실패한다 — `CREATE INDEX` 가 이미 그런 것과 같고,
 `Replication/ddlSyncPropertyMismatch.tc` 가 그 계약을 재고 있다.
 
-### 5.3 Disk 회귀 9 건의 판정 → **서버 회귀 아님**
+### 5.3 실패 건들의 판정 → **서버 회귀 아님. 뿌리는 오라클 하나다**
 
-먼저 두 가지를 확인했다.
+> **정정 (2026-08-20 저녁).** 이 절의 첫 판은 실패를 "절대 카탈로그 id ·
+> 문자셋 · 패키지 미설치 · 복제 비활성" 넷으로 갈랐다. **그 분류는 증상을
+> 갈랐을 뿐 뿌리가 아니었다.** 아래가 추적 결과다.
 
-1. 실행 중이던 서버가 **수정 이전 바이너리**였다(`/proc/<pid>/exe` 가
-   deleted). 재빌드 후 재기동하고 다시 쟀다.
-2. 9 건 중 **`FROM TABLE SCHEMA` 를 쓰는 케이스는 하나도 없다.**
-   그 문장을 쓰는 케이스는 트리 전체에서 셋뿐이고 전부 `Memory/Create` 다.
-   따라서 CopySwap 수정이 원인일 수 없다.
+#### 5.3.1 먼저 — 이 스위트는 맨손 `atsclnt` 로 도는 것이 아니다
 
-그 다음 `.out` 과 `.lst` 를 비교해 원인별로 갈랐다.
+정식 실행기가 있다: **`altidev4/scripts/global-index/natc-check.sh`**.
 
-| 케이스 | 차이의 정체 | 분류 |
+| | 맨손 `atsclnt NativeGlobalIndex.ts` | `natc-check.sh` |
 |---|---|---|
-| `createTableAsSelect_RangePartTable` | `TABLE_ID` 289 ↔ 406, 파티션 서수 | 절대 카탈로그 id (이식) |
-| `createIndexLocal_RangePartTable` / `Hash` / `List` | `__SYS_PART_IDX_ID_1933` ↔ `__SYS_PART_IDX_ID_254` | 절대 카탈로그 id (이식) |
-| `pdtBug_BUG-9` | 한글 리터럴의 `ERR-21069` 유무 | **DB 문자셋** |
-| `alterColumnLob_basic` | 컬럼 헤더 폭만 다름 | **DB 문자셋** |
-| `statisticsAndHeader` | `DBMS_STATS` 가 `ERR-313C3` | **패키지 미설치** |
-| `qc_JoinTest` | `.lst` 는 EUC-KR 바이트, `.out` 은 UTF-8. 추가로 INCLUDE 주석 전사 블록이 `.lst` 에만 있다 | 이식·인코딩 |
-| `replicationReject` | 전부 `ERR-61023 : Replication is disabled` | **인스턴스 설정** (`REPLICATION_PORT_NO = 0`) |
+| 인스턴스 | `$ALTIBASE_HOME`(개발용, 포트 20104) | 격리 인스턴스 `~/.ngi-testdb`(포트 20399) |
+| 문자셋 | `clean` 기본값 `KO16KSC5601` | `server create UTF8 UTF8` |
+| 시스템 패키지 | 없음 | `dbms_concurrent_exec` + `dbms_stats` 설치 |
+| `packages/` 링크 | 없음 | 만든다 (aexport 의 `DBMS_METADATA`) |
+| 신선도 | `--auto-init=ON` | `NEEDS_FRESH_INSTANCE` 를 보고 인스턴스를 재생성 |
+| 실행 | `atsclnt <ts>` | `atsclnt --auto-init=OFF --core=OFF <ts>` |
 
-**환경을 맞추자 셋이 사라졌다.** `clean` 의 기본 문자셋이
-`KO16KSC5601` 인데 `.lst` 는 `UTF8` 기준이었다(한글 5 자가 10 바이트 ↔
-15 바이트). `clean UTF8 UTF16` + `packages/catproc.sql` 설치로 다시 돌린
-결과:
+환경 계약은 전부 **`scripts/global-index/testdb.sh`** 의 `do_init` 에 있다.
+그 안의 주석이 이 사태를 그대로 예고해 두었다 — *"`server create` leaves
+the instance bare -- no system packages. Install the ones the check scripts
+need, **so that destroying and recreating this instance does not silently
+turn statistics-dependent cases into failures**"*.
 
-```
-전:  PASS 263  FAIL 9
-후:  PASS 266  FAIL 6
-```
+즉 **`DBMS_STATS` 는 재구성 과정에서 빠진 것이 아니다.** 애초에 TC 트리에
+있던 적이 없고(원본 `PROJ-1624` 트리도 쓰지 않는다), 스위트의 환경을 짓는
+하네스에 있었으며 그 하네스는 지금도 있다. 맨손 `atsclnt` 가 그 하네스를
+건너뛴 것이다.
 
-남은 6 은 절대 카탈로그 id 넷, `qc_JoinTest`(인코딩), `replicationReject`
-(복제 비활성 인스턴스)다. **서버 회귀는 하나도 없다.**
+**실측**: `natc-check.sh` 로 돌리면 `pdtBug_BUG-9` · `alterColumnLob_basic`
+· `statisticsAndHeader` 셋이 **전부 초록**이고 결과는 **PASS 267 / FAIL 6**
+이다.
 
-부수 확인 둘:
+#### 5.3.2 남은 6 의 뿌리 — 커밋 `df87aaa` 가 오라클 10 개를 안 찍었다
 
-- `Disk/Recovery/Recovery.ts` 는 자기 주석에 이미 적어 두었다 —
-  `restartCatalogSurvival.sql` 의 `clean` 이 DB 를 지우므로 **연속 실행의
-  둘째 회부터 `DBMS_STATS` 가 없고 문자셋이 기본값으로 돌아간다.**
-  즉 `statisticsAndHeader` 는 실행 방법의 함수이지 서버의 함수가 아니다.
-- `qc_JoinTest` 의 `.lst` 는 EUC-KR 로, `pdtBug_BUG-9` 의 `.lst` 는 UTF8 로
-  기록돼 있다. **두 오라클이 서로 다른 문자셋에서 찍혔다.** 어느 한
-  문자셋으로도 이 스위트를 전부 초록으로 만들 수 없다. 별건으로 남긴다.
+`df87aaa` *"Fold every helper into the case that uses it, and delete the
+shared includes"* 는 `.tc`·`.sql` **243 개**를 고치면서 `.lst` 를 **233 개**만
+다시 찍었다. 남겨진 10 개가 이것이다.
 
----
+| 남겨진 원본 경로 | 오늘의 케이스 | 오늘 |
+|---|---|---|
+| `Memory/DDL/replicationReject.tc` | `replicationReject` | **FAIL** |
+| `Port1624/qc/JoinTest.tc` | `Disk/Query/qc_JoinTest` | **FAIL** |
+| `Port1624/pdt/Design/CREATE_INDEX/LOCAL/RangePartTable.sql` | `Disk/Create/createIndexLocal_RangePartTable` | **FAIL** |
+| `Port1624/pdt/Design/CREATE_INDEX/LOCAL/HashPartTable.sql` | `…_HashPartTable` | **FAIL** |
+| `Port1624/pdt/Design/CREATE_INDEX/LOCAL/ListPartTable.sql` | `…_ListPartTable` | **FAIL** |
+| `Port1624/pdt/Design/CREATE_TABLE/AS_SELECT/RangePartTable.sql` | `Disk/Create/createTableAsSelect_RangePartTable` | **FAIL** |
+| `Port1624/pdt/Bugs/BUG-9/BUG-9.sql` | `Disk/Bugs/pdtBug_BUG-9` | 정식 실행기에서는 PASS |
+| `Port1624/pdt/Design/ALTER_TABLE/ALTER_COLUMN_LOB/basic.sql` | `Disk/DDL/alterColumnLob_basic` | 정식 실행기에서는 PASS |
+| `Port1624/include/pinNative.sql` | (인클루드 — 오라클 없음) | — |
+| `Port1624/pdt/Design/DELETE/RangePartTable.sql` | **MANIFEST 가 `held`** (비결정적 FK 보고) | — |
+
+**남겨진 8 개의 오라클 = 오늘 붉은 6 개 + 인스턴스가 맞으면 초록인 2 개.**
+다른 원인은 없다.
+
+증상이 두 모양으로 나뉜 것도 여기서 설명된다.
+
+- `replicationReject` 는 **삭제된 공유 인클루드의 주석 전사**가 오라클에
+  아직 남아 있다. 그것이 차이의 전부다(주석 블록 외 차이 0).
+- `qc_JoinTest` 는 같은 주석 문제에 더해, 원본이 **EUC-KR** 이라 오라클도
+  EUC-KR 바이트인데 러너 출력은 UTF-8 이고, 한글 리터럴이 손상된 채
+  이식돼(`컬럼` → `�÷�`) 바이트 길이가 달라지면서 `ERR-21069`
+  유무까지 갈린다.
+- 나머지 넷은 **절대 카탈로그 id**(`__SYS_PART_IDX_ID_1933` ↔ `254`,
+  `TABLE_ID 289` ↔ `406`)다. 오라클이 이력 있는 인스턴스에서 찍힌 채
+  다시 찍히지 않았다.
+
+#### 5.3.3 CopySwap 수정과의 관계 → 없다
+
+- 6 건 중 `CREATE TABLE ... FROM TABLE SCHEMA` 를 쓰는 케이스는 **하나도
+  없다.** 그 문장을 쓰는 케이스는 트리 전체에 넷이고
+  (`createPathSweep` · `createTableFromSchema` · `createIndexError` ·
+  새 `copySchemaGate`) 전부 통과한다.
+- 실행 중이던 서버가 **수정 이전 바이너리**였던 것(`/proc/<pid>/exe` 가
+  deleted)은 별개로 확인해 재빌드·재기동했다.
 
 ## 6. 재현 · 검증에 쓴 정확한 명령
 
@@ -356,35 +386,37 @@ DDL 문장 텍스트를 `qciMisc::runDDLforInternal` 로 다시 실행한다
 # 빌드 (altidev4)
 cd /data/et16/work/altidev4 && make build -j"$(nproc)"
 
-# 서버 재기동 (natc 환경, ALTIBASE_PORT_NO=20104)
+# ★ 스위트 실행 — 이것이 정식 경로다.
+#   격리 인스턴스를 UTF8 로 짓고 시스템 패키지를 넣고 --auto-init=OFF 로 돈다.
+cd /data/et16/work/altidev4 && ./scripts/global-index/natc-check.sh
+#   --no-fresh 를 주면 인스턴스 재생성을 건너뛴다.
+
+# 단일 케이스만 볼 때 (개발용 인스턴스, 포트 20104)
 cd /data/et16/work/natc && server stop && server start
-
-# 스위트 실행용 환경 — 문자셋과 패키지를 맞춘다
-cd /data/et16/work/natc && server stop && clean UTF8 UTF16 && server start
-isql -s localhost -u sys -p manager -port 20104 -silent \
-     -f $ALTIBASE_HOME/packages/catproc.sql
-
-# 단일 케이스
 atsclnt TC/Server/sm4/Project4/NativeGlobalIndexClaude/Disk/DDL/copySchemaGate.tc
 atsclnt TC/Server/sm4/Project4/NativeGlobalIndexClaude/Memory/Create/createPathSweep.tc
-
-# 전체
-atsclnt TC/Server/sm4/Project4/NativeGlobalIndexClaude/NativeGlobalIndex.ts
 ```
 
+> **맨손 `atsclnt <NativeGlobalIndex.ts>` 로 전체를 돌리지 말 것.** 개발용
+> 인스턴스는 문자셋이 `KO16KSC5601` 이고 시스템 패키지가 없어서 §5.3.1 의
+> 셋이 실패로 보인다. 서버의 문제가 아니다.
+>
 > `bin/atc` / `bin/atc2` 는 이 기계에서 돌지 않는다 — `atc.pl` 이 요구하는
-> perl `Event` 모듈이 없다. 러너는 `atsclnt` 다.
-
----
+> perl `Event` 모듈이 없다.
 
 ## 7. 남은 것
 
+- [ ] **`df87aaa` 가 남긴 오라클 8 개를 다시 찍는다.** 정식 실행기에서
+      6 개가 붉다. 넷(절대 카탈로그 id)은 `natc-check.sh` 의 신선 인스턴스에서
+      찍으면 그대로 결정적이 된다.
+- [ ] `qc_JoinTest` 는 오라클만으로 부족하다 — 이식본 `.tc` 의 한글 리터럴이
+      손상돼 있다(`컬럼`·`조인`·`가_A`·`T/티`·`S/하`·`하하하`가 U+FFFD 와
+      `÷`·`Ƽ` 로 바뀌었다). 원본
+      `TC/Server/qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/JoinTest.tc`
+      가 EUC-KR 로 온전하므로 `iconv -f EUC-KR` 로 되살린 뒤 UTF-8 로 다시
+      찍는다.
 - [ ] `ERR-313D0` 의 문구가 디스크 파티션드 테이블에 나오면 오해를 부른다.
       매체별 오류 코드 정리는 설계 결정이라 손대지 않았다(§4).
-- [ ] `qc_JoinTest_A4_64.lst` 가 EUC-KR 이다. 이식분 오라클의 인코딩을
-      UTF-8 로 통일해야 이 스위트가 한 문자셋에서 전부 초록이 된다.
-- [ ] `replicationReject.tc` 는 `REPLICATION_PORT_NO` 가 0 인 인스턴스에서
-      항상 붉다. 케이스가 전제를 선언하든지, 실행 계약이 복제 가능한
-      인스턴스를 요구한다고 적든지 해야 한다.
-- [ ] 절대 카탈로그 id 를 기대값에 담은 이식분 넷(§5.3)의 항구적 수리 —
-      `BUG-35460` 이 그렇게 고쳐졌다.
+- [ ] `df87aaa` 같은 사고를 막는 규약 — **`.tc`·`.sql` 을 고치는 커밋은
+      대응 `.lst` 를 같은 커밋에서 다시 찍는다.** 이번 것은 243 대 233 이라
+      세기만 해도 잡혔다.
