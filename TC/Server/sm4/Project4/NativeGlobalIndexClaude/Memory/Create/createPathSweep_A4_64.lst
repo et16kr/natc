@@ -1,0 +1,288 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 글로벌 인덱스를 만드는 모든 문장이 같은 게이트를 지나는가 (메모리).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **결함을 찾으려고 쓴 것**이다.
+$T0> #                        방법: `NativeGlobalIndex-TC-Method.md` 수-1(형제 훑기).
+$T0> #
+$T0> # ★ 왜 이 자리인가 -- 소스에서 센 형제 집합
+$T0> #
+$T0> #   `qdx::validateNativeGlobalIndex` 를 부르는 자리는 **셋뿐**이다(실측):
+$T0> #       qdx.cpp:3454      qdx::validateAlterRebuild        (ALTER INDEX REBUILD)
+$T0> #       qdx.cpp:11362     qdx::validateIndexRestriction    (CREATE INDEX)
+$T0> #       qdbCommon.cpp:6931 qdbCommon::createConstrPrimaryUnique (PK/UNIQUE)
+$T0> #
+$T0> #   그런데 인덱스를 **만들 수 있는 문장은 그보다 많다.** 특히
+$T0> #   `CREATE TABLE ... FROM TABLE SCHEMA` 는 원본 테이블의 인덱스를 복제하는데,
+$T0> #   그 처리는 `qdbCopySwap.cpp` 에 있고 **위 셋 어디에도 안 걸린다.**
+$T0> #
+$T0> #   J24 가 "덮는 문장 다섯" 이라 회계했다가 여섯 번째 경로(DIRECTKEY)를
+$T0> #   놓친 것이 같은 종류다(V4 리뷰 §3). 그래서 센 것이 아니라 **소스에서
+$T0> #   뽑은 목록**으로 훑는다.
+$T0> #
+$T0> # ★★ 예측 (돌리기 전에 적는다)
+$T0> #
+$T0> #   게이트: `MEM_GLOBAL_INDEX_ENABLE = 0` 이면 네이티브 글로벌 인덱스를
+$T0> #   만들 수 없다. A 절이 그 거절을 기준으로 세운다(= 기준 오류 E).
+$T0> #
+$T0> #     A  CREATE INDEX                     -> 거절 E              [기준]
+$T0> #     B  ALTER TABLE ADD CONSTRAINT UNIQUE -> **E 와 같은 거절**
+$T0> #     C  CREATE TABLE (... PRIMARY KEY ...) -> **E 와 같은 거절**
+$T0> #     D  CREATE TABLE ... FROM TABLE SCHEMA -> **E 와 같은 거절**
+$T0> #     E' ALTER INDEX ... REBUILD           -> 아래 ★ 참조
+$T0> #
+$T0> #   **D 가 이 케이스의 표적이다.** 검증기를 안 거치므로 두 결말 중 하나다:
+$T0> #     (ㄱ) 거절한다        -> 다른 자리에 게이트가 있다. 예측이 틀렸고 안전하다.
+$T0> #     (ㄴ) **만들어 준다**  -> 프로퍼티가 생성 경로 전부를 막지 못한다.
+$T0> #          즉 프로퍼티 0 인 인스턴스에 네이티브 글로벌 인덱스가 생긴다.
+$T0> #          **그것은 결함이다** -- J24 의 은퇴 회계가 그만큼 새는 것이고,
+$T0> #          §5.4 가 경고한 "기본값이 움직이는 날 다른 것을 재게 된다" 가
+$T0> #          현실이 된다.
+$T0> #
+$T0> #   ★ 어긋나면 케이스를 고치기 전에 제품을 의심한다(방법 문서 §4.1).
+$T0> #
+$T0> # ★★★ 실측 (2026-08-20) -- 예측 (ㄴ) 이 맞았고 **결함이었다. 고쳤다.**
+$T0> #
+$T0> #   처음 돌렸을 때:
+$T0> #     A CREATE INDEX          -> 거절 ERR-313D0
+$T0> #     B ADD CONSTRAINT UNIQUE -> 거절 ERR-31415
+$T0> #     C CREATE TABLE + PK     -> 거절 ERR-31415
+$T0> #     D FROM TABLE SCHEMA     -> **Create success. 판별자 101** ★ 결함
+$T0> #
+$T0> #   카탈로그 흔적이 아니었다 -- 복사본에 파티션을 가로지르는 중복을 넣으면
+$T0> #   `ERR-11058` 로 거절됐다. 게이트가 닫힌 인스턴스에 **작동하는** 네이티브
+$T0> #   글로벌 인덱스가 서 있었다. 양쪽 매체 모두.
+$T0> #
+$T0> #   뿌리: `qdx::validateNativeGlobalIndex` 를 부르는 자리가 셋뿐인데
+$T0> #   `FROM TABLE SCHEMA` 는 `qdbCopySwap.cpp` 가 처리하고 그 호출이 없었다.
+$T0> #   V2 A1a 가 V1 의 거부를 걷을 때의 근거는 A1(미커밋 로우)이었고, 그 뒤
+$T0> #   J24(V4 D-2)가 프로퍼티 0 에 "만들 수 없다" 는 새 뜻을 부여했는데 이
+$T0> #   경로는 배운 적이 없었다.
+$T0> #
+$T0> #   수정: `qdbCopySwap::validateCreateTableFromTableSchema` 에 형제와 같은
+$T0> #   판정식(`qdx::isNativeGlobalIndexMedia`)을 넣었다. 지금은 D 도
+$T0> #   **A 와 같은 `ERR-313D0`** 을 낸다.
+$T0> #
+$T0> #   보고: `NativeGlobalIndex-Defect-CopySwapGate.md`
+$T0> #
+$T0> #   ★ 이 케이스가 그 수정의 감시자다. D 절이 다시 `Create success.` 를 내면
+$T0> #     게이트가 또 새는 것이다.
+$T0> #
+$T0> # ★ 왜 메모리인가
+$T0> #   게이트가 매체마다 따로 있다(`MEM_`/`DISK_`). 메모리가 싸고, 같은 훑기를
+$T0> #   디스크로 옮기는 것은 프로퍼티 이름만 바꾸면 된다.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGM_CPS_SRC;
+$T0> DROP TABLE NGM_CPS_B;
+$T0> DROP TABLE NGM_CPS_C;
+$T0> DROP TABLE NGM_CPS_D;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION -- 게이트가 열린 상태에서 원본을 만든다
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> CREATE TABLE NGM_CPS_SRC ( P INTEGER, K INTEGER, V VARCHAR(16) )
+    PARTITION BY RANGE ( P )
+    (
+        PARTITION P1 VALUES LESS THAN ( 10 ),
+        PARTITION P2 VALUES LESS THAN ( 20 ),
+        PARTITION PD VALUES DEFAULT
+    ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # 파티션 키 P 를 포함하지 않는 키 -> 글로벌이어야만 설 수 있다
+$T0> CREATE INDEX NGM_CPS_SRC_G ON NGM_CPS_SRC ( K ) TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> # 전제 -- 정말 네이티브 글로벌인가(판별자 101)
+$T0> SELECT COUNT(*) AS SRC_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_CPS_SRC_G';
+SRC_IS_NATIVE_GLOBAL 
+-----------------------
+1                    
+1 row selected.
+
+$T0> INSERT INTO NGM_CPS_SRC VALUES ( 1,  101, 'A' );
+1 row inserted.
+$T0> INSERT INTO NGM_CPS_SRC VALUES ( 11, 102, 'B' );
+1 row inserted.
+$T0> INSERT INTO NGM_CPS_SRC VALUES ( 21, 103, 'C' );
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; GATE -- 여기서부터 게이트를 닫는다
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'MEM_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEM_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                           
+0                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; A -- CREATE INDEX (기준 오류 E 를 여기서 정한다)
+$T0> ##################################
+$T0> CREATE INDEX NGM_CPS_SRC_G2 ON NGM_CPS_SRC ( V ) TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+
+$T0> SELECT COUNT(*) AS A_CREATED
+      FROM SYSTEM_.SYS_INDICES_ WHERE INDEX_NAME = 'NGM_CPS_SRC_G2';
+A_CREATED            
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; B -- ADD CONSTRAINT UNIQUE (createConstrPrimaryUnique)
+$T0> ##################################
+$T0> CREATE TABLE NGM_CPS_B ( P INTEGER, K INTEGER )
+    PARTITION BY RANGE ( P )
+    ( PARTITION P1 VALUES LESS THAN ( 10 ), PARTITION PD VALUES DEFAULT )
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+
+$T0> ALTER TABLE NGM_CPS_B ADD CONSTRAINT NGM_CPS_B_U UNIQUE ( K );
+[ERR-31415 : A primary key or unique key constraint can be defined for a non-partitioned index on a disk partitioned table.]
+
+$T0> SELECT COUNT(*) AS B_CREATED
+      FROM SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_TABLES_ T
+     WHERE I.TABLE_ID = T.TABLE_ID AND T.TABLE_NAME = 'NGM_CPS_B';
+B_CREATED            
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS B_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_TABLES_ T
+     WHERE P.INDEX_ID = I.INDEX_ID AND I.TABLE_ID = T.TABLE_ID
+       AND P.PARTITION_TYPE = 101 AND T.TABLE_NAME = 'NGM_CPS_B';
+B_IS_NATIVE_GLOBAL   
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; C -- CREATE TABLE 안의 PRIMARY KEY
+$T0> ##################################
+$T0> CREATE TABLE NGM_CPS_C ( P INTEGER, K INTEGER,
+                             CONSTRAINT NGM_CPS_C_PK PRIMARY KEY ( K ) )
+    PARTITION BY RANGE ( P )
+    ( PARTITION P1 VALUES LESS THAN ( 10 ), PARTITION PD VALUES DEFAULT )
+    TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-31415 : A primary key or unique key constraint can be defined for a non-partitioned index on a disk partitioned table.]
+
+$T0> SELECT COUNT(*) AS C_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = 'NGM_CPS_C';
+C_TABLE_CREATED      
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS C_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_TABLES_ T
+     WHERE P.INDEX_ID = I.INDEX_ID AND I.TABLE_ID = T.TABLE_ID
+       AND P.PARTITION_TYPE = 101 AND T.TABLE_NAME = 'NGM_CPS_C';
+C_IS_NATIVE_GLOBAL   
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; D -- ★★ 표적. FROM TABLE SCHEMA 는 검증기를 안 거친다
+$T0> ##################################
+$T0> # 원본 NGM_CPS_SRC 에는 게이트가 열려 있을 때 만든 네이티브 글로벌 인덱스가
+$T0> # 있다. 그 스키마를 복제하면 인덱스도 복제된다 -- 게이트가 닫힌 지금.
+$T0> CREATE TABLE NGM_CPS_D FROM TABLE SCHEMA NGM_CPS_SRC USING PREFIX ZZ;
+[ERR-313D0 : A non-partitioned index can be created on a disk partitioned table.]
+
+$T0> SELECT COUNT(*) AS D_TABLE_CREATED
+      FROM SYSTEM_.SYS_TABLES_ WHERE TABLE_NAME = 'NGM_CPS_D';
+D_TABLE_CREATED      
+-----------------------
+0                    
+1 row selected.
+
+$T0> # ★ 여기가 판정이다. 0 이면 게이트가 이 경로도 막은 것이고(예측 ㄱ),
+$T0> #   1 이상이면 **프로퍼티 0 인데 네이티브 글로벌 인덱스가 생긴 것**이다(ㄴ).
+$T0> SELECT COUNT(*) AS D_IS_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_TABLES_ T
+     WHERE P.INDEX_ID = I.INDEX_ID AND I.TABLE_ID = T.TABLE_ID
+       AND P.PARTITION_TYPE = 101 AND T.TABLE_NAME = 'NGM_CPS_D';
+D_IS_NATIVE_GLOBAL   
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 만들어졌다면 그것이 실제로 도는지까지 본다 -- 게이트가 닫힌 채로
+$T0> # 글로벌 유일성이 서면 회계가 완전히 새는 것이다.
+$T0> SELECT COUNT(*) AS D_INDEX_ROWS
+      FROM SYSTEM_.SYS_INDICES_ I, SYSTEM_.SYS_TABLES_ T
+     WHERE I.TABLE_ID = T.TABLE_ID AND T.TABLE_NAME = 'NGM_CPS_D';
+D_INDEX_ROWS         
+-----------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; E -- ALTER INDEX REBUILD (validateAlterRebuild)
+$T0> ##################################
+$T0> # 이미 있는 네이티브 글로벌 인덱스를 게이트가 닫힌 상태에서 다시 세운다.
+$T0> ALTER INDEX NGM_CPS_SRC_G REBUILD;
+Alter success.
+
+$T0> SELECT COUNT(*) AS E_STILL_NATIVE_GLOBAL
+      FROM SYSTEM_.SYS_PART_INDICES_ P, SYSTEM_.SYS_INDICES_ I
+     WHERE P.INDEX_ID = I.INDEX_ID
+       AND P.PARTITION_TYPE = 101
+       AND I.INDEX_NAME = 'NGM_CPS_SRC_G';
+E_STILL_NATIVE_GLOBAL 
+------------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 8; FINALIZATION
+$T0> ##################################
+$T0> alter system set MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGM_CPS_D;
+$T0> DROP TABLE NGM_CPS_C;
+$T0> DROP TABLE NGM_CPS_B;
+$T0> SKIP END;
+$T0> DROP TABLE NGM_CPS_SRC;
+Drop success.
+

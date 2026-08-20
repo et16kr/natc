@@ -3,7 +3,7 @@
 - 발견: 2026-08-20
 - 방법: `NativeGlobalIndex-TC-Method.md` **수-1 형제 훑기**
 - 감시자: `TC/.../NativeGlobalIndexClaude/Memory/Create/createPathSweep.tc` (D 절)
-- 상태: **`.lst` 미기록** — 지금 동작을 기대값으로 굳히지 않는다
+- 상태: **수정 완료 / 국소 검증 완료** — 후속 조합 감사는 §8 참조
 
 ---
 
@@ -34,7 +34,8 @@ CREATE UNIQUE INDEX VG_SRC_U ON VG_SRC ( K ) TABLESPACE SYS_TBS_MEM_DATA;
 ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 0;
 
 CREATE TABLE VG_COPY FROM TABLE SCHEMA VG_SRC USING PREFIX ZZ;
---> Create success.
+--> 수정 전: Create success.
+--> 수정 후: [ERR-313D0]
 ```
 
 ```sql
@@ -47,15 +48,18 @@ SELECT I.INDEX_NAME, DECODE(I.INDEX_TABLE_ID,0,'NATIVE','GIT') IMPL,
 ```
 
 ```
+수정 전:
 INDEX_NAME    IMPL    PARTITION_TYPE
 ZZVG_SRC_U    NATIVE  101
+
+수정 후에는 `VG_COPY` 자체가 생성되지 않는다.
 ```
 
 **`DISK_GLOBAL_INDEX_ENABLE = 0` 에서도 같다** — `ZZVGD_SRC_U` / `NATIVE` / `101`.
 
 ---
 
-## 3. 카탈로그 흔적이 아니라 **작동하는 인덱스**다
+## 3. 카탈로그 흔적이 아니라 **작동하는 인덱스**였다
 
 ```sql
 INSERT INTO VG_COPY VALUES (1,  500, 'a');   --> 1 row inserted.
@@ -69,6 +73,10 @@ SELECT COUNT(*) FROM VG_COPY;                --> 1
 로컬 인덱스는 그렇게 하지 못한다. 즉 게이트가 닫힌 인스턴스에
 **기능하는 네이티브 글로벌 인덱스**가 존재한다.
 
+수정 후에는 복사 테이블이 생성되지 않으므로 위 INSERT의 대상이 없다.
+게이트가 열린 상태에서 만든 원본과 정상적인 스키마 복사는 기존 동작대로
+유지된다.
+
 ---
 
 ## 4. 형제 대조 — 같은 게이트, 네 경로
@@ -80,7 +88,7 @@ SELECT COUNT(*) FROM VG_COPY;                --> 1
 | `CREATE INDEX` | `qdx::validateIndexRestriction` | 거절 `ERR-313D0` |
 | `ALTER TABLE ADD CONSTRAINT UNIQUE` | `qdbCommon::createConstrPrimaryUnique` | 거절 `ERR-31415` |
 | `CREATE TABLE (... PRIMARY KEY ...)` | `qdbCommon::createConstrPrimaryUnique` | 거절 `ERR-31415` |
-| **`CREATE TABLE ... FROM TABLE SCHEMA`** | **없음** | **Create success.** |
+| **`CREATE TABLE ... FROM TABLE SCHEMA`** | **없음 (수정 전)** | **수정 전 Create success → 수정 후 `ERR-313D0`** |
 
 ---
 
@@ -117,12 +125,22 @@ src/qp/qdb/qdbCommon.cpp:6931 qdbCommon::createConstrPrimaryUnique
 
 ---
 
-## 7. 고칠 자리 제안
+## 7. 수정 내용
 
-`qdbCopySwap` 의 인덱스 복제 지점에서 원본 인덱스가 네이티브 글로벌이면
-`qdx::validateNativeGlobalIndex` 를 태우거나, 최소한 게이트를 물어
-거절한다. 거절 코드는 형제 경로와 같아야 한다 —
-`CREATE INDEX` 가 내는 `ERR-313D0`, 제약이면 `ERR-31415`.
+`src/qp/qdb/qdbCopySwap.cpp`의
+`qdbCopySwap::validateCreateTableFromTableSchema`에 원본 테이블의
+네이티브 글로벌 인덱스 존재 여부를 확인하는 게이트를 추가했다.
+
+원본이 네이티브 글로벌 인덱스를 갖고 있으면 다음을 수행한다.
+
+1. `snapshotGlobalIndexEnable()`로 해당 DDL 문장의 프로퍼티를 고정한다.
+2. 논리 테이블과 모든 파티션의 매체 개수를 계산한다.
+3. 형제 생성 경로와 같은 `qdx::isNativeGlobalIndexMedia()`를 호출한다.
+4. 게이트가 닫혀 있으면 `ERR-313D0`으로 실패시키고 대상 테이블을 만들지 않는다.
+
+게이트가 열려 있으면 기존 복제 동작을 그대로 둔다. 메모리·디스크의
+게이트 off와 on을 확인했고, `createPathSweep.tc`를 두 번 실행해
+연속 PASS를 확인했다.
 
 **대안 판정**: 복제를 허용하되 **로컬 인덱스로 낮춰** 만드는 것도 가능한
 설계다. 다만 그 경우 "스키마 복제 결과가 원본과 다르다" 가 되므로
@@ -130,10 +148,20 @@ src/qp/qdb/qdbCommon.cpp:6931 qdbCommon::createConstrPrimaryUnique
 
 ---
 
-## 8. 후속
+## 8. 후속 — 아직 닫지 않은 감사 항목
 
-- [ ] §6-3 의 다른 거절 조합도 이 경로로 새는지 훑는다 (수-1 계속)
-- [ ] `ALTER TABLE ... ALL INDEX ENABLE`, 복제 메타 DDL 등 **검증기를 안
-      거치는 다른 경로**가 더 있는지 소스에서 센다
-- [ ] 수정이 들어오면 `createPathSweep.tc` D 절이 A~C 와 같은 거절을 내는지
-      확인하고 그때 `.lst` 를 찍는다
+- [ ] §6-3의 다른 제한도 `FROM TABLE SCHEMA`에서 새는지 확인한다:
+      휘발성·혼합 매체(`ERR-314AB`), 함수 기반·압축 키(`ERR-314AD`),
+      인덱스 비트 예산 64(`ERR-314AC`), 키 길이 상한(`ERR-311E0`).
+- [ ] 소스에서 인덱스를 생성·복제하는 경로를 다시 세고,
+      `ALL INDEX ENABLE/DISABLE` 및 복제 메타 DDL처럼 같은 검증기를
+      우회할 수 있는 경로를 분리한다.
+- [ ] 현재 Disk 회귀의 9건 실패를 기준 빌드와 비교해 서버 회귀인지,
+      기존 포팅 케이스의 절대 카탈로그 ID·환경 의존성인지 판정한다.
+      현재 관측 목록은 `pdtBug_INITIALIZE`, `pdtBug_BUG-9`,
+      `createTableAsSelect_RangePartTable`, `createIndexLocal`의
+      Range/Hash/List 3건, `alterColumnLob_basic`,
+      `statisticsAndHeader`, `qc_JoinTest`다. 이들은 CopySwap 수정의
+      직접 실패로 확정된 것이 아니다.
+- [x] 수정 후 `createPathSweep.tc`의 D 절이 `ERR-313D0`을 내는 것을
+      확인하고 `.lst`를 기록했다.
