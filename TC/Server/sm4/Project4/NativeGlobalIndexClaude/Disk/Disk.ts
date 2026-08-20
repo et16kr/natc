@@ -22,4 +22,6 @@ Transaction/Transaction.ts              # Transaction
 Boundary/Boundary.ts                    # Boundary
 
 pdtDesign_FINALIZE.sql                  # 전제 정리 -- PDT_TBS/2/3
+
+Recovery/Recovery.ts                    # 재기동·복구 — clean 이 DB 를 지우므로 **맨 뒤**
 -------------------------------------------------------------------------------

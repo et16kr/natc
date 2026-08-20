@@ -570,3 +570,111 @@ rm: cannot remove '*.class': No such file or directory
 rm: cannot remove '*.res': No such file or directory
 make: [Makefile:21: clean] Error 1 (ignored)
 
+[2026/08/20 10:54:52] /home/et16/work/natc/TC/Server/sm4/Project4/NativeGlobalIndexClaude/Tool/tool_atomic_atomic_test.tc:
+FINALIZE_T0> (52) make clean
+[2026/08/20 10:54:52] rm atomic_insert atomic_insert.cpp *.o core *.class *.res
+rm: cannot remove 'atomic_insert': No such file or directory
+rm: cannot remove 'atomic_insert.cpp': No such file or directory
+rm: cannot remove '*.o': No such file or directory
+rm: cannot remove 'core': No such file or directory
+rm: cannot remove '*.class': No such file or directory
+rm: cannot remove '*.res': No such file or directory
+make: [Makefile:21: clean] Error 1 (ignored)
+
+[2026/08/20 10:54:52] /home/et16/work/natc/TC/Server/sm4/Project4/NativeGlobalIndexClaude/Tool/tool_atomic_atomic_test.tc:
+MAIN_T0> (98) make all
+[2026/08/20 10:54:52] sesc -atc -t cpp atomic_insert.sc
+-----------------------------------------------------------------
+     Altibase C/C++ Precompiler. 
+     Release Version 7.3.0.0.0
+     Copyright 2000, ALTIBASE Corporation or its subsidiaries.
+     All Rights Reserved.
+-----------------------------------------------------------------
+g++ -D_GNU_SOURCE -D_GNU_SOURCE -W -Wall -pipe -D_POSIX_PTHREAD_SEMANTICS -D_POSIX_THREADS -D_POSIX_THREAD_SAFE_FUNCTIONS -D_REENTRANT -m64 -mtune=k8 -Wno-error=deprecated-declarations -Wno-error=implicit-fallthrough -g -g -DDEBUG -fno-implicit-templates -Wno-deprecated -fpermissive -g -g -DDEBUG -fno-exceptions -fcheck-new -DPDL_NO_INLINE -DPDL_LACKS_PDL_TOKEN -DPDL_LACKS_PDL_OTHER -DACP_CFG_DEBUG -DACP_CFG_COMPILE_64BIT -DACP_CFG_COMPILE_BIT=64 -DACP_CFG_COMPILE_BIT_STR=64 -Wno-narrowing -include /home/et16/work/altibase/build-compat/sigstksz_compat.h -include /home/et16/work/altibase/build-compat/openssl_legacy_api_compat.h -DCOMPILER_OPT_FLAGS="" -MMD -MP -c -I/home/et16/work/altidev4/altibase_home/include -I. -I/home/et16/work/natc/include -I. -I/home/et16/work/altidev4/src/id/include -I/home/et16/work/altidev4/src/core/include -I/home/et16/work/altidev4/src/pd/include -I/home/et16/work/altidev4/src/pd/makeinclude -oatomic_insert.o atomic_insert.cpp
+In file included from /home/et16/work/natc/include/atc4ses.h:4,
+                 from atomic_insert.cpp:5:
+/home/et16/work/altidev4/altibase_home/include/idl.h:790:32: warning: invalid suffix on literal; C++11 requires a space between literal and string macro [-Wliteral-suffix]
+  790 | #define IDL_ALTIBASE_ODBC_NAME "lib"PRODUCT_PREFIX"altibase_odbc-64bit-ul32.so"
+      |                                ^
+In file included from /home/et16/work/altidev4/src/core/include/acpSpinLock.h:33,
+                 from /home/et16/work/altidev4/src/core/include/acp.h:64,
+                 from /home/et16/work/altidev4/src/id/include/idtCPUSet.h:41,
+                 from /home/et16/work/altidev4/altibase_home/include/idtBaseThread.h:38,
+                 from /home/et16/work/natc/include/atc4ses.h:5:
+/home/et16/work/altidev4/src/core/include/acpThr.h: In function 'void acpThrYield()':
+/home/et16/work/altidev4/src/core/include/acpThr.h:289:24: warning: 'int pthread_yield()' is deprecated: pthread_yield is deprecated, use sched_yield instead [-Wdeprecated-declarations]
+  289 |     (void)pthread_yield();
+      |           ~~~~~~~~~~~~~^~
+In file included from /usr/include/features.h:490,
+                 from /usr/include/signal.h:25,
+                 from /home/et16/work/altibase/build-compat/sigstksz_compat.h:10,
+                 from <command-line>:
+/usr/include/pthread.h:479:12: note: declared here
+  479 | extern int __REDIRECT_NTH (pthread_yield, (void), sched_yield)
+      |            ^~~~~~~~~~~~~~
+g++ -Wl,-relax -L. -g -L/home/et16/work/altidev4/altibase_home/lib -L/home/et16/work/altidev4/altibase_home/lib -L. -oatomic_insert atomic_insert.o -lsesc -lid -lpd -lodbccli -ldl -lpthread -lcrypt -lrt -lstdc++
+rm atomic_insert.cpp
+
+[2026/08/20 10:54:52] /home/et16/work/natc/TC/Server/sm4/Project4/NativeGlobalIndexClaude/Tool/tool_atomic_atomic_test.tc:
+FINALIZE_T0> (52) make clean
+[2026/08/20 10:54:53] rm atomic_insert atomic_insert.cpp *.o core *.class *.res
+rm: cannot remove 'atomic_insert.cpp': No such file or directory
+rm: cannot remove 'core': No such file or directory
+rm: cannot remove '*.class': No such file or directory
+rm: cannot remove '*.res': No such file or directory
+make: [Makefile:21: clean] Error 1 (ignored)
+
+[2026/08/20 11:11:28] /home/et16/work/natc/TC/Server/sm4/Project4/NativeGlobalIndexClaude/Tool/tool_atomic_atomic_test.tc:
+FINALIZE_T0> (52) make clean
+[2026/08/20 11:11:28] rm atomic_insert atomic_insert.cpp *.o core *.class *.res
+rm: cannot remove 'atomic_insert': No such file or directory
+rm: cannot remove 'atomic_insert.cpp': No such file or directory
+rm: cannot remove '*.o': No such file or directory
+rm: cannot remove 'core': No such file or directory
+rm: cannot remove '*.class': No such file or directory
+rm: cannot remove '*.res': No such file or directory
+make: [Makefile:21: clean] Error 1 (ignored)
+
+[2026/08/20 11:11:28] /home/et16/work/natc/TC/Server/sm4/Project4/NativeGlobalIndexClaude/Tool/tool_atomic_atomic_test.tc:
+MAIN_T0> (98) make all
+[2026/08/20 11:11:29] sesc -atc -t cpp atomic_insert.sc
+-----------------------------------------------------------------
+     Altibase C/C++ Precompiler. 
+     Release Version 7.3.0.0.0
+     Copyright 2000, ALTIBASE Corporation or its subsidiaries.
+     All Rights Reserved.
+-----------------------------------------------------------------
+g++ -D_GNU_SOURCE -D_GNU_SOURCE -W -Wall -pipe -D_POSIX_PTHREAD_SEMANTICS -D_POSIX_THREADS -D_POSIX_THREAD_SAFE_FUNCTIONS -D_REENTRANT -m64 -mtune=k8 -Wno-error=deprecated-declarations -Wno-error=implicit-fallthrough -g -g -DDEBUG -fno-implicit-templates -Wno-deprecated -fpermissive -g -g -DDEBUG -fno-exceptions -fcheck-new -DPDL_NO_INLINE -DPDL_LACKS_PDL_TOKEN -DPDL_LACKS_PDL_OTHER -DACP_CFG_DEBUG -DACP_CFG_COMPILE_64BIT -DACP_CFG_COMPILE_BIT=64 -DACP_CFG_COMPILE_BIT_STR=64 -Wno-narrowing -include /home/et16/work/altibase/build-compat/sigstksz_compat.h -include /home/et16/work/altibase/build-compat/openssl_legacy_api_compat.h -DCOMPILER_OPT_FLAGS="" -MMD -MP -c -I/home/et16/work/altidev4/altibase_home/include -I. -I/home/et16/work/natc/include -I. -I/home/et16/work/altidev4/src/id/include -I/home/et16/work/altidev4/src/core/include -I/home/et16/work/altidev4/src/pd/include -I/home/et16/work/altidev4/src/pd/makeinclude -oatomic_insert.o atomic_insert.cpp
+In file included from /home/et16/work/natc/include/atc4ses.h:4,
+                 from atomic_insert.cpp:5:
+/home/et16/work/altidev4/altibase_home/include/idl.h:790:32: warning: invalid suffix on literal; C++11 requires a space between literal and string macro [-Wliteral-suffix]
+  790 | #define IDL_ALTIBASE_ODBC_NAME "lib"PRODUCT_PREFIX"altibase_odbc-64bit-ul32.so"
+      |                                ^
+In file included from /home/et16/work/altidev4/src/core/include/acpSpinLock.h:33,
+                 from /home/et16/work/altidev4/src/core/include/acp.h:64,
+                 from /home/et16/work/altidev4/src/id/include/idtCPUSet.h:41,
+                 from /home/et16/work/altidev4/altibase_home/include/idtBaseThread.h:38,
+                 from /home/et16/work/natc/include/atc4ses.h:5:
+/home/et16/work/altidev4/src/core/include/acpThr.h: In function 'void acpThrYield()':
+/home/et16/work/altidev4/src/core/include/acpThr.h:289:24: warning: 'int pthread_yield()' is deprecated: pthread_yield is deprecated, use sched_yield instead [-Wdeprecated-declarations]
+  289 |     (void)pthread_yield();
+      |           ~~~~~~~~~~~~~^~
+In file included from /usr/include/features.h:490,
+                 from /usr/include/signal.h:25,
+                 from /home/et16/work/altibase/build-compat/sigstksz_compat.h:10,
+                 from <command-line>:
+/usr/include/pthread.h:479:12: note: declared here
+  479 | extern int __REDIRECT_NTH (pthread_yield, (void), sched_yield)
+      |            ^~~~~~~~~~~~~~
+g++ -Wl,-relax -L. -g -L/home/et16/work/altidev4/altibase_home/lib -L/home/et16/work/altidev4/altibase_home/lib -L. -oatomic_insert atomic_insert.o -lsesc -lid -lpd -lodbccli -ldl -lpthread -lcrypt -lrt -lstdc++
+rm atomic_insert.cpp
+
+[2026/08/20 11:11:29] /home/et16/work/natc/TC/Server/sm4/Project4/NativeGlobalIndexClaude/Tool/tool_atomic_atomic_test.tc:
+FINALIZE_T0> (52) make clean
+[2026/08/20 11:11:29] rm atomic_insert atomic_insert.cpp *.o core *.class *.res
+rm: cannot remove 'atomic_insert.cpp': No such file or directory
+rm: cannot remove 'core': No such file or directory
+rm: cannot remove '*.class': No such file or directory
+rm: cannot remove '*.res': No such file or directory
+make: [Makefile:21: clean] Error 1 (ignored)
+
