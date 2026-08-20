@@ -1,0 +1,148 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Take TEMP file and extent defaults from the USER_TEMP_* properties when the
+$T0> #                        CREATE statement omits them.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = an omitted SIZE, EXTENTSIZE, AUTOEXTEND, or SEGMENT MANAGEMENT clause must
+$T0> #                        resolve to the shipped property default rather than to zero or to a
+$T0> #                        DATA-tablespace default.
+$T0> # Product Reference    = src/id/idp/idpDescResource.cpp USER_TEMP_FILE_INIT_SIZE (100M),
+$T0> #                        USER_TEMP_TBS_EXTENT_SIZE (512K), USER_TEMP_FILE_NEXT_SIZE (1M)
+$T0> #                        src/qp/qcp/qcply.y filespec rule with mInitSize = 0 when SIZE is omitted
+$T0> # Environment Contract = the four USER_TEMP_* properties are IDP_ATTR_RD_READONLY, so this case
+$T0> #                        reads the shipped defaults and never writes them.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_PD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_PD_MIX INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> # Every optional clause is omitted.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_PD_TS
+        TEMPFILE 'sdpte_pd_01.dbf';
+Create success.
+
+$T0> # One file states SIZE, the other does not, so a single statement must apply
+$T0> # the default only where the clause is absent.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_PD_MIX
+        TEMPFILE 'sdpte_pd_02.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_pd_03.dbf'
+        EXTENTSIZE 256K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; THE OMITTED CLAUSES RESOLVE TO THE PROPERTY DEFAULTS
+$T0> ##################################
+$T0> SELECT NAME,
+           TYPE,
+           STATE,
+           DATAFILE_COUNT,
+           TOTAL_PAGE_COUNT,
+           EXTENT_PAGE_COUNT,
+           SEGMENT_MANAGEMENT
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_PD_TS';
+NAME                                      TYPE        STATE       DATAFILE_COUNT 
+--------------------------------------------------------------------------------------
+TOTAL_PAGE_COUNT     EXTENT_PAGE_COUNT SEGMENT_MANAGEMENT    
+-----------------------------------------------------------------
+SDPTE_PD_TS                               6           2           1           
+12800                64          MANUAL                
+1 row selected.
+
+$T0> # 12800 pages is USER_TEMP_FILE_INIT_SIZE (100M) and 64 pages is
+$T0> # USER_TEMP_TBS_EXTENT_SIZE (512K). An omitted AUTOEXTEND clause is OFF.
+$T0> SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.STATE = 2
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 12800
+                AND T.EXTENT_PAGE_COUNT = 64
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND T.SEGMENT_MANAGEMENT = 'MANUAL'
+                AND D.INITSIZE = 12800
+                AND D.CURRSIZE = 12800
+                AND D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+               THEN 1 ELSE 0
+           END AS PASS_ALL_DEFAULTS_APPLIED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PD_TS';
+PASS_ALL_DEFAULTS_APPLIED 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; AN EXPLICIT CLAUSE STILL WINS PER FILE
+$T0> ##################################
+$T0> SELECT T.NAME AS TBS_NAME,
+           D.ID AS FILE_ID,
+           D.INITSIZE,
+           D.CURRSIZE,
+           D.AUTOEXTEND
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PD_MIX'
+     ORDER BY D.ID;
+TBS_NAME                                  FILE_ID     INITSIZE             
+-------------------------------------------------------------------------------
+CURRSIZE             AUTOEXTEND  
+------------------------------------
+SDPTE_PD_MIX                              0           1024                 
+1024                 0           
+SDPTE_PD_MIX                              1           12800                
+12800                0           
+2 rows selected.
+
+$T0> # File 0 keeps its stated 8M. File 1 takes the 100M default. The statement
+$T0> # level EXTENTSIZE 256K applies to the tablespace regardless.
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.ID = 0 AND D.INITSIZE = 1024 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 1 AND D.INITSIZE = 12800 THEN 1 ELSE 0 END) = 1
+                AND SUM(D.AUTOEXTEND) = 0
+                AND MIN(T.EXTENT_PAGE_COUNT) = 32
+                AND MIN(T.TOTAL_PAGE_COUNT) = 13824
+               THEN 1 ELSE 0
+           END AS PASS_EXPLICIT_CLAUSE_WINS_PER_FILE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PD_MIX';
+PASS_EXPLICIT_CLAUSE_WINS_PER_FILE 
+-------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_PD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_PD_MIX INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

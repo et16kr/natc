@@ -1,0 +1,112 @@
+###########################################################################
+# TestCase Description = Refuse a spill that outgrows an AUTOEXTEND OFF TEMP tablespace and
+#                        leave the space reusable.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = work-area reservation failure is an ordinary statement error, not a
+#                        runtime fault; the failed statement releases every extent it took.
+# Product Reference    = src/sm/sdp/sdpte/sdpteExtentFacade.cpp smERR_ABORT_NOT_ENOUGH_WORKAREA
+#                        src/sm/smi/smiTempTable.cpp checkAndDump benign error list
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# Tuning Manual        = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_XA_U CASCADE;
+    DROP TABLESPACE SDPTE_XA_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_XA_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_XA_DATA
+        DATAFILE 'sdpte_xa_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    # 4M with AUTOEXTEND OFF cannot hold the work area the query below needs.
+    CREATE TEMPORARY TABLESPACE SDPTE_XA_TS
+        TEMPFILE 'sdpte_xa_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_XA_U IDENTIFIED BY SDPTE_XA_U
+        DEFAULT TABLESPACE SDPTE_XA_DATA
+        TEMPORARY TABLESPACE SDPTE_XA_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTE_XA_U/SDPTE_XA_U;
+
+    CREATE TABLE SDPTE_XA_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_XA_DATA;
+
+    INSERT INTO SDPTE_XA_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('X', 1790, 'X')
+      FROM DUAL
+    CONNECT BY LEVEL <= 5000;
+
+    COMMIT;
+
+##################################
+SECTOR; THE OVERSIZED SPILL IS AN ORDINARY STATEMENT ERROR
+##################################
+    # ERR-11184 is the reservation refusal. It must arrive as a statement error,
+    # not as a server-side fault.
+    SELECT COUNT(*) AS EXHAUSTED_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XA_SOURCE
+           ) D;
+
+##################################
+SECTOR; THE SESSION AND THE SPACE BOTH SURVIVE
+##################################
+    SELECT 'SESSION_ALIVE' AS PASS_SESSION_SURVIVES FROM DUAL;
+
+    # A work area that fits still succeeds on the same session and the same space.
+    SELECT CASE WHEN COUNT(*) = 100 THEN 1 ELSE 0 END AS PASS_SMALL_SPILL_AFTER_REFUSAL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XA_SOURCE
+             WHERE ID <= 100
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    # The refused statement released every extent it had taken and the AUTOEXTEND OFF
+    # definition is untouched.
+    SELECT CASE
+               WHEN T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+                AND D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_RELEASED_AND_DEFINITION_INTACT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XA_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_XA_U CASCADE;
+    DROP TABLESPACE SDPTE_XA_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_XA_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

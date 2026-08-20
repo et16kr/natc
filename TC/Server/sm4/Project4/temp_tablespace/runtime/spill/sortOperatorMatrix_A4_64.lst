@@ -1,0 +1,277 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Drive sort, merge-join and set-operation work areas into a user TEMP
+$T0> #                        tablespace, and keep disk index build out of it.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = the TEMP tablespace serves every work-area producer, not only the hash
+$T0> #                        distinct path that the rest of this suite exercises. Sort-shaped and
+$T0> #                        set-operation-shaped work areas allocate and release through the same
+$T0> #                        extent owner.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteExtentFacade.cpp reservation entry point
+$T0> #                        src/sm/smi/smiTempTable.cpp work-area lifecycle
+$T0> # Regression Focus     = 68 of the suite's 75 spill hints are DISTINCT_HASH. This case is the
+$T0> #                        counterweight: GROUP_SORT, USE_MERGE, UNION, MINUS, INTERSECT and a bare
+$T0> #                        ORDER BY each take a differently shaped work area.
+$T0> # Tuning Manual        = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_OM_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_OM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_OM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_OM_DATA
+        DATAFILE 'sdpte_om_data.dbf' SIZE 32M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_OM_TS
+        TEMPFILE 'sdpte_om_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 256M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_OM_U IDENTIFIED BY SDPTE_OM_U
+        DEFAULT TABLESPACE SDPTE_OM_DATA
+        TEMPORARY TABLESPACE SDPTE_OM_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+$T0> ALTER SYSTEM SET SORT_AREA_SIZE = 524288;
+Alter success.
+
+$T0> CONNECT SDPTE_OM_U/SDPTE_OM_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_OM_A ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_OM_DATA;
+Create success.
+
+$T0> CREATE TABLE SDPTE_OM_B ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_OM_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_OM_A
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('A', 1790, 'A')
+      FROM DUAL
+    CONNECT BY LEVEL <= 20000;
+20000 rows inserted.
+
+$T0> INSERT INTO SDPTE_OM_B
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('A', 1790, 'A')
+      FROM DUAL
+    CONNECT BY LEVEL <= 20000;
+20000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; SORT SHAPED GROUP BY
+$T0> ##################################
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1000
+                AND MIN(C) = 20
+                AND MAX(C) = 20
+               THEN 1 ELSE 0
+           END AS PASS_GROUP_SORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK GROUP_SORT */
+                   MOD(ID, 1000) AS G,
+                   COUNT(*) AS C
+              FROM SDPTE_OM_A
+             GROUP BY MOD(ID, 1000)
+           ) G;
+PASS_GROUP_SORT_SPILL 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; MERGE JOIN SORTS BOTH INPUTS
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_MERGE_JOIN_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK ORDERED USE_MERGE(A, B) */
+                   A.K1 AS AK
+              FROM SDPTE_OM_A A,
+                   SDPTE_OM_B B
+             WHERE A.ID = B.ID
+           ) J;
+PASS_MERGE_JOIN_SPILL 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; SET OPERATIONS SORT AND DEDUPLICATE
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_UNION_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ K1 FROM SDPTE_OM_A
+            UNION
+            SELECT K1 FROM SDPTE_OM_B
+           ) U;
+PASS_UNION_SPILL 
+-------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 10000 THEN 1 ELSE 0 END AS PASS_MINUS_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ K1 FROM SDPTE_OM_A
+            MINUS
+            SELECT K1 FROM SDPTE_OM_B WHERE ID <= 10000
+           ) M;
+PASS_MINUS_SPILL 
+-------------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_INTERSECT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ K1 FROM SDPTE_OM_A
+            INTERSECT
+            SELECT K1 FROM SDPTE_OM_B
+           ) I;
+PASS_INTERSECT_SPILL 
+-----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; A BARE ORDER BY SORTS THROUGH THE SAME SPACE
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_ORDER_BY_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ ID, K1
+              FROM SDPTE_OM_A
+             ORDER BY K1 DESC
+           ) O;
+PASS_ORDER_BY_SPILL 
+----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; EVERY SHAPE USED THE SPACE AND GAVE IT BACK
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT D.INITSIZE,
+           D.CURRSIZE,
+           T.TOTAL_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+INITSIZE             CURRSIZE             TOTAL_PAGE_COUNT     
+-------------------------------------------------------------------
+ALLOCATED_PAGE_COUNT 
+-----------------------
+128                  5248                 5248                 
+0                    
+1 row selected.
+
+$T0> # The exact settled size depends on the allocation policy, so only the
+$T0> # direction and the release are asserted.
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE > D.INITSIZE
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.AUTOEXTEND = 1
+               THEN 1 ELSE 0
+           END AS PASS_SORT_SHAPES_USED_AND_RELEASED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+PASS_SORT_SHAPES_USED_AND_RELEASED 
+-------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; DISK INDEX BUILD DOES NOT CONSUME THE USER TEMP TABLESPACE
+$T0> ##################################
+$T0> # The index build sorts through SORT_AREA_SIZE and its own scratch, not
+$T0> # through the user TEMP tablespace. Its size must not move.
+$T0> SELECT D.CURRSIZE AS CURRSIZE_BEFORE_INDEX
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+CURRSIZE_BEFORE_INDEX 
+------------------------
+5248                 
+1 row selected.
+
+$T0> CONNECT SDPTE_OM_U/SDPTE_OM_U;
+Connect success.
+
+$T0> CREATE INDEX SDPTE_OM_A_IDX ON SDPTE_OM_A ( K1 );
+Create success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_INDEX_BUILT
+      FROM SDPTE_OM_A
+     WHERE K1 IS NOT NULL;
+PASS_INDEX_BUILT 
+-------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+               THEN 1 ELSE 0
+           END AS PASS_INDEX_BUILD_LEFT_TEMP_QUIESCED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+PASS_INDEX_BUILD_LEFT_TEMP_QUIESCED 
+--------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 8; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+$T0> ALTER SYSTEM SET SORT_AREA_SIZE = 1048576;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_OM_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_OM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_OM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

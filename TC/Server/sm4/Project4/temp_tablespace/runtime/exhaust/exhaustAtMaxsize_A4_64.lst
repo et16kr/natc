@@ -1,0 +1,171 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Grow an AUTOEXTEND TEMP file to exactly its MAXSIZE and refuse the spill there.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = MAXSIZE is the hard runtime ceiling; the last successful grow stops at the
+$T0> #                        cap and the refusal does not push CURRSIZE past it.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAutoExtend.cpp cap evaluation
+$T0> #                        src/sm/sdp/sdpte/sdpteExtentFacade.cpp smERR_ABORT_NOT_ENOUGH_WORKAREA
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # Tuning Manual        = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_XM_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_XM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_XM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_XM_DATA
+        DATAFILE 'sdpte_xm_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> # 1M initial, 1M steps, hard cap at 4M. The query below needs far more.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_XM_TS
+        TEMPFILE 'sdpte_xm_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 4M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_XM_U IDENTIFIED BY SDPTE_XM_U
+        DEFAULT TABLESPACE SDPTE_XM_DATA
+        TEMPORARY TABLESPACE SDPTE_XM_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_XM_U/SDPTE_XM_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_XM_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_XM_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_XM_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('M', 1790, 'M')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; AUTOEXTEND STOPS AT THE CAP AND THE SPILL IS REFUSED
+$T0> ##################################
+$T0> SELECT COUNT(*) AS CAPPED_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XM_SOURCE
+           ) D;
+[ERR-11184 : Insufficient free space in work area]
+
+$T0> SELECT 'SESSION_ALIVE' AS PASS_SESSION_SURVIVES FROM DUAL;
+PASS_SESSION_SURVIVES  
+-------------------------
+SESSION_ALIVE  
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # CURRSIZE settled on MAXSIZE exactly. INITSIZE is the recorded definition
+$T0> # baseline and is not rewritten by the growth that preceded the refusal.
+$T0> SELECT T.TOTAL_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT,
+           D.INITSIZE,
+           D.CURRSIZE,
+           D.AUTOEXTEND,
+           D.NEXTSIZE,
+           D.MAXSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XM_TS';
+TOTAL_PAGE_COUNT     ALLOCATED_PAGE_COUNT INITSIZE             
+-------------------------------------------------------------------
+CURRSIZE             AUTOEXTEND  NEXTSIZE             MAXSIZE              
+--------------------------------------------------------------------------------
+512                  0                    128                  
+512                  1           128                  512                  
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.INITSIZE = 128
+                AND D.CURRSIZE = 512
+                AND D.CURRSIZE = D.MAXSIZE
+                AND D.AUTOEXTEND = 1
+               THEN 1 ELSE 0
+           END AS PASS_STOPPED_AT_MAXSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XM_TS';
+PASS_STOPPED_AT_MAXSIZE 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; A SECOND ATTEMPT AT THE CAP BEHAVES THE SAME WAY
+$T0> ##################################
+$T0> CONNECT SDPTE_XM_U/SDPTE_XM_U;
+Connect success.
+
+$T0> SELECT COUNT(*) AS CAPPED_SPILL_AGAIN
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XM_SOURCE
+           ) D;
+[ERR-11184 : Insufficient free space in work area]
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_CAP_IS_STABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XM_TS';
+PASS_CAP_IS_STABLE 
+---------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_XM_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_XM_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_XM_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

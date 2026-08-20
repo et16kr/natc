@@ -4,6 +4,7 @@ create_autoextend_next_4m.tc
 create_autoextend_unlimited.tc
 createBoundaryValidation.tc
 create_catalog.tc
+createDefaultsFromProperty.tc
 createDiskTemporaryForm.tc
 create_extent_1m.tc
 create_extent_256k.tc

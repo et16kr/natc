@@ -1,0 +1,210 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Project TEMP work-area usage through V$DISK_TEMP_STAT and V$DISK_TEMP_INFO.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = the public disk-TEMP usage views must remain queryable and joinable for a
+$T0> #                        user TEMP tablespace, must report no live work area when the space is idle,
+$T0> #                        and must return to that state once a spill has finished.
+$T0> # Product Reference    = src/qp/qcm/qcmPerformanceView.cpp V$DISK_TEMP_STAT over X$TEMPTABLE_STATS
+$T0> #                        (WHERE CREATE_TIME > DROP_TIME) and V$DISK_TEMP_INFO over X$TEMPINFO
+$T0> #                        src/sm/smi/smiTempTable.cpp accumulateStats
+$T0> # Oracle Note          = V$DISK_TEMP_STAT lists only work areas that are still live, so catching one
+$T0> #                        mid-statement is a race. This case asserts the two deterministic ends
+$T0> #                        (idle and drained) and never asserts a live sample. V$DISK_TEMP_INFO
+$T0> #                        reports server-lifetime maxima, so only its shape and units are asserted.
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_DT_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_DT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_DT_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_DT_DATA
+        DATAFILE 'sdpte_dt_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DT_TS
+        TEMPFILE 'sdpte_dt_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_DT_U IDENTIFIED BY SDPTE_DT_U
+        DEFAULT TABLESPACE SDPTE_DT_DATA
+        TEMPORARY TABLESPACE SDPTE_DT_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_DT_U/SDPTE_DT_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_DT_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_DT_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_DT_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('T', 1790, 'T')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; AN IDLE TEMP TABLESPACE PROJECTS NO LIVE WORK AREA
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_IDLE_HAS_NO_LIVE_WORK_AREA
+      FROM V$DISK_TEMP_STAT S, V$TABLESPACES T
+     WHERE S.TBS_ID = T.ID
+       AND T.NAME = 'SDPTE_DT_TS';
+PASS_IDLE_HAS_NO_LIVE_WORK_AREA 
+----------------------------------
+1           
+1 row selected.
+
+$T0> # The view is joinable on TBS_ID and carries the documented column set.
+$T0> SELECT CASE
+               WHEN COUNT(*) >= 0
+               THEN 1 ELSE 0
+           END AS PASS_STAT_VIEW_QUERYABLE
+      FROM ( SELECT TBS_ID,
+                    TRANSACTION_ID,
+                    CONSUME_TIME,
+                    READ_COUNT,
+                    WRITE_COUNT,
+                    WRITE_PAGE_COUNT,
+                    OVER_ALLOC_COUNT,
+                    ALLOC_WAIT_COUNT,
+                    WRITE_WAIT_COUNT,
+                    QUEUE_WAIT_COUNT,
+                    WORK_AREA_SIZE,
+                    MAX_WORK_AREA_SIZE,
+                    DISK_USAGE,
+                    RUNTIME_MAP_SIZE
+               FROM V$DISK_TEMP_STAT ) S;
+PASS_STAT_VIEW_QUERYABLE 
+---------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; THE LIVE PROJECTION IS EMPTY AGAIN AFTER A REAL SPILL
+$T0> ##################################
+$T0> CONNECT SDPTE_DT_U/SDPTE_DT_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_COMPLETED
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_DT_SOURCE
+           ) D;
+PASS_SPILL_COMPLETED 
+-----------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # The work area is gone, so it must no longer be listed, while the tablespace
+$T0> # itself still shows the capacity the spill left behind.
+$T0> SELECT CASE
+               WHEN ( SELECT COUNT(*)
+                        FROM V$DISK_TEMP_STAT S, V$TABLESPACES T
+                       WHERE S.TBS_ID = T.ID
+                         AND T.NAME = 'SDPTE_DT_TS' ) = 0
+                AND ( SELECT T.ALLOCATED_PAGE_COUNT
+                        FROM V$TABLESPACES T
+                       WHERE T.NAME = 'SDPTE_DT_TS' ) = 0
+                AND ( SELECT D.CURRSIZE
+                        FROM V$TABLESPACES T, V$DATAFILES D
+                       WHERE T.ID = D.SPACEID
+                         AND T.NAME = 'SDPTE_DT_TS' ) > 128
+               THEN 1 ELSE 0
+           END AS PASS_LIVE_PROJECTION_DRAINED
+      FROM DUAL;
+PASS_LIVE_PROJECTION_DRAINED 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; V$DISK_TEMP_INFO KEEPS ITS FOUR ESTIMATE ROWS IN BYTES
+$T0> ##################################
+$T0> SELECT NAME, UNIT
+      FROM V$DISK_TEMP_INFO
+     ORDER BY NAME;
+NAME                                  UNIT                                  
+-------------------------------------------------------------------------------
+MAX ESTIMATED ONEPASS SORT SIZE       BYTES                                 
+MAX ESTIMATED OPTIMAL HASH MAP SIZE   BYTES                                 
+MAX ESTIMATED OPTIMAL HASH ROW SIZE   BYTES                                 
+MAX ESTIMATED OPTIMAL SORT SIZE       BYTES                                 
+4 rows selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 4
+                AND SUM(CASE WHEN UNIT = 'BYTES' THEN 1 ELSE 0 END) = 4
+                AND SUM(CASE WHEN VALUE >= 0 THEN 1 ELSE 0 END) = 4
+               THEN 1 ELSE 0
+           END AS PASS_TEMP_INFO_SHAPE
+      FROM V$DISK_TEMP_INFO;
+PASS_TEMP_INFO_SHAPE 
+-----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; DROPPING THE TEMP TABLESPACE LEAVES NO USAGE ROW BEHIND
+$T0> ##################################
+$T0> DROP USER SDPTE_DT_U CASCADE;
+Drop success.
+$T0> DROP TABLESPACE SDPTE_DT_TS INCLUDING CONTENTS AND DATAFILES;
+Drop success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NO_USAGE_ROW_AFTER_DROP
+      FROM V$DISK_TEMP_STAT S
+     WHERE S.TBS_ID NOT IN ( SELECT T.ID FROM V$TABLESPACES T );
+PASS_NO_USAGE_ROW_AFTER_DROP 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_DT_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_DT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_DT_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

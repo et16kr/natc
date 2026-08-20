@@ -1,0 +1,248 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep two users spilling into their own TEMP tablespaces at the same time.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = each session resolves its own runtime owner from its own binding, so two
+$T0> #                        live TEMP spaces grow and release independently and neither borrows the
+$T0> #                        other's extents.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteModule.cpp per-space runtime owner
+$T0> #                        src/sm/sdp/sdpte/sdpteExtentFacade.cpp per-space reservation
+$T0> # Regression Focus     = the existing concurrency cases all run one user against one TEMP space, so
+$T0> #                        a cross-space owner mixup would not show up there.
+$T0> # ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/runtime/concurrency/parallelAutoextend.tc
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_MI_U1 CASCADE;
+$T0> DROP USER SDPTE_MI_U2 CASCADE;
+$T0> DROP TABLESPACE SDPTE_MI_TS1 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_MI_TS2 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_MI_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_MI_DATA
+        DATAFILE 'sdpte_mi_data.dbf' SIZE 32M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> # Two independently sized TEMP spaces so a mixup changes the wrong file.
+$T0> # Both keep EXTENTSIZE 512K: the work-area manager asserts on any extent
+$T0> # other than SDT_WAEXTENT_PAGECOUNT (64 pages), so a differently sized
+$T0> # extent would abort the server rather than test isolation. The spaces are
+$T0> # distinguished by their initial and growth sizes instead.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_MI_TS1
+        TEMPFILE 'sdpte_mi_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_MI_TS2
+        TEMPFILE 'sdpte_mi_02.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_MI_U1 IDENTIFIED BY SDPTE_MI_U1
+        DEFAULT TABLESPACE SDPTE_MI_DATA
+        TEMPORARY TABLESPACE SDPTE_MI_TS1;
+Create success.
+
+$T0> CREATE USER SDPTE_MI_U2 IDENTIFIED BY SDPTE_MI_U2
+        DEFAULT TABLESPACE SDPTE_MI_DATA
+        TEMPORARY TABLESPACE SDPTE_MI_TS2;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+$T0> ALTER SYSTEM SET SORT_AREA_SIZE = 524288;
+Alter success.
+
+$T0> CONNECT SDPTE_MI_U1/SDPTE_MI_U1;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_MI_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_MI_DATA;
+Create success.
+
+$T0> CREATE TABLE SDPTE_MI_RESULT ( WORKER_ID INTEGER, PASS_VALUE INTEGER )
+        TABLESPACE SDPTE_MI_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_MI_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('I', 1790, 'I')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> GRANT SELECT ON SDPTE_MI_SOURCE TO SDPTE_MI_U2;
+Grant success.
+$T0> GRANT INSERT ON SDPTE_MI_RESULT TO SDPTE_MI_U2;
+Grant success.
+
+$T0> ##################################
+$T0> SECTOR 2; BOTH SPACES ARE IDLE BEFORE THE RUN
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(T.ALLOCATED_PAGE_COUNT) = 0
+                AND SUM(CASE WHEN D.CURRSIZE = D.INITSIZE THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_SPACES_IDLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_MI_TS1', 'SDPTE_MI_TS2');
+PASS_BOTH_SPACES_IDLE 
+------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; TWO USERS SPILL CONCURRENTLY INTO THEIR OWN SPACES
+$T0> ##################################
+
+$T0> CONNECT SDPTE_MI_U1/SDPTE_MI_U1;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(PASS_VALUE) = 2
+                AND COUNT(DISTINCT WORKER_ID) = 2
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_SPILLS_CORRECT
+      FROM SDPTE_MI_RESULT;
+PASS_BOTH_SPILLS_CORRECT 
+---------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; EACH SPACE GREW ON ITS OWN TERMS AND RELEASED
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT T.NAME,
+           T.EXTENT_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT,
+           D.INITSIZE,
+           D.NEXTSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_MI_TS1', 'SDPTE_MI_TS2')
+     ORDER BY T.NAME;
+NAME                                      EXTENT_PAGE_COUNT 
+---------------------------------------------------------------
+ALLOCATED_PAGE_COUNT INITSIZE             NEXTSIZE             
+-------------------------------------------------------------------
+SDPTE_MI_TS1                              64          
+0                    128                  128                  
+SDPTE_MI_TS2                              64          
+0                    512                  512                  
+2 rows selected.
+
+$T0> # Both grew past their own initial size, both are quiesced, and each kept its
+$T0> # own extent geometry. A shared owner would have collapsed one of these.
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(T.ALLOCATED_PAGE_COUNT) = 0
+                AND SUM(CASE WHEN D.CURRSIZE > D.INITSIZE THEN 1 ELSE 0 END) = 2
+                AND SUM(CASE WHEN T.NAME = 'SDPTE_MI_TS1'
+                              AND T.EXTENT_PAGE_COUNT = 64
+                              AND D.INITSIZE = 128
+                              AND D.NEXTSIZE = 128 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN T.NAME = 'SDPTE_MI_TS2'
+                              AND T.EXTENT_PAGE_COUNT = 64
+                              AND D.INITSIZE = 512
+                              AND D.NEXTSIZE = 512 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN T.TOTAL_PAGE_COUNT = D.CURRSIZE THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_SPACES_STAYED_INDEPENDENT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_MI_TS1', 'SDPTE_MI_TS2');
+PASS_SPACES_STAYED_INDEPENDENT 
+---------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; RETIRING ONE SPACE LEAVES THE OTHER WORKING
+$T0> ##################################
+$T0> ALTER USER SDPTE_MI_U2 TEMPORARY TABLESPACE SYS_TBS_DISK_TEMP;
+Alter success.
+
+$T0> DROP TABLESPACE SDPTE_MI_TS2 INCLUDING CONTENTS AND DATAFILES;
+Drop success.
+
+$T0> CONNECT SDPTE_MI_U1/SDPTE_MI_U1;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SURVIVING_SPACE_STILL_SPILLS
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_MI_SOURCE
+           ) D;
+PASS_SURVIVING_SPACE_STILL_SPILLS 
+------------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.DATAFILE_COUNT = 1
+                AND T.EXTENT_PAGE_COUNT = 64
+               THEN 1 ELSE 0
+           END AS PASS_SURVIVOR_UNAFFECTED
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTE_MI_TS1';
+PASS_SURVIVOR_UNAFFECTED 
+---------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+$T0> ALTER SYSTEM SET SORT_AREA_SIZE = 1048576;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_MI_U1 CASCADE;
+$T0> DROP USER SDPTE_MI_U2 CASCADE;
+$T0> DROP TABLESPACE SDPTE_MI_TS1 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_MI_TS2 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_MI_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

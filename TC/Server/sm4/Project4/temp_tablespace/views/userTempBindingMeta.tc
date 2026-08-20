@@ -1,0 +1,151 @@
+###########################################################################
+# TestCase Description = Project the user-to-TEMP binding and TEMP access grants through the catalog.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = a user TEMP tablespace is ordinary catalog state: SYS_USERS_ carries the
+#                        binding, SYS_TBS_USERS_ carries explicit access, and both survive the
+#                        tablespace lifecycle they describe.
+# Product Reference    = src/qp/qcm/qcmCreate.cpp DBA_USERS_.TEMP_TBS_ID and the SYS_USERS_ view
+#                        src/qp/qcm/qcmTableSpace.cpp checkAccessTBS default/temp TBS exemption
+#                        src/qp/qdr/qdr.cpp ACCESS clause maintenance of SYS_TBS_USERS_
+# View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_BM_U CASCADE;
+    DROP USER SDPTE_BM_V CASCADE;
+    DROP TABLESPACE SDPTE_BM_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_BM_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_BM_DATA
+        DATAFILE 'sdpte_bm_data.dbf' SIZE 4M AUTOEXTEND OFF;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_BM_TS
+        TEMPFILE 'sdpte_bm_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_BM_U IDENTIFIED BY SDPTE_BM_U
+        DEFAULT TABLESPACE SDPTE_BM_DATA
+        TEMPORARY TABLESPACE SDPTE_BM_TS;
+
+    # No TEMPORARY TABLESPACE clause, so this user inherits the system TEMP space.
+    CREATE USER SDPTE_BM_V IDENTIFIED BY SDPTE_BM_V
+        DEFAULT TABLESPACE SDPTE_BM_DATA;
+
+##################################
+SECTOR; SYS_USERS_ CARRIES THE BINDING FOR BOTH USERS
+##################################
+    SELECT U.USER_NAME,
+           DT.NAME AS DEFAULT_TBS,
+           TT.NAME AS TEMP_TBS,
+           TT.TYPE AS TEMP_TBS_TYPE
+      FROM SYSTEM_.SYS_USERS_ U,
+           V$TABLESPACES DT,
+           V$TABLESPACES TT
+     WHERE U.DEFAULT_TBS_ID = DT.ID
+       AND U.TEMP_TBS_ID = TT.ID
+       AND U.USER_NAME IN ('SDPTE_BM_U', 'SDPTE_BM_V')
+     ORDER BY U.USER_NAME;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN U.USER_NAME = 'SDPTE_BM_U'
+                              AND TT.NAME = 'SDPTE_BM_TS'
+                              AND TT.TYPE = 6 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN U.USER_NAME = 'SDPTE_BM_V'
+                              AND TT.NAME = 'SYS_TBS_DISK_TEMP'
+                              AND TT.TYPE = 5 THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_BINDING_PROJECTION
+      FROM SYSTEM_.SYS_USERS_ U,
+           V$TABLESPACES TT
+     WHERE U.TEMP_TBS_ID = TT.ID
+       AND U.USER_NAME IN ('SDPTE_BM_U', 'SDPTE_BM_V');
+
+##################################
+SECTOR; THE BOUND TEMP SPACE NEEDS NO EXPLICIT ACCESS ROW
+##################################
+    # checkAccessTBS exempts a user's own default and temp tablespaces, so binding
+    # alone must not create a SYS_TBS_USERS_ row.
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NO_IMPLICIT_ACCESS_ROW
+      FROM SYSTEM_.SYS_TBS_USERS_ A,
+           SYSTEM_.SYS_USERS_ U,
+           V$TABLESPACES T
+     WHERE A.USER_ID = U.USER_ID
+       AND A.TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_BM_U'
+       AND T.NAME = 'SDPTE_BM_TS';
+
+##################################
+SECTOR; AN EXPLICIT GRANT TO A TEMP TABLESPACE IS RECORDED
+##################################
+    ALTER USER SDPTE_BM_V ACCESS SDPTE_BM_TS ON;
+
+    SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(A.IS_ACCESS) = 1
+               THEN 1 ELSE 0
+           END AS PASS_EXPLICIT_ACCESS_RECORDED
+      FROM SYSTEM_.SYS_TBS_USERS_ A,
+           SYSTEM_.SYS_USERS_ U,
+           V$TABLESPACES T
+     WHERE A.USER_ID = U.USER_ID
+       AND A.TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_BM_V'
+       AND T.NAME = 'SDPTE_BM_TS';
+
+    ALTER USER SDPTE_BM_V ACCESS SDPTE_BM_TS OFF;
+
+    SELECT CASE
+               WHEN COUNT(*) = 1
+                AND MIN(A.IS_ACCESS) = 0
+               THEN 1 ELSE 0
+           END AS PASS_ACCESS_REVOKED
+      FROM SYSTEM_.SYS_TBS_USERS_ A,
+           SYSTEM_.SYS_USERS_ U,
+           V$TABLESPACES T
+     WHERE A.USER_ID = U.USER_ID
+       AND A.TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_BM_V'
+       AND T.NAME = 'SDPTE_BM_TS';
+
+##################################
+SECTOR; DROPPING THE USER CLEARS ITS CATALOG ROWS
+##################################
+    DROP USER SDPTE_BM_V CASCADE;
+
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_USER_ROW_CLEARED
+      FROM SYSTEM_.SYS_USERS_
+     WHERE USER_NAME = 'SDPTE_BM_V';
+
+    SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_REMAINING_BINDING_INTACT
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_BM_U'
+       AND T.NAME = 'SDPTE_BM_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP USER SDPTE_BM_U CASCADE;
+    DROP USER SDPTE_BM_V CASCADE;
+    DROP TABLESPACE SDPTE_BM_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_BM_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

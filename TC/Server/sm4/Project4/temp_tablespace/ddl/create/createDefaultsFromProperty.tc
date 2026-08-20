@@ -1,0 +1,116 @@
+###########################################################################
+# TestCase Description = Take TEMP file and extent defaults from the USER_TEMP_* properties when the
+#                        CREATE statement omits them.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = an omitted SIZE, EXTENTSIZE, AUTOEXTEND, or SEGMENT MANAGEMENT clause must
+#                        resolve to the shipped property default rather than to zero or to a
+#                        DATA-tablespace default.
+# Product Reference    = src/id/idp/idpDescResource.cpp USER_TEMP_FILE_INIT_SIZE (100M),
+#                        USER_TEMP_TBS_EXTENT_SIZE (512K), USER_TEMP_FILE_NEXT_SIZE (1M)
+#                        src/qp/qcp/qcply.y filespec rule with mInitSize = 0 when SIZE is omitted
+# Environment Contract = the four USER_TEMP_* properties are IDP_ATTR_RD_READONLY, so this case
+#                        reads the shipped defaults and never writes them.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_PD_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_PD_MIX INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    # Every optional clause is omitted.
+    CREATE TEMPORARY TABLESPACE SDPTE_PD_TS
+        TEMPFILE 'sdpte_pd_01.dbf';
+
+    # One file states SIZE, the other does not, so a single statement must apply
+    # the default only where the clause is absent.
+    CREATE TEMPORARY TABLESPACE SDPTE_PD_MIX
+        TEMPFILE 'sdpte_pd_02.dbf' SIZE 8M AUTOEXTEND OFF,
+                 'sdpte_pd_03.dbf'
+        EXTENTSIZE 256K;
+
+##################################
+SECTOR; THE OMITTED CLAUSES RESOLVE TO THE PROPERTY DEFAULTS
+##################################
+    SELECT NAME,
+           TYPE,
+           STATE,
+           DATAFILE_COUNT,
+           TOTAL_PAGE_COUNT,
+           EXTENT_PAGE_COUNT,
+           SEGMENT_MANAGEMENT
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_PD_TS';
+
+    # 12800 pages is USER_TEMP_FILE_INIT_SIZE (100M) and 64 pages is
+    # USER_TEMP_TBS_EXTENT_SIZE (512K). An omitted AUTOEXTEND clause is OFF.
+    SELECT CASE
+               WHEN T.TYPE = 6
+                AND T.STATE = 2
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = 12800
+                AND T.EXTENT_PAGE_COUNT = 64
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND T.SEGMENT_MANAGEMENT = 'MANUAL'
+                AND D.INITSIZE = 12800
+                AND D.CURRSIZE = 12800
+                AND D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+               THEN 1 ELSE 0
+           END AS PASS_ALL_DEFAULTS_APPLIED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PD_TS';
+
+##################################
+SECTOR; AN EXPLICIT CLAUSE STILL WINS PER FILE
+##################################
+    SELECT T.NAME AS TBS_NAME,
+           D.ID AS FILE_ID,
+           D.INITSIZE,
+           D.CURRSIZE,
+           D.AUTOEXTEND
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PD_MIX'
+     ORDER BY D.ID;
+
+    # File 0 keeps its stated 8M. File 1 takes the 100M default. The statement
+    # level EXTENTSIZE 256K applies to the tablespace regardless.
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN D.ID = 0 AND D.INITSIZE = 1024 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN D.ID = 1 AND D.INITSIZE = 12800 THEN 1 ELSE 0 END) = 1
+                AND SUM(D.AUTOEXTEND) = 0
+                AND MIN(T.EXTENT_PAGE_COUNT) = 32
+                AND MIN(T.TOTAL_PAGE_COUNT) = 13824
+               THEN 1 ELSE 0
+           END AS PASS_EXPLICIT_CLAUSE_WINS_PER_FILE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_PD_MIX';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_PD_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_PD_MIX INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

@@ -1,0 +1,257 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Abort the server around ADD and DROP TEMPFILE and reconcile to one
+$T0> #                        consistent file set after restart.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = file-set membership is all-or-nothing across an abrupt stop. After restart
+$T0> #                        the catalog file count, the published total and the live file sizes must
+$T0> #                        agree, no half-joined file may be bound, and the space must still serve a
+$T0> #                        spill and further file DDL.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAddTempFile.cpp, sdpteDropTempFile.cpp
+$T0> #                        src/sm/sdp/sdpte/sdpteReconcile.cpp post-recovery membership reconciliation
+$T0> #                        src/sm/sdp/sdpte/sdpteBinding.cpp startup binding
+$T0> # Oracle Note          = Whether each DDL commits before the abort is not controllable, so the case
+$T0> #                        asserts the invariant that holds for every outcome: the file count is one
+$T0> #                        of the legal values and TOTAL_PAGE_COUNT equals the sum of live CURRSIZE.
+$T0> # ATAF Runtime         = stdFunc.i stdServerKill/stdServerStart.
+$T0> # ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/recovery/crash/abruptRuntimeRestart.tc
+$T0> # Manual Reference     = ALTIBASE/Documents/Manuals/Altibase_7.1/eng/SQL Reference.md,
+$T0> #                        ALTER TABLESPACE (datafile_tempfile_clause). DROP
+$T0> #                        TEMPFILE removes the catalog member, not the physical file.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_CK_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_CK_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CK_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_03.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_04.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_CK_DATA
+        DATAFILE 'sdpte_ck_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CK_TS
+        TEMPFILE 'sdpte_ck_01.dbf' SIZE 4M AUTOEXTEND OFF,
+                 'sdpte_ck_02.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_CK_U IDENTIFIED BY SDPTE_CK_U
+        DEFAULT TABLESPACE SDPTE_CK_DATA
+        TEMPORARY TABLESPACE SDPTE_CK_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_CK_U/SDPTE_CK_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_CK_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_CK_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_CK_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('K', 1790, 'K')
+      FROM DUAL
+    CONNECT BY LEVEL <= 5000;
+5000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 2
+                AND TOTAL_PAGE_COUNT = 1024
+               THEN 1 ELSE 0
+           END AS PASS_PRE_ABORT_FILESET
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_CK_TS';
+PASS_PRE_ABORT_FILESET 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; ABORT AROUND ADD TEMPFILE
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Either the add committed (3 files) or it did not (2 files). In both cases
+$T0> # the published total must equal the sum of the live file sizes.
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT IN ( 2, 3 )
+                AND T.DATAFILE_COUNT = F.FILE_COUNT
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.MIN_ID = 0
+               THEN 1 ELSE 0
+           END AS PASS_ADD_RECONCILED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    MIN(D.ID) AS MIN_ID
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_CK_TS' ) F
+     WHERE T.NAME = 'SDPTE_CK_TS';
+PASS_ADD_RECONCILED 
+----------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_CK_U/SDPTE_CK_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 100 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_ADD_ABORT
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_CK_SOURCE
+             WHERE ID <= 100
+           ) D;
+PASS_SPILL_AFTER_ADD_ABORT 
+-----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; VERIFY THE LEGAL FILE SET BEFORE THE SECOND ABORT
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT IN ( 2, 3 )
+                AND T.DATAFILE_COUNT = F.FILE_COUNT
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_FILESET_READY_FOR_DROP_ABORT
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_CK_TS' ) F
+     WHERE T.NAME = 'SDPTE_CK_TS';
+PASS_FILESET_READY_FOR_DROP_ABORT 
+------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; ABORT AROUND DROP TEMPFILE
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # ADD may have committed or aborted, independently of this DROP. Therefore
+$T0> # one, two or three files are legal; membership, total size and OPENED state
+$T0> # must still describe one complete published file set.
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT IN ( 1, 2, 3 )
+                AND T.DATAFILE_COUNT = F.FILE_COUNT
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.OPENED_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_DROP_RECONCILED
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.OPENED = 1 THEN 1 ELSE 0 END) AS OPENED_COUNT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_CK_TS' ) F
+     WHERE T.NAME = 'SDPTE_CK_TS';
+PASS_DROP_RECONCILED 
+-----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; THE SPACE STILL SPILLS AND STILL ACCEPTS FILE DDL
+$T0> ##################################
+$T0> CONNECT SDPTE_CK_U/SDPTE_CK_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 100 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_DROP_ABORT
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_CK_SOURCE
+             WHERE ID <= 100
+           ) D;
+PASS_SPILL_AFTER_DROP_ABORT 
+------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ALTER TABLESPACE SDPTE_CK_TS ADD TEMPFILE
+        'sdpte_ck_04.dbf' SIZE 8M AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = F.FILE_COUNT
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.HAS_NEW_FILE = 1
+               THEN 1 ELSE 0
+           END AS PASS_FILE_DDL_ACCEPTED_AFTER_ABORT
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.NAME LIKE '%sdpte_ck_04.dbf'
+                              AND D.CURRSIZE = 1024 THEN 1 ELSE 0 END) AS HAS_NEW_FILE
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_CK_TS' ) F
+     WHERE T.NAME = 'SDPTE_CK_TS';
+PASS_FILE_DDL_ACCEPTED_AFTER_ABORT 
+-------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_CK_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_CK_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CK_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+

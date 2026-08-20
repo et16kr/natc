@@ -1,0 +1,220 @@
+###########################################################################
+# TestCase Description = Keep two users spilling into their own TEMP tablespaces at the same time.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = each session resolves its own runtime owner from its own binding, so two
+#                        live TEMP spaces grow and release independently and neither borrows the
+#                        other's extents.
+# Product Reference    = src/sm/sdp/sdpte/sdpteModule.cpp per-space runtime owner
+#                        src/sm/sdp/sdpte/sdpteExtentFacade.cpp per-space reservation
+# Regression Focus     = the existing concurrency cases all run one user against one TEMP space, so
+#                        a cross-space owner mixup would not show up there.
+# ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/runtime/concurrency/parallelAutoextend.tc
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_MI_U1 CASCADE;
+    DROP USER SDPTE_MI_U2 CASCADE;
+    DROP TABLESPACE SDPTE_MI_TS1 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_MI_TS2 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_MI_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_MI_DATA
+        DATAFILE 'sdpte_mi_data.dbf' SIZE 32M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+
+    # Two independently sized TEMP spaces so a mixup changes the wrong file.
+    # Both keep EXTENTSIZE 512K: the work-area manager asserts on any extent
+    # other than SDT_WAEXTENT_PAGECOUNT (64 pages), so a differently sized
+    # extent would abort the server rather than test isolation. The spaces are
+    # distinguished by their initial and growth sizes instead.
+    CREATE TEMPORARY TABLESPACE SDPTE_MI_TS1
+        TEMPFILE 'sdpte_mi_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_MI_TS2
+        TEMPFILE 'sdpte_mi_02.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 4M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_MI_U1 IDENTIFIED BY SDPTE_MI_U1
+        DEFAULT TABLESPACE SDPTE_MI_DATA
+        TEMPORARY TABLESPACE SDPTE_MI_TS1;
+
+    CREATE USER SDPTE_MI_U2 IDENTIFIED BY SDPTE_MI_U2
+        DEFAULT TABLESPACE SDPTE_MI_DATA
+        TEMPORARY TABLESPACE SDPTE_MI_TS2;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+    ALTER SYSTEM SET SORT_AREA_SIZE = 524288;
+
+    CONNECT SDPTE_MI_U1/SDPTE_MI_U1;
+
+    CREATE TABLE SDPTE_MI_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_MI_DATA;
+
+    CREATE TABLE SDPTE_MI_RESULT ( WORKER_ID INTEGER, PASS_VALUE INTEGER )
+        TABLESPACE SDPTE_MI_DATA;
+
+    INSERT INTO SDPTE_MI_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('I', 1790, 'I')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+
+    COMMIT;
+
+    GRANT SELECT ON SDPTE_MI_SOURCE TO SDPTE_MI_U2;
+    GRANT INSERT ON SDPTE_MI_RESULT TO SDPTE_MI_U2;
+
+##################################
+SECTOR; BOTH SPACES ARE IDLE BEFORE THE RUN
+##################################
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(T.ALLOCATED_PAGE_COUNT) = 0
+                AND SUM(CASE WHEN D.CURRSIZE = D.INITSIZE THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_SPACES_IDLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_MI_TS1', 'SDPTE_MI_TS2');
+
+##################################
+SECTOR; TWO USERS SPILL CONCURRENTLY INTO THEIR OWN SPACES
+##################################
+    NODISPLAY ON;
+    CALL runTwoUserSpills();
+    NODISPLAY OFF;
+
+    CONNECT SDPTE_MI_U1/SDPTE_MI_U1;
+
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(PASS_VALUE) = 2
+                AND COUNT(DISTINCT WORKER_ID) = 2
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_SPILLS_CORRECT
+      FROM SDPTE_MI_RESULT;
+
+##################################
+SECTOR; EACH SPACE GREW ON ITS OWN TERMS AND RELEASED
+##################################
+    CONNECT SYS/MANAGER;
+
+    SELECT T.NAME,
+           T.EXTENT_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT,
+           D.INITSIZE,
+           D.NEXTSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_MI_TS1', 'SDPTE_MI_TS2')
+     ORDER BY T.NAME;
+
+    # Both grew past their own initial size, both are quiesced, and each kept its
+    # own extent geometry. A shared owner would have collapsed one of these.
+    SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(T.ALLOCATED_PAGE_COUNT) = 0
+                AND SUM(CASE WHEN D.CURRSIZE > D.INITSIZE THEN 1 ELSE 0 END) = 2
+                AND SUM(CASE WHEN T.NAME = 'SDPTE_MI_TS1'
+                              AND T.EXTENT_PAGE_COUNT = 64
+                              AND D.INITSIZE = 128
+                              AND D.NEXTSIZE = 128 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN T.NAME = 'SDPTE_MI_TS2'
+                              AND T.EXTENT_PAGE_COUNT = 64
+                              AND D.INITSIZE = 512
+                              AND D.NEXTSIZE = 512 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN T.TOTAL_PAGE_COUNT = D.CURRSIZE THEN 1 ELSE 0 END) = 2
+               THEN 1 ELSE 0
+           END AS PASS_SPACES_STAYED_INDEPENDENT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME IN ('SDPTE_MI_TS1', 'SDPTE_MI_TS2');
+
+##################################
+SECTOR; RETIRING ONE SPACE LEAVES THE OTHER WORKING
+##################################
+    ALTER USER SDPTE_MI_U2 TEMPORARY TABLESPACE SYS_TBS_DISK_TEMP;
+
+    DROP TABLESPACE SDPTE_MI_TS2 INCLUDING CONTENTS AND DATAFILES;
+
+    CONNECT SDPTE_MI_U1/SDPTE_MI_U1;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SURVIVING_SPACE_STILL_SPILLS
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_MI_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.DATAFILE_COUNT = 1
+                AND T.EXTENT_PAGE_COUNT = 64
+               THEN 1 ELSE 0
+           END AS PASS_SURVIVOR_UNAFFECTED
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTE_MI_TS1';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+    ALTER SYSTEM SET SORT_AREA_SIZE = 1048576;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_MI_U1 CASCADE;
+    DROP USER SDPTE_MI_U2 CASCADE;
+    DROP TABLESPACE SDPTE_MI_TS1 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_MI_TS2 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_MI_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}
+
+DEF runTwoUserSpills()
+{
+    $sPrompt = "$$EOF$$";
+    $sClient1 = "${ALTIBASE_HOME}/bin/isql -s localhost -u SDPTE_MI_U1 -p SDPTE_MI_U1 -silent -noprompt -ataf";
+    $sClient2 = "${ALTIBASE_HOME}/bin/isql -s localhost -u SDPTE_MI_U2 -p SDPTE_MI_U2 -silent -noprompt -ataf";
+
+    EXEC SDPTE_MI_W1 -t 1800 $sClient1;
+    EXEC SDPTE_MI_W2 -t 1800 $sClient2;
+
+    # Two users, two bindings, two work areas, overlapping in time.
+    SEND SDPTE_MI_W1 "INSERT INTO SDPTE_MI_RESULT SELECT 1, CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END FROM (SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1 FROM SDPTE_MI_SOURCE);";
+    SEND SDPTE_MI_W2 "INSERT INTO SDPTE_MI_U1.SDPTE_MI_RESULT SELECT 2, CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END FROM (SELECT /*+ TEMP_TBS_DISK DISTINCT_SORT */ DISTINCT K1 FROM SDPTE_MI_U1.SDPTE_MI_SOURCE);";
+
+    P_WAIT SDPTE_MI_W1 $sPrompt;
+    P_WAIT SDPTE_MI_W2 $sPrompt;
+
+    SEND SDPTE_MI_W1 "COMMIT;";
+    SEND SDPTE_MI_W2 "COMMIT;";
+    P_WAIT SDPTE_MI_W1 $sPrompt;
+    P_WAIT SDPTE_MI_W2 $sPrompt;
+
+    SEND SDPTE_MI_W1 "QUIT";
+    SEND SDPTE_MI_W2 "QUIT";
+    P_WAIT SDPTE_MI_W1;
+    P_WAIT SDPTE_MI_W2;
+}

@@ -1,0 +1,217 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Make a refused spill succeed by adding a TEMP file to the tablespace.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = a work-area refusal must be recoverable by adding capacity, not only by
+$T0> #                        resizing the file that ran out. ADD TEMPFILE and DROP TEMPFILE must keep
+$T0> #                        working on a tablespace whose last spill was refused.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAddTempFile.cpp, sdpteDropTempFile.cpp
+$T0> #                        src/sm/sdp/sdpte/sdpteExtentFacade.cpp smERR_ABORT_NOT_ENOUGH_WORKAREA
+$T0> # Regression Origin     = Before the deferred rollback-image fix, ADD/DROP TEMPFILE failed after
+$T0> #                        this case's ERR-11184 refusal. Keep the case registered so the operator's
+$T0> #                        natural recovery path cannot regress silently.
+$T0> # Manual Reference      = ALTIBASE/Documents/Manuals/Altibase_7.1/eng/SQL Reference.md,
+$T0> #                        ALTER TABLESPACE (datafile_tempfile_clause).
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_XT_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_XT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_XT_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_xt_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_xt_03.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_XT_DATA
+        DATAFILE 'sdpte_xt_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_XT_TS
+        TEMPFILE 'sdpte_xt_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_XT_U IDENTIFIED BY SDPTE_XT_U
+        DEFAULT TABLESPACE SDPTE_XT_DATA
+        TEMPORARY TABLESPACE SDPTE_XT_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_XT_U/SDPTE_XT_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_XT_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_XT_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_XT_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('T', 1790, 'T')
+      FROM DUAL
+    CONNECT BY LEVEL <= 5000;
+5000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; ADD TEMPFILE WORKS BEFORE ANY REFUSAL
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ALTER TABLESPACE SDPTE_XT_TS ADD TEMPFILE
+        'sdpte_xt_02.dbf' SIZE 2M AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 2
+                AND TOTAL_PAGE_COUNT = 768
+               THEN 1 ELSE 0
+           END AS PASS_ADD_BEFORE_REFUSAL
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_XT_TS';
+PASS_ADD_BEFORE_REFUSAL 
+--------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; THE SPILL IS REFUSED AT THIS CAPACITY
+$T0> ##################################
+$T0> CONNECT SDPTE_XT_U/SDPTE_XT_U;
+Connect success.
+
+$T0> SELECT COUNT(*) AS REFUSED_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XT_SOURCE
+           ) D;
+[ERR-11184 : Insufficient free space in work area]
+
+$T0> ##################################
+$T0> SECTOR 4; ADD TEMPFILE MUST STILL WORK AFTER THE REFUSAL
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ALTER TABLESPACE SDPTE_XT_TS ADD TEMPFILE
+        'sdpte_xt_03.dbf' SIZE 32M AUTOEXTEND OFF;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 3
+                AND T.DATAFILE_COUNT = F.FILE_COUNT
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND F.HAS_NEW_FILE = 1
+               THEN 1 ELSE 0
+           END AS PASS_ADD_AFTER_REFUSAL
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT,
+                    SUM(CASE WHEN D.NAME LIKE '%sdpte_xt_03.dbf'
+                              AND D.CURRSIZE = 4096 THEN 1 ELSE 0 END) AS HAS_NEW_FILE
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_XT_TS' ) F
+     WHERE T.NAME = 'SDPTE_XT_TS';
+PASS_ADD_AFTER_REFUSAL 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; THE ADDED CAPACITY MAKES THE SAME SPILL SUCCEED
+$T0> ##################################
+$T0> CONNECT SDPTE_XT_U/SDPTE_XT_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 5000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_ADD_TEMPFILE
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XT_SOURCE
+           ) D;
+PASS_SPILL_AFTER_ADD_TEMPFILE 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; DROP TEMPFILE MUST ALSO STILL WORK
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ALTER TABLESPACE SDPTE_XT_TS DROP TEMPFILE 'sdpte_xt_02.dbf';
+Alter success.
+
+$T0> SELECT CASE
+               WHEN T.DATAFILE_COUNT = 2
+                AND T.DATAFILE_COUNT = F.FILE_COUNT
+                AND T.TOTAL_PAGE_COUNT = F.TOTAL_CURRENT
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_DROP_AFTER_REFUSAL
+      FROM V$TABLESPACES T,
+           ( SELECT COUNT(*) AS FILE_COUNT,
+                    SUM(D.CURRSIZE) AS TOTAL_CURRENT
+               FROM V$TABLESPACES T2, V$DATAFILES D
+              WHERE T2.ID = D.SPACEID
+                AND T2.NAME = 'SDPTE_XT_TS' ) F
+     WHERE T.NAME = 'SDPTE_XT_TS';
+PASS_DROP_AFTER_REFUSAL 
+--------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_XT_U/SDPTE_XT_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 5000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_DROP_TEMPFILE
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XT_SOURCE
+           ) D;
+PASS_SPILL_AFTER_DROP_TEMPFILE 
+---------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_XT_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_XT_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_XT_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_xt_02.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_xt_03.dbf";
+

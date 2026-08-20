@@ -1,0 +1,250 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Rebind a user to another TEMP tablespace and route its spills to the new one.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = the user-to-TEMP binding is catalog state, and a spill resolves its space
+$T0> #                        from that binding at session start rather than from a cached identity.
+$T0> # Product Reference    = src/qp/qdr/qdr.cpp validateAlter TEMPORARY TABLESPACE branch and the
+$T0> #                        DBA_USERS_.TEMP_TBS_ID update in executeAlter
+$T0> #                        src/qp/qcm/qcmTableSpace.cpp checkAccessTBS temp-TBS exemption
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> # View Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/General Reference-2.The Data Dictionary.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_UB_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_UB_TS1 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_UB_TS2 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_UB_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_UB_DATA
+        DATAFILE 'sdpte_ub_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_UB_TS1
+        TEMPFILE 'sdpte_ub_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_UB_TS2
+        TEMPFILE 'sdpte_ub_02.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_UB_U IDENTIFIED BY SDPTE_UB_U
+        DEFAULT TABLESPACE SDPTE_UB_DATA
+        TEMPORARY TABLESPACE SDPTE_UB_TS1;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_UB_U/SDPTE_UB_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_UB_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_UB_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_UB_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('B', 1790, 'B')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; THE CREATE-TIME BINDING ROUTES THE SPILL
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT U.USER_NAME, T.NAME AS TEMP_TBS
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UB_U';
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TEMP_TBS                                  
+--------------------------------------------
+SDPTE_UB_U                                                                                                                        
+SDPTE_UB_TS1                              
+1 row selected.
+
+$T0> CONNECT SDPTE_UB_U/SDPTE_UB_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_ON_TS1
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_UB_SOURCE
+           ) D;
+PASS_SPILL_ON_TS1 
+--------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Only the bound space grew. The sibling is still at its initial size.
+$T0> SELECT CASE
+               WHEN ( SELECT D.CURRSIZE FROM V$TABLESPACES T, V$DATAFILES D
+                       WHERE T.ID = D.SPACEID AND T.NAME = 'SDPTE_UB_TS1' ) > 128
+                AND ( SELECT D.CURRSIZE FROM V$TABLESPACES T, V$DATAFILES D
+                       WHERE T.ID = D.SPACEID AND T.NAME = 'SDPTE_UB_TS2' ) = 128
+               THEN 1 ELSE 0
+           END AS PASS_ONLY_TS1_GREW
+      FROM DUAL;
+PASS_ONLY_TS1_GREW 
+---------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; REBINDING MOVES THE CATALOG AND THE ROUTING
+$T0> ##################################
+$T0> ALTER USER SDPTE_UB_U TEMPORARY TABLESPACE SDPTE_UB_TS2;
+Alter success.
+
+$T0> SELECT U.USER_NAME, T.NAME AS TEMP_TBS
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UB_U';
+USER_NAME                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+TEMP_TBS                                  
+--------------------------------------------
+SDPTE_UB_U                                                                                                                        
+SDPTE_UB_TS2                              
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_CATALOG_REBOUND
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UB_U'
+       AND T.NAME = 'SDPTE_UB_TS2';
+PASS_CATALOG_REBOUND 
+-----------------------
+1           
+1 row selected.
+
+$T0> # A session started after the rebinding spills into the new space.
+$T0> CONNECT SDPTE_UB_U/SDPTE_UB_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_ON_TS2
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_UB_SOURCE
+           ) D;
+PASS_SPILL_ON_TS2 
+--------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN ( SELECT D.CURRSIZE FROM V$TABLESPACES T, V$DATAFILES D
+                       WHERE T.ID = D.SPACEID AND T.NAME = 'SDPTE_UB_TS2' ) > 128
+                AND ( SELECT T.ALLOCATED_PAGE_COUNT FROM V$TABLESPACES T
+                       WHERE T.NAME = 'SDPTE_UB_TS1' ) = 0
+                AND ( SELECT T.ALLOCATED_PAGE_COUNT FROM V$TABLESPACES T
+                       WHERE T.NAME = 'SDPTE_UB_TS2' ) = 0
+               THEN 1 ELSE 0
+           END AS PASS_ROUTING_FOLLOWED_REBINDING
+      FROM DUAL;
+PASS_ROUTING_FOLLOWED_REBINDING 
+----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; THE SYSTEM TEMP SPACE IS A VALID REBINDING TARGET
+$T0> ##################################
+$T0> ALTER USER SDPTE_UB_U TEMPORARY TABLESPACE SYS_TBS_DISK_TEMP;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_REBOUND_TO_SYSTEM_TEMP
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UB_U'
+       AND T.NAME = 'SYS_TBS_DISK_TEMP';
+PASS_REBOUND_TO_SYSTEM_TEMP 
+------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_UB_U/SDPTE_UB_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_ON_SYSTEM_TEMP
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_UB_SOURCE
+           ) D;
+PASS_SPILL_ON_SYSTEM_TEMP 
+----------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Neither user space is left holding runtime after the binding moved away.
+$T0> SELECT CASE
+               WHEN SUM(T.ALLOCATED_PAGE_COUNT) = 0
+                AND COUNT(*) = 2
+               THEN 1 ELSE 0
+           END AS PASS_USER_SPACES_QUIESCED
+      FROM V$TABLESPACES T
+     WHERE T.NAME IN ('SDPTE_UB_TS1', 'SDPTE_UB_TS2');
+PASS_USER_SPACES_QUIESCED 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_UB_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_UB_TS1 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_UB_TS2 INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_UB_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

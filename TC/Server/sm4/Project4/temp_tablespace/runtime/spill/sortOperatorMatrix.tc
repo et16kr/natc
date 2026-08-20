@@ -1,0 +1,207 @@
+###########################################################################
+# TestCase Description = Drive sort, merge-join and set-operation work areas into a user TEMP
+#                        tablespace, and keep disk index build out of it.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = the TEMP tablespace serves every work-area producer, not only the hash
+#                        distinct path that the rest of this suite exercises. Sort-shaped and
+#                        set-operation-shaped work areas allocate and release through the same
+#                        extent owner.
+# Product Reference    = src/sm/sdp/sdpte/sdpteExtentFacade.cpp reservation entry point
+#                        src/sm/smi/smiTempTable.cpp work-area lifecycle
+# Regression Focus     = 68 of the suite's 75 spill hints are DISTINCT_HASH. This case is the
+#                        counterweight: GROUP_SORT, USE_MERGE, UNION, MINUS, INTERSECT and a bare
+#                        ORDER BY each take a differently shaped work area.
+# Tuning Manual        = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_OM_U CASCADE;
+    DROP TABLESPACE SDPTE_OM_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_OM_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_OM_DATA
+        DATAFILE 'sdpte_om_data.dbf' SIZE 32M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_OM_TS
+        TEMPFILE 'sdpte_om_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 256M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_OM_U IDENTIFIED BY SDPTE_OM_U
+        DEFAULT TABLESPACE SDPTE_OM_DATA
+        TEMPORARY TABLESPACE SDPTE_OM_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+    ALTER SYSTEM SET SORT_AREA_SIZE = 524288;
+
+    CONNECT SDPTE_OM_U/SDPTE_OM_U;
+
+    CREATE TABLE SDPTE_OM_A ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_OM_DATA;
+
+    CREATE TABLE SDPTE_OM_B ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_OM_DATA;
+
+    INSERT INTO SDPTE_OM_A
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('A', 1790, 'A')
+      FROM DUAL
+    CONNECT BY LEVEL <= 20000;
+
+    INSERT INTO SDPTE_OM_B
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('A', 1790, 'A')
+      FROM DUAL
+    CONNECT BY LEVEL <= 20000;
+
+    COMMIT;
+
+##################################
+SECTOR; SORT SHAPED GROUP BY
+##################################
+    SELECT CASE
+               WHEN COUNT(*) = 1000
+                AND MIN(C) = 20
+                AND MAX(C) = 20
+               THEN 1 ELSE 0
+           END AS PASS_GROUP_SORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK GROUP_SORT */
+                   MOD(ID, 1000) AS G,
+                   COUNT(*) AS C
+              FROM SDPTE_OM_A
+             GROUP BY MOD(ID, 1000)
+           ) G;
+
+##################################
+SECTOR; MERGE JOIN SORTS BOTH INPUTS
+##################################
+    SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_MERGE_JOIN_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK ORDERED USE_MERGE(A, B) */
+                   A.K1 AS AK
+              FROM SDPTE_OM_A A,
+                   SDPTE_OM_B B
+             WHERE A.ID = B.ID
+           ) J;
+
+##################################
+SECTOR; SET OPERATIONS SORT AND DEDUPLICATE
+##################################
+    SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_UNION_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ K1 FROM SDPTE_OM_A
+            UNION
+            SELECT K1 FROM SDPTE_OM_B
+           ) U;
+
+    SELECT CASE WHEN COUNT(*) = 10000 THEN 1 ELSE 0 END AS PASS_MINUS_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ K1 FROM SDPTE_OM_A
+            MINUS
+            SELECT K1 FROM SDPTE_OM_B WHERE ID <= 10000
+           ) M;
+
+    SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_INTERSECT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ K1 FROM SDPTE_OM_A
+            INTERSECT
+            SELECT K1 FROM SDPTE_OM_B
+           ) I;
+
+##################################
+SECTOR; A BARE ORDER BY SORTS THROUGH THE SAME SPACE
+##################################
+    SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_ORDER_BY_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK */ ID, K1
+              FROM SDPTE_OM_A
+             ORDER BY K1 DESC
+           ) O;
+
+##################################
+SECTOR; EVERY SHAPE USED THE SPACE AND GAVE IT BACK
+##################################
+    CONNECT SYS/MANAGER;
+
+    SELECT D.INITSIZE,
+           D.CURRSIZE,
+           T.TOTAL_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+
+    # The exact settled size depends on the allocation policy, so only the
+    # direction and the release are asserted.
+    SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE > D.INITSIZE
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.AUTOEXTEND = 1
+               THEN 1 ELSE 0
+           END AS PASS_SORT_SHAPES_USED_AND_RELEASED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+
+##################################
+SECTOR; DISK INDEX BUILD DOES NOT CONSUME THE USER TEMP TABLESPACE
+##################################
+    # The index build sorts through SORT_AREA_SIZE and its own scratch, not
+    # through the user TEMP tablespace. Its size must not move.
+    SELECT D.CURRSIZE AS CURRSIZE_BEFORE_INDEX
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+
+    CONNECT SDPTE_OM_U/SDPTE_OM_U;
+
+    CREATE INDEX SDPTE_OM_A_IDX ON SDPTE_OM_A ( K1 );
+
+    SELECT CASE WHEN COUNT(*) = 20000 THEN 1 ELSE 0 END AS PASS_INDEX_BUILT
+      FROM SDPTE_OM_A
+     WHERE K1 IS NOT NULL;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+               THEN 1 ELSE 0
+           END AS PASS_INDEX_BUILD_LEFT_TEMP_QUIESCED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_OM_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+    ALTER SYSTEM SET SORT_AREA_SIZE = 1048576;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_OM_U CASCADE;
+    DROP TABLESPACE SDPTE_OM_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_OM_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

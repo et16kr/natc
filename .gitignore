@@ -1,0 +1,14 @@
+# Generated test output files
+*.out
+*.log
+
+# Runtime and generated work files
+/work/
+
+# Local NATC build products and ad-hoc root-suite overrides
+/TC/skip.ts
+/src/java/AtcLib.class
+/src/java/AtcLib.jar
+/src/ses/src/ses_conn.cpp
+/src/ses/src/ses_conn.d
+/src/ses/src/ses_conn.o

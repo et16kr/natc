@@ -7,6 +7,7 @@ rejectDuplicatePathInStatement.tc
 reject_drop_primary.tc
 rejectExistingFileWithoutReuse.tc
 rejectFileKindMismatch.tc
+rejectFileSizeBeyondLimit.tc
 rejectObjectPlacementInTemp.tc
 rejectSystemTempLifecycle.tc
 reject_tablespace_autoextend.tc

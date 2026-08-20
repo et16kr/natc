@@ -1,0 +1,173 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Refuse a second DISCARD of a TEMP tablespace that is already discarded.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = DISCARD is idempotent only in outcome, not in acceptance. A space that is
+$T0> #                        already discarded rejects a repeat command and stays in the same state, and
+$T0> #                        the rejection does not disturb a live sibling TEMP tablespace.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteHandler.cpp:1518 smERR_ABORT_TBS_ALREADY_DISCARDED
+$T0> #                        src/sm/sdp/sdpte/sdpteControlLane.cpp discard entry point
+$T0> # Oracle Note          = A CONTROL session runs inside an EXEC process, so its replies do not reach
+$T0> #                        this case's output. The repeated DISCARD is therefore verified through the
+$T0> #                        state it leaves behind and through the SERVICE-phase rejections below,
+$T0> #                        not through the CONTROL error text.
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_DD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_DD_LIVE INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DD_TS
+        TEMPFILE 'sdpte_dd_01.dbf' SIZE 8M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> # A sibling that must stay untouched by every command below.
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_DD_LIVE
+        TEMPFILE 'sdpte_dd_live.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; THE SECOND DISCARD IS REJECTED
+$T0> ##################################
+
+
+$T0> SEND SDPTE_DD_CONTROL "ALTER TABLESPACE SDPTE_DD_TS DISCARD;";
+$T0> P_WAIT SDPTE_DD_CONTROL $sPrompt;
+
+$T0> # Already discarded. This must be refused, not silently accepted.
+$T0> SEND SDPTE_DD_CONTROL "ALTER TABLESPACE SDPTE_DD_TS DISCARD;";
+$T0> P_WAIT SDPTE_DD_CONTROL $sPrompt;
+
+$T0> # A third attempt behaves the same way.
+$T0> SEND SDPTE_DD_CONTROL "ALTER TABLESPACE SDPTE_DD_TS DISCARD;";
+$T0> P_WAIT SDPTE_DD_CONTROL $sPrompt;
+
+$T0> # A space that never existed is refused on its own terms. The live sibling
+$T0> # is deliberately never named here: the point of this case is that repeated
+$T0> # rejections on one space leave every other space alone.
+$T0> SEND SDPTE_DD_CONTROL "ALTER TABLESPACE SDPTE_DD_NO_SUCH_TS DISCARD;";
+$T0> P_WAIT SDPTE_DD_CONTROL $sPrompt;
+
+
+$T0> ##################################
+$T0> SECTOR 3; THE DISCARDED SPACE IS STILL DISCARDED AND ONLY DROPPABLE
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT NAME, STATE, DATAFILE_COUNT, TOTAL_PAGE_COUNT, ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES
+     WHERE NAME IN ('SDPTE_DD_TS', 'SDPTE_DD_LIVE')
+     ORDER BY NAME;
+NAME                                      STATE       DATAFILE_COUNT 
+-------------------------------------------------------------------------
+TOTAL_PAGE_COUNT     ALLOCATED_PAGE_COUNT 
+---------------------------------------------
+SDPTE_DD_LIVE                             2           1           
+512                  0                    
+SDPTE_DD_TS                               1024        1           
+1024                 0                    
+2 rows selected.
+
+$T0> # Repeated rejections left exactly one discarded space and one live one.
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(CASE WHEN NAME = 'SDPTE_DD_TS'
+                              AND ALLOCATED_PAGE_COUNT = 0 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN NAME = 'SDPTE_DD_LIVE'
+                              AND DATAFILE_COUNT = 1
+                              AND TOTAL_PAGE_COUNT = 512
+                              AND ALLOCATED_PAGE_COUNT = 0 THEN 1 ELSE 0 END) = 1
+               THEN 1 ELSE 0
+           END AS PASS_STATE_AFTER_REPEATED_DISCARD
+      FROM V$TABLESPACES
+     WHERE NAME IN ('SDPTE_DD_TS', 'SDPTE_DD_LIVE');
+PASS_STATE_AFTER_REPEATED_DISCARD 
+------------------------------------
+1           
+1 row selected.
+
+$T0> # A discarded space accepts nothing but DROP.
+$T0> ALTER TABLESPACE SDPTE_DD_TS
+        ALTER TEMPFILE 'sdpte_dd_01.dbf' SIZE 16M;
+[ERR-110FC : Unable to use a discarded tablespace. (NAME=SDPTE_DD_TS)]
+
+$T0> ALTER TABLESPACE SDPTE_DD_TS ADD TEMPFILE
+        'sdpte_dd_02.dbf' SIZE 4M AUTOEXTEND OFF;
+[ERR-110FC : Unable to use a discarded tablespace. (NAME=SDPTE_DD_TS)]
+
+$T0> SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END AS PASS_DISCARDED_ALTER_STILL_REJECTED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_DD_TS';
+PASS_DISCARDED_ALTER_STILL_REJECTED 
+--------------------------------------
+1           
+1 row selected.
+
+$T0> DROP TABLESPACE SDPTE_DD_TS;
+Drop success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_DISCARDED_SPACE_DROPPED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_DD_TS';
+PASS_DISCARDED_SPACE_DROPPED 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; THE LIVE SIBLING WAS NEVER TOUCHED
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_DD_LIVE
+        ALTER TEMPFILE 'sdpte_dd_live.dbf' SIZE 8M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 1024
+                AND T.TOTAL_PAGE_COUNT = 1024
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_LIVE_SIBLING_STILL_ALTERABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_DD_LIVE';
+PASS_LIVE_SIBLING_STILL_ALTERABLE 
+------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_DD_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_DD_LIVE INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_dd_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_dd_02.dbf";
+

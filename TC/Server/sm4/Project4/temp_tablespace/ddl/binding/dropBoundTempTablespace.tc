@@ -1,0 +1,179 @@
+###########################################################################
+# TestCase Description = Record what DROP TABLESPACE does to a user still bound to that TEMP space.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = DROP has no user-binding guard, so the binding is left dangling. This case
+#                        pins the observable consequences: the drop succeeds, the catalog keeps a
+#                        TEMP_TBS_ID that resolves to nothing, the user can still connect, a spill
+#                        is refused rather than faulting, and rebinding restores service.
+# Product Reference    = src/qp/qdb/qdbTableSpace.cpp drop path (no DBA_USERS_.TEMP_TBS_ID check)
+#                        src/sm/sdp/sdpte/sdpteHandler.cpp smERR_ABORT_NotFoundTableSpaceNode
+# Oracle Note          = The refused spill reports ERR-1102B with the retired tablespace ID in the
+#                        message. That ID is allocation-order dependent, so the statement runs under
+#                        SKIP and the contract is asserted through state instead of message text.
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_UD_U CASCADE;
+    DROP TABLESPACE SDPTE_UD_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_UD_TS2 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_UD_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_UD_DATA
+        DATAFILE 'sdpte_ud_data.dbf' SIZE 8M
+            AUTOEXTEND ON NEXT 8M MAXSIZE 256M;
+
+    # Both spaces must be able to serve the spill below, so they autoextend.
+    # Work-area exhaustion is covered by runtime/exhaust, not here.
+    CREATE TEMPORARY TABLESPACE SDPTE_UD_TS
+        TEMPFILE 'sdpte_ud_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_UD_TS2
+        TEMPFILE 'sdpte_ud_02.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_UD_U IDENTIFIED BY SDPTE_UD_U
+        DEFAULT TABLESPACE SDPTE_UD_DATA
+        TEMPORARY TABLESPACE SDPTE_UD_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTE_UD_U/SDPTE_UD_U;
+
+    CREATE TABLE SDPTE_UD_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_UD_DATA;
+
+    INSERT INTO SDPTE_UD_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('D', 1790, 'D')
+      FROM DUAL
+    CONNECT BY LEVEL <= 5000;
+
+    COMMIT;
+
+    SELECT CASE WHEN COUNT(*) = 5000 THEN 1 ELSE 0 END AS PASS_SPILL_WHILE_BOUND
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_UD_SOURCE
+           ) D;
+
+##################################
+SECTOR; DROP OF A BOUND TEMP TABLESPACE IS NOT GUARDED
+##################################
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_BOUND_BEFORE_DROP
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UD_U'
+       AND T.NAME = 'SDPTE_UD_TS';
+
+    DROP TABLESPACE SDPTE_UD_TS INCLUDING CONTENTS AND DATAFILES;
+
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_DEFINITION_GONE
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_UD_TS';
+
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdpte_ud_01.dbf" )
+    {
+        PRINT "FAIL_FILE_UNLINKED";
+    }
+    ELSE
+    {
+        PRINT "PASS_FILE_UNLINKED";
+    }
+
+    # The user keeps a TEMP_TBS_ID that no longer resolves to any tablespace.
+    SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_BINDING_LEFT_DANGLING
+      FROM SYSTEM_.SYS_USERS_ U
+     WHERE U.USER_NAME = 'SDPTE_UD_U'
+       AND U.TEMP_TBS_ID NOT IN ( SELECT T.ID FROM V$TABLESPACES T );
+
+##################################
+SECTOR; A DANGLING BINDING REFUSES THE SPILL WITHOUT FAULTING
+##################################
+    CONNECT SDPTE_UD_U/SDPTE_UD_U;
+
+    # Connecting and running non-spilling work is unaffected.
+    SELECT CASE WHEN COUNT(*) = 5000 THEN 1 ELSE 0 END AS PASS_PLAIN_QUERY_STILL_WORKS
+      FROM SDPTE_UD_SOURCE;
+
+    # ERR-1102B carries the retired tablespace ID, which is not stable across runs.
+    SKIP BEGIN;
+    SELECT COUNT(*) AS DANGLING_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_UD_SOURCE
+           ) D;
+    SKIP END;
+
+    SELECT 'SESSION_ALIVE' AS PASS_SESSION_SURVIVES_DANGLING_SPILL FROM DUAL;
+
+##################################
+SECTOR; REBINDING RESTORES SERVICE WITHOUT A RESTART
+##################################
+    CONNECT SYS/MANAGER;
+
+    ALTER USER SDPTE_UD_U TEMPORARY TABLESPACE SDPTE_UD_TS2;
+
+    SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_REBOUND_TO_LIVE_SPACE
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UD_U'
+       AND T.NAME = 'SDPTE_UD_TS2';
+
+    CONNECT SDPTE_UD_U/SDPTE_UD_U;
+
+    SELECT CASE WHEN COUNT(*) = 5000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_REBINDING
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_UD_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.DATAFILE_COUNT = 1
+               THEN 1 ELSE 0
+           END AS PASS_NEW_SPACE_QUIESCED
+      FROM V$TABLESPACES T
+     WHERE T.NAME = 'SDPTE_UD_TS2';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_UD_U CASCADE;
+    DROP TABLESPACE SDPTE_UD_TS2 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_UD_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ud_01.dbf";
+}

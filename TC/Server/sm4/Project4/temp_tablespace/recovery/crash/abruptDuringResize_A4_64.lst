@@ -1,0 +1,197 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Abort the server around a TEMP file resize and reconcile to one consistent
+$T0> #                        size after restart.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = a definition resize is all-or-nothing across an abrupt stop. After restart
+$T0> #                        the committed definition and the physical file must agree on exactly one of
+$T0> #                        the two sizes, never on a value in between, and the space must still serve
+$T0> #                        a spill.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, sdpteAlterSizeLane.cpp
+$T0> #                        src/sm/sdp/sdpte/sdpteReconcile.cpp post-recovery size reconciliation
+$T0> #                        src/sm/smi/smiMain.cpp sdpteBoot::reconcileAfterRecovery
+$T0> # Oracle Note          = Whether the kill lands before or after the resize commits is not
+$T0> #                        controllable, so the case asserts the invariant that holds either way:
+$T0> #                        CURRSIZE is one of the two legal values and TOTAL_PAGE_COUNT matches it.
+$T0> #                        No timing-specific error string is asserted.
+$T0> # ATAF Runtime         = stdFunc.i stdServerKill/stdServerStart.
+$T0> # ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/recovery/crash/abruptRuntimeRestart.tc
+$T0> # Manual Reference     = ALTIBASE/Documents/Manuals/Altibase_7.1/eng/SQL Reference.md,
+$T0> #                        ALTER TABLESPACE (datafile_tempfile_clause).
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_CZ_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_CZ_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CZ_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_CZ_DATA
+        DATAFILE 'sdpte_cz_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_CZ_TS
+        TEMPFILE 'sdpte_cz_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_CZ_U IDENTIFIED BY SDPTE_CZ_U
+        DEFAULT TABLESPACE SDPTE_CZ_DATA
+        TEMPORARY TABLESPACE SDPTE_CZ_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_CZ_U/SDPTE_CZ_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_CZ_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_CZ_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_CZ_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('Z', 1790, 'Z')
+      FROM DUAL
+    CONNECT BY LEVEL <= 5000;
+5000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_PRE_ABORT_DEFINITION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+PASS_PRE_ABORT_DEFINITION 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; ABORT AROUND A GROW FROM 4M TO 128M
+$T0> ##################################
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # 512 pages is the pre-resize size and 16384 is the requested one. Any other
+$T0> # value means the definition and the file disagreed across the abort.
+$T0> SELECT CASE
+               WHEN D.CURRSIZE IN ( 512, 16384 )
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND T.DATAFILE_COUNT = 1
+                AND D.AUTOEXTEND = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESIZE_RECONCILED_TO_ONE_SIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+PASS_RESIZE_RECONCILED_TO_ONE_SIZE 
+-------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; THE SPACE STILL WORKS AND STILL ACCEPTS DEFINITION CHANGES
+$T0> ##################################
+$T0> CONNECT SDPTE_CZ_U/SDPTE_CZ_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 100 THEN 1 ELSE 0 END AS PASS_POST_ABORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_CZ_SOURCE
+             WHERE ID <= 100
+           ) D;
+PASS_POST_ABORT_SPILL 
+------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> ALTER TABLESPACE SDPTE_CZ_TS
+        ALTER TEMPFILE 'sdpte_cz_01.dbf' SIZE 32M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 4096
+                AND T.TOTAL_PAGE_COUNT = 4096
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESIZE_ACCEPTED_AFTER_ABORT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+PASS_RESIZE_ACCEPTED_AFTER_ABORT 
+-----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; THE RECONCILED SIZE SURVIVES AN ORDINARY RESTART
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 4096
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 4096
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_DURABLE_AFTER_CLEAN_RESTART
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+PASS_DURABLE_AFTER_CLEAN_RESTART 
+-----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_CZ_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_CZ_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_CZ_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

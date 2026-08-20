@@ -1,0 +1,133 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Refuse any non-TEMP tablespace as a user TEMPORARY TABLESPACE.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = only SMI_DISK_SYSTEM_TEMP and SMI_DISK_USER_TEMP are bindable; a refused
+$T0> #                        binding leaves the previous one intact.
+$T0> # Product Reference    = src/qp/qdr/qdr.cpp validateCreate/validateAlter ERR_INVALID_TEMP_TBS
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_UN_U CASCADE;
+$T0> DROP USER SDPTE_UN_BAD CASCADE;
+$T0> DROP TABLESPACE SDPTE_UN_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_UN_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_UN_DATA
+        DATAFILE 'sdpte_un_data.dbf' SIZE 4M AUTOEXTEND OFF;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_UN_TS
+        TEMPFILE 'sdpte_un_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_UN_U IDENTIFIED BY SDPTE_UN_U
+        DEFAULT TABLESPACE SDPTE_UN_DATA
+        TEMPORARY TABLESPACE SDPTE_UN_TS;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; CREATE USER REFUSES A NON-TEMP TARGET
+$T0> ##################################
+$T0> # A disk DATA tablespace is not a temporary tablespace.
+$T0> CREATE USER SDPTE_UN_BAD IDENTIFIED BY SDPTE_UN_BAD
+        DEFAULT TABLESPACE SDPTE_UN_DATA
+        TEMPORARY TABLESPACE SDPTE_UN_DATA;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> # Neither is a memory tablespace.
+$T0> CREATE USER SDPTE_UN_BAD IDENTIFIED BY SDPTE_UN_BAD
+        DEFAULT TABLESPACE SDPTE_UN_DATA
+        TEMPORARY TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> # The undo tablespace is not bindable either.
+$T0> CREATE USER SDPTE_UN_BAD IDENTIFIED BY SDPTE_UN_BAD
+        DEFAULT TABLESPACE SDPTE_UN_DATA
+        TEMPORARY TABLESPACE SYS_TBS_DISK_UNDO;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_NO_USER_CREATED
+      FROM SYSTEM_.SYS_USERS_
+     WHERE USER_NAME = 'SDPTE_UN_BAD';
+PASS_NO_USER_CREATED 
+-----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; ALTER USER REFUSES THE SAME TARGETS AND KEEPS THE OLD BINDING
+$T0> ##################################
+$T0> ALTER USER SDPTE_UN_U TEMPORARY TABLESPACE SDPTE_UN_DATA;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> ALTER USER SDPTE_UN_U TEMPORARY TABLESPACE SYS_TBS_MEM_DATA;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> ALTER USER SDPTE_UN_U TEMPORARY TABLESPACE SYS_TBS_MEM_DIC;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> ALTER USER SDPTE_UN_U TEMPORARY TABLESPACE SYS_TBS_DISK_DATA;
+[ERR-311E4 : Invalid temporary tablespace]
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_BINDING_UNCHANGED
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UN_U'
+       AND T.NAME = 'SDPTE_UN_TS';
+PASS_BINDING_UNCHANGED 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; A NAME THAT IS NOT A TABLESPACE IS REFUSED BEFORE THE TYPE CHECK
+$T0> ##################################
+$T0> ALTER USER SDPTE_UN_U TEMPORARY TABLESPACE SDPTE_UN_NO_SUCH_TS;
+[ERR-1102A : Tablespace node not found ( Name : SDPTE_UN_NO_SUCH_TS )]
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+               THEN 1 ELSE 0
+           END AS PASS_BINDING_STILL_UNCHANGED
+      FROM SYSTEM_.SYS_USERS_ U, V$TABLESPACES T
+     WHERE U.TEMP_TBS_ID = T.ID
+       AND U.USER_NAME = 'SDPTE_UN_U'
+       AND T.NAME = 'SDPTE_UN_TS';
+PASS_BINDING_STILL_UNCHANGED 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_UN_U CASCADE;
+$T0> DROP USER SDPTE_UN_BAD CASCADE;
+$T0> DROP TABLESPACE SDPTE_UN_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_UN_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

@@ -1,0 +1,132 @@
+###########################################################################
+# TestCase Description = Grow an AUTOEXTEND TEMP file to exactly its MAXSIZE and refuse the spill there.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = MAXSIZE is the hard runtime ceiling; the last successful grow stops at the
+#                        cap and the refusal does not push CURRSIZE past it.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAutoExtend.cpp cap evaluation
+#                        src/sm/sdp/sdpte/sdpteExtentFacade.cpp smERR_ABORT_NOT_ENOUGH_WORKAREA
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+# Tuning Manual        = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_XM_U CASCADE;
+    DROP TABLESPACE SDPTE_XM_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_XM_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_XM_DATA
+        DATAFILE 'sdpte_xm_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+
+    # 1M initial, 1M steps, hard cap at 4M. The query below needs far more.
+    CREATE TEMPORARY TABLESPACE SDPTE_XM_TS
+        TEMPFILE 'sdpte_xm_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 4M
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_XM_U IDENTIFIED BY SDPTE_XM_U
+        DEFAULT TABLESPACE SDPTE_XM_DATA
+        TEMPORARY TABLESPACE SDPTE_XM_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTE_XM_U/SDPTE_XM_U;
+
+    CREATE TABLE SDPTE_XM_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_XM_DATA;
+
+    INSERT INTO SDPTE_XM_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('M', 1790, 'M')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+
+    COMMIT;
+
+##################################
+SECTOR; AUTOEXTEND STOPS AT THE CAP AND THE SPILL IS REFUSED
+##################################
+    SELECT COUNT(*) AS CAPPED_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XM_SOURCE
+           ) D;
+
+    SELECT 'SESSION_ALIVE' AS PASS_SESSION_SURVIVES FROM DUAL;
+
+    CONNECT SYS/MANAGER;
+
+    # CURRSIZE settled on MAXSIZE exactly. INITSIZE is the recorded definition
+    # baseline and is not rewritten by the growth that preceded the refusal.
+    SELECT T.TOTAL_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT,
+           D.INITSIZE,
+           D.CURRSIZE,
+           D.AUTOEXTEND,
+           D.NEXTSIZE,
+           D.MAXSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XM_TS';
+
+    SELECT CASE
+               WHEN T.TOTAL_PAGE_COUNT = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.INITSIZE = 128
+                AND D.CURRSIZE = 512
+                AND D.CURRSIZE = D.MAXSIZE
+                AND D.AUTOEXTEND = 1
+               THEN 1 ELSE 0
+           END AS PASS_STOPPED_AT_MAXSIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XM_TS';
+
+##################################
+SECTOR; A SECOND ATTEMPT AT THE CAP BEHAVES THE SAME WAY
+##################################
+    CONNECT SDPTE_XM_U/SDPTE_XM_U;
+
+    SELECT COUNT(*) AS CAPPED_SPILL_AGAIN
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_XM_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.CURRSIZE = 512
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_CAP_IS_STABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_XM_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_XM_U CASCADE;
+    DROP TABLESPACE SDPTE_XM_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_XM_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

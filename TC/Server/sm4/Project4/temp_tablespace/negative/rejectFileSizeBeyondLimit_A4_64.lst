@@ -1,0 +1,158 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Refuse TEMP file sizes that exceed the OS or the maximum file size limit.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = the size guards run before any file is created or any definition is
+$T0> #                        published, on both the CREATE lane and the ALTER AUTOEXTEND lane.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteHandler.cpp
+$T0> #                          :563 smERR_ABORT_MaxSizeExceedOSLimit
+$T0> #                          :569 smERR_ABORT_InitSizeExceedOSLimit
+$T0> #                          :606 smERR_ABORT_MaxExceedMaxFileSize
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_FL_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_fl_bad.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_FL_TS
+        TEMPFILE 'sdpte_fl_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; CREATE REFUSES A MAXSIZE PAST THE OS FILE SIZE LIMIT
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_FL_BAD
+        TEMPFILE 'sdpte_fl_bad.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 64G
+        EXTENTSIZE 512K;
+[ERR-11154 : The MAXSIZE of the data file exceeds the OS file size limit. ( Request Max Size : 8388608 pages, OS file size limit : 4194303 pages )]
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_MAXSIZE_OS_LIMIT_REFUSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_FL_BAD';
+PASS_MAXSIZE_OS_LIMIT_REFUSED 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; CREATE REFUSES AN INITIAL SIZE PAST THE OS FILE SIZE LIMIT
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_FL_BAD
+        TEMPFILE 'sdpte_fl_bad.dbf' SIZE 64G AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+[ERR-11153 : The INITSIZE of the data file exceeds the OS file size limit. ( Request Init Size : 8388608 pages, OS file size limit : 4194303 pages )]
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_INITSIZE_OS_LIMIT_REFUSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_FL_BAD';
+PASS_INITSIZE_OS_LIMIT_REFUSED 
+---------------------------------
+1           
+1 row selected.
+
+$T0> # No refused statement left a file behind.
+$T0> PASS_NO_ORPHAN_FILE
+
+$T0> ##################################
+$T0> SECTOR 4; ADD TEMPFILE REFUSES THE SAME SIZES
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_FL_TS ADD TEMPFILE
+        'sdpte_fl_bad.dbf' SIZE 64G AUTOEXTEND OFF;
+[ERR-11153 : The INITSIZE of the data file exceeds the OS file size limit. ( Request Init Size : 8388608 pages, OS file size limit : 4194303 pages )]
+
+$T0> ALTER TABLESPACE SDPTE_FL_TS ADD TEMPFILE
+        'sdpte_fl_bad.dbf' SIZE 4M AUTOEXTEND ON NEXT 1M MAXSIZE 64G;
+[ERR-11154 : The MAXSIZE of the data file exceeds the OS file size limit. ( Request Max Size : 8388608 pages, OS file size limit : 4194303 pages )]
+
+$T0> SELECT CASE
+               WHEN DATAFILE_COUNT = 1
+                AND TOTAL_PAGE_COUNT = 512
+               THEN 1 ELSE 0
+           END AS PASS_FILESET_UNCHANGED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_FL_TS';
+PASS_FILESET_UNCHANGED 
+-------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; ALTER AUTOEXTEND REFUSES A MAXSIZE PAST THE MAXIMUM FILE SIZE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_FL_TS
+        ALTER TEMPFILE 'sdpte_fl_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 64G;
+[ERR-11022 : The MAXSIZE of the data file exceeds the maximum file size. ( Request Max Size : 8388608 pages, Maximum File Size : 4194304 pages )]
+
+$T0> # The refusal left the file at AUTOEXTEND OFF with no NEXTSIZE or MAXSIZE.
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+                AND D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_DEFINITION_UNCHANGED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_FL_TS';
+PASS_AUTOEXTEND_DEFINITION_UNCHANGED 
+---------------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; A LEGAL MAXSIZE STILL SUCCEEDS AFTERWARDS
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_FL_TS
+        ALTER TEMPFILE 'sdpte_fl_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 64M;
+Alter success.
+
+$T0> SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 8192
+               THEN 1 ELSE 0
+           END AS PASS_LEGAL_AUTOEXTEND_ACCEPTED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_FL_TS';
+PASS_LEGAL_AUTOEXTEND_ACCEPTED 
+---------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_FL_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_FL_BAD INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_fl_bad.dbf";
+

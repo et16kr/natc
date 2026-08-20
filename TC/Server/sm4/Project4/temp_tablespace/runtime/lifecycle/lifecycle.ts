@@ -1,7 +1,5 @@
-TestSuiteDescription = TEMP tablespace DDL cases
+TestSuiteDescription = TEMP tablespace runtime lifecycle cases
 ###############################################################################
-create/create.ts
-alter/alter.ts
-tempfile/tempfile.ts
-binding/binding.ts
+repeatedSpillReusesExtents.tc
+sessionExitReleasesRuntime.tc
 -------------------------------------------------------------------------------

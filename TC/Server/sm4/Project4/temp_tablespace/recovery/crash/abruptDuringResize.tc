@@ -1,0 +1,173 @@
+###########################################################################
+# TestCase Description = Abort the server around a TEMP file resize and reconcile to one consistent
+#                        size after restart.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = a definition resize is all-or-nothing across an abrupt stop. After restart
+#                        the committed definition and the physical file must agree on exactly one of
+#                        the two sizes, never on a value in between, and the space must still serve
+#                        a spill.
+# Product Reference    = src/sm/sdp/sdpte/sdpteAlterSize.cpp, sdpteAlterSizeLane.cpp
+#                        src/sm/sdp/sdpte/sdpteReconcile.cpp post-recovery size reconciliation
+#                        src/sm/smi/smiMain.cpp sdpteBoot::reconcileAfterRecovery
+# Oracle Note          = Whether the kill lands before or after the resize commits is not
+#                        controllable, so the case asserts the invariant that holds either way:
+#                        CURRSIZE is one of the two legal values and TOTAL_PAGE_COUNT matches it.
+#                        No timing-specific error string is asserted.
+# ATAF Runtime         = stdFunc.i stdServerKill/stdServerStart.
+# ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/recovery/crash/abruptRuntimeRestart.tc
+# Manual Reference     = ALTIBASE/Documents/Manuals/Altibase_7.1/eng/SQL Reference.md,
+#                        ALTER TABLESPACE (datafile_tempfile_clause).
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_CZ_U CASCADE;
+    DROP TABLESPACE SDPTE_CZ_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CZ_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_CZ_DATA
+        DATAFILE 'sdpte_cz_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_CZ_TS
+        TEMPFILE 'sdpte_cz_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    CREATE USER SDPTE_CZ_U IDENTIFIED BY SDPTE_CZ_U
+        DEFAULT TABLESPACE SDPTE_CZ_DATA
+        TEMPORARY TABLESPACE SDPTE_CZ_TS;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+
+    CONNECT SDPTE_CZ_U/SDPTE_CZ_U;
+
+    CREATE TABLE SDPTE_CZ_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_CZ_DATA;
+
+    INSERT INTO SDPTE_CZ_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('Z', 1790, 'Z')
+      FROM DUAL
+    CONNECT BY LEVEL <= 5000;
+
+    COMMIT;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_PRE_ABORT_DEFINITION
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+
+##################################
+SECTOR; ABORT AROUND A GROW FROM 4M TO 128M
+##################################
+    $sPrompt = "$$EOF$$";
+
+    NODISPLAY ON;
+    EXEC SDPTE_CZ_RESIZE -t 1800 $gStdIsql;
+    SEND SDPTE_CZ_RESIZE "ALTER TABLESPACE SDPTE_CZ_TS ALTER TEMPFILE 'sdpte_cz_01.dbf' SIZE 128M;";
+    # Scheduling aid only. The assertions below hold whether the resize
+    # committed before the abort or not.
+    sleep 1;
+    CALL stdServerKill();
+    P_WAIT SDPTE_CZ_RESIZE $sPrompt;
+    SEND SDPTE_CZ_RESIZE "quit";
+    P_WAIT SDPTE_CZ_RESIZE;
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    # 512 pages is the pre-resize size and 16384 is the requested one. Any other
+    # value means the definition and the file disagreed across the abort.
+    SELECT CASE
+               WHEN D.CURRSIZE IN ( 512, 16384 )
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND T.DATAFILE_COUNT = 1
+                AND D.AUTOEXTEND = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESIZE_RECONCILED_TO_ONE_SIZE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+
+##################################
+SECTOR; THE SPACE STILL WORKS AND STILL ACCEPTS DEFINITION CHANGES
+##################################
+    CONNECT SDPTE_CZ_U/SDPTE_CZ_U;
+
+    SELECT CASE WHEN COUNT(*) = 100 THEN 1 ELSE 0 END AS PASS_POST_ABORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_CZ_SOURCE
+             WHERE ID <= 100
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    ALTER TABLESPACE SDPTE_CZ_TS
+        ALTER TEMPFILE 'sdpte_cz_01.dbf' SIZE 32M;
+
+    SELECT CASE
+               WHEN D.CURRSIZE = 4096
+                AND T.TOTAL_PAGE_COUNT = 4096
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_RESIZE_ACCEPTED_AFTER_ABORT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+
+##################################
+SECTOR; THE RECONCILED SIZE SURVIVES AN ORDINARY RESTART
+##################################
+    NODISPLAY ON;
+    CALL stdServerStop();
+    CALL stdServerStart();
+    NODISPLAY OFF;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN D.CURRSIZE = 4096
+                AND D.OPENED = 0
+                AND T.TOTAL_PAGE_COUNT = 4096
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_DURABLE_AFTER_CLEAN_RESTART
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_CZ_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_CZ_U CASCADE;
+    DROP TABLESPACE SDPTE_CZ_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_CZ_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}

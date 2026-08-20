@@ -1,0 +1,148 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Refuse CONTROL CREATE DATAFILE when the target path already exists.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = the CONTROL recreate lane never adopts or overwrites an existing inode. A
+$T0> #                        refused recreate leaves the registered pathname unchanged, so a later
+$T0> #                        recreate onto a free path still succeeds and survives a restart.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteHandler.cpp:3606 smERR_ABORT_AlreadyExistFile on
+$T0> #                        SDPTE_CONTROL_LANE_TARGET_EXISTS
+$T0> #                        src/sm/sdp/sdpte/sdpteControlLane.cpp createDataFile
+$T0> # Oracle Note          = control/createDatafile.tc runs this rejection under NODISPLAY and asserts
+$T0> #                        only the aggregate outcome, so the error itself never reaches an oracle.
+$T0> #                        Here the CONTROL session output is visible, following
+$T0> #                        control/phaseBoundaryForTempCommands.tc.
+$T0> # Admin Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Administrator's Manual.md
+$T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md
+$T0> # ATAF Process Ref     = TC/Server/sm4/Bugs/BUG-35443/initialize.tc
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_TE_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_te_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_te_squatter.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_te_free.dbf";
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_TE_TS
+        TEMPFILE 'sdpte_te_01.dbf' SIZE 8M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+Create success.
+
+
+$T0> ##################################
+$T0> SECTOR 2; CONTROL RECREATE REFUSES EVERY OCCUPIED TARGET
+$T0> ##################################
+
+
+$T0> # An occupied AS target is refused even though the registered path is free.
+$T0> SEND SDPTE_TE_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_te_01.dbf' AS '${ALTIBASE_HOME}/dbs/sdpte_te_squatter.dbf';";
+$T0> P_WAIT SDPTE_TE_CONTROL $sPrompt;
+
+$T0> # The registered path is still free, so a plain recreate succeeds.
+$T0> SEND SDPTE_TE_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_te_01.dbf';";
+$T0> P_WAIT SDPTE_TE_CONTROL $sPrompt;
+
+$T0> # Now the registered path is occupied by the file just created, so a repeat
+$T0> # of the same command is refused.
+$T0> SEND SDPTE_TE_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_te_01.dbf';";
+$T0> P_WAIT SDPTE_TE_CONTROL $sPrompt;
+
+$T0> # A rename onto a free path still works after those refusals.
+$T0> SEND SDPTE_TE_CONTROL "ALTER DATABASE CREATE DATAFILE '${ALTIBASE_HOME}/dbs/sdpte_te_01.dbf' AS '${ALTIBASE_HOME}/dbs/sdpte_te_free.dbf';";
+$T0> P_WAIT SDPTE_TE_CONTROL $sPrompt;
+
+
+$T0> ##################################
+$T0> SECTOR 3; ONLY THE FREE PATH WAS ADOPTED
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_te_free.dbf'
+                              AND D.CURRSIZE = 1024
+                              AND D.AUTOEXTEND = 0 THEN 1 ELSE 0 END) = 1
+                AND MIN(T.TOTAL_PAGE_COUNT) = 1024
+                AND MIN(T.ALLOCATED_PAGE_COUNT) = 0
+               THEN 1 ELSE 0
+           END AS PASS_ONLY_FREE_PATH_ADOPTED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_TE_TS';
+PASS_ONLY_FREE_PATH_ADOPTED 
+------------------------------
+1           
+1 row selected.
+
+$T0> # The squatter was never adopted and was never unlinked.
+$T0> PASS_SQUATTER_UNTOUCHED
+
+$T0> SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_SQUATTER_NOT_REGISTERED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND D.NAME LIKE '%sdpte_te_squatter.dbf';
+PASS_SQUATTER_NOT_REGISTERED 
+-------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; THE ADOPTED PATH IS DURABLE AND THE SPACE IS USABLE
+$T0> ##################################
+$T0> ALTER TABLESPACE SDPTE_TE_TS
+        ALTER TEMPFILE 'sdpte_te_free.dbf' SIZE 16M;
+Alter success.
+
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN COUNT(*) = 1
+                AND SUM(CASE WHEN D.NAME LIKE '%sdpte_te_free.dbf'
+                              AND D.CURRSIZE = 2048 THEN 1 ELSE 0 END) = 1
+                AND MIN(T.TOTAL_PAGE_COUNT) = 2048
+                AND MIN(T.ALLOCATED_PAGE_COUNT) = 0
+               THEN 1 ELSE 0
+           END AS PASS_ADOPTED_PATH_DURABLE
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_TE_TS';
+PASS_ADOPTED_PATH_DURABLE 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> DROP TABLESPACE SDPTE_TE_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_te_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_te_squatter.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_te_free.dbf";
+

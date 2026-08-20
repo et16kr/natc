@@ -1,0 +1,212 @@
+###########################################################################
+# TestCase Description = Spill through the round EXTENTSIZE values a DBA is likely to choose.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = T-RUN-01, T-RUN-10, T-RUN-14, F-07. EXTENTSIZE is a documented CREATE
+#                        clause, so every value the catalog accepts must also be servable at
+#                        runtime, not only the one the work-area manager is compiled for.
+# Product Reference    = src/sm/include/sdtDef.h:83 SDT_WAEXTENT_PAGECOUNT is a compile-time 64
+#                        src/sm/sdt/sdtWAExtentMgr.cpp:880
+#                          IDE_ASSERT( sExtDesc.mLength == SDT_WAEXTENT_PAGECOUNT )
+#                        src/sm/sdp/sdpte/sdpteExtent.cpp extent geometry publication
+#
+# NOT REGISTERED        = This case is deliberately commented out of runtime/spill/spill.ts, the
+#                        same treatment as extent38Spill, extent67Spill and variableExtentSpill.
+#                        On the current server every non-64-page section below aborts the process
+#                        at sdtWAExtentMgr.cpp:880 rather than returning an error, so the case
+#                        cannot carry an oracle here. It is kept executable-ready for the internal
+#                        server where non-64-page runtime support is expected to land.
+#
+# WHY THIS IS SEPARATE  = extent38Spill (304K / 38 pages) and extent67Spill (536K / 67 pages) probe
+#                        deliberately odd geometries. This case probes the round values a DBA
+#                        actually types and that ddl/create/create_extent_256k.tc and
+#                        create_extent_1m.tc already prove the catalog accepts: 256K, 1M and 2M.
+#                        Those CREATE cases stop at the projection and never spill, so the gap
+#                        between "accepted at CREATE" and "servable at runtime" is only here.
+#
+# EXECUTION ORDER       = The 512K control runs first. If it fails, the fixture is wrong rather
+#                        than the extent support.
+# Tuning Manual         = /home/et16/work/manual/Manuals/Altibase_7.1/eng/Performance Tuning Guide.md
+# SQL Manual            = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_ES_U CASCADE;
+    DROP TABLESPACE SDPTE_ES_E32 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_E64 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_E128 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_E256 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE DISK TABLESPACE SDPTE_ES_DATA
+        DATAFILE 'sdpte_es_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_ES_E64
+        TEMPFILE 'sdpte_es_64.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_ES_E32
+        TEMPFILE 'sdpte_es_32.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 256K;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_ES_E128
+        TEMPFILE 'sdpte_es_128.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 1M;
+
+    CREATE TEMPORARY TABLESPACE SDPTE_ES_E256
+        TEMPFILE 'sdpte_es_256.dbf' SIZE 2M
+            AUTOEXTEND ON NEXT 2M MAXSIZE 128M
+        EXTENTSIZE 2M;
+
+    # The catalog accepts all four geometries before any of them is used.
+    SELECT NAME, EXTENT_PAGE_COUNT, TOTAL_PAGE_COUNT, ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES
+     WHERE NAME LIKE 'SDPTE_ES_E%'
+     ORDER BY NAME;
+
+    SELECT CASE
+               WHEN COUNT(*) = 4
+                AND SUM(CASE WHEN NAME = 'SDPTE_ES_E32'  AND EXTENT_PAGE_COUNT = 32  THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN NAME = 'SDPTE_ES_E64'  AND EXTENT_PAGE_COUNT = 64  THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN NAME = 'SDPTE_ES_E128' AND EXTENT_PAGE_COUNT = 128 THEN 1 ELSE 0 END) = 1
+                AND SUM(CASE WHEN NAME = 'SDPTE_ES_E256' AND EXTENT_PAGE_COUNT = 256 THEN 1 ELSE 0 END) = 1
+                AND SUM(ALLOCATED_PAGE_COUNT) = 0
+               THEN 1 ELSE 0
+           END AS PASS_ALL_GEOMETRIES_ACCEPTED
+      FROM V$TABLESPACES
+     WHERE NAME LIKE 'SDPTE_ES_E%';
+
+    CREATE USER SDPTE_ES_U IDENTIFIED BY SDPTE_ES_U
+        DEFAULT TABLESPACE SDPTE_ES_DATA
+        TEMPORARY TABLESPACE SDPTE_ES_E64;
+
+    ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+    ALTER SYSTEM SET SORT_AREA_SIZE = 524288;
+
+    CONNECT SDPTE_ES_U/SDPTE_ES_U;
+
+    CREATE TABLE SDPTE_ES_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_ES_DATA;
+
+    INSERT INTO SDPTE_ES_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('S', 1790, 'S')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+
+    COMMIT;
+
+##################################
+SECTOR; 64 PAGE EXTENT CONTROL
+##################################
+    CALL spillInto("SDPTE_ES_E64", 64);
+
+##################################
+SECTOR; 32 PAGE EXTENT
+##################################
+    CALL spillInto("SDPTE_ES_E32", 32);
+
+##################################
+SECTOR; 128 PAGE EXTENT
+##################################
+    CALL spillInto("SDPTE_ES_E128", 128);
+
+##################################
+SECTOR; 256 PAGE EXTENT
+##################################
+    CALL spillInto("SDPTE_ES_E256", 256);
+
+##################################
+SECTOR; EVERY GEOMETRY SERVED AND RELEASED
+##################################
+    CONNECT SYS/MANAGER;
+
+    SELECT NAME, EXTENT_PAGE_COUNT, ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES
+     WHERE NAME LIKE 'SDPTE_ES_E%'
+     ORDER BY NAME;
+
+    SELECT CASE
+               WHEN COUNT(*) = 4
+                AND SUM(T.ALLOCATED_PAGE_COUNT) = 0
+                AND SUM(CASE WHEN D.CURRSIZE > D.INITSIZE THEN 1 ELSE 0 END) = 4
+                AND SUM(CASE WHEN T.TOTAL_PAGE_COUNT = D.CURRSIZE THEN 1 ELSE 0 END) = 4
+               THEN 1 ELSE 0
+           END AS PASS_EVERY_GEOMETRY_SERVED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME LIKE 'SDPTE_ES_E%';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+    ALTER SYSTEM SET SORT_AREA_SIZE = 1048576;
+
+    SKIP BEGIN;
+    DROP USER SDPTE_ES_U CASCADE;
+    DROP TABLESPACE SDPTE_ES_E32 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_E64 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_E128 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_E256 INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_ES_DATA INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+}
+
+<#
+Rebind the user to one TEMP tablespace, spill into it from a fresh session, and
+assert the result, the published extent geometry and the release. The spill is a
+sort shape and a hash shape so a geometry that only breaks one of the two paths
+is still caught.
+#>
+DEF spillInto( @aTbsName, @aExtentPageCount )
+{
+    CONNECT SYS/MANAGER;
+
+    ALTER USER SDPTE_ES_U TEMPORARY TABLESPACE @{aTbsName};
+
+    CONNECT SDPTE_ES_U/SDPTE_ES_U;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_HASH_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_ES_SOURCE
+           ) D;
+
+    SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SORT_SPILL
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_SORT */ DISTINCT K1
+              FROM SDPTE_ES_SOURCE
+           ) D;
+
+    CONNECT SYS/MANAGER;
+
+    SELECT CASE
+               WHEN T.EXTENT_PAGE_COUNT = @{aExtentPageCount}
+                AND T.ALLOCATED_PAGE_COUNT = 0
+                AND D.CURRSIZE > D.INITSIZE
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND MOD( D.CURRSIZE - D.INITSIZE, T.EXTENT_PAGE_COUNT ) = 0
+               THEN 1 ELSE 0
+           END AS PASS_GEOMETRY_SERVED_AND_RELEASED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = '@{aTbsName}';
+}

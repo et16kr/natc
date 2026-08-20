@@ -1,0 +1,164 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Release the TEMP runtime when two concurrently spilling sessions exit.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = work-area ownership is session scoped. Session teardown returns every
+$T0> #                        extent that session held, and the freed capacity is immediately reusable
+$T0> #                        by the next session without a definition change.
+$T0> # Out Of Scope         = transaction discard on exit. The iSQL client commits on QUIT even under
+$T0> #                        AUTOCOMMIT OFF, so a NATC worker cannot demonstrate an abandoned
+$T0> #                        transaction. Verified 2026-08-20. Extent release is asserted here; the
+$T0> #                        transaction path is not.
+$T0> # Product Reference    = src/sm/smi/smiTempTable.cpp work-area teardown
+$T0> #                        src/sm/sdp/sdpte/sdpteExtent.cpp free-extent return path
+$T0> # ATAF Process Ref     = TC/Server/sm4/Project4/temp_tablespace/runtime/concurrency/parallelAutoextend.tc
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_LX_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_LX_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_LX_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_LX_DATA
+        DATAFILE 'sdpte_lx_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_LX_TS
+        TEMPFILE 'sdpte_lx_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_LX_U IDENTIFIED BY SDPTE_LX_U
+        DEFAULT TABLESPACE SDPTE_LX_DATA
+        TEMPORARY TABLESPACE SDPTE_LX_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_LX_U/SDPTE_LX_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_LX_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_LX_DATA;
+Create success.
+
+$T0> CREATE TABLE SDPTE_LX_RESULT ( WORKER_ID INTEGER, PASS_VALUE INTEGER )
+        TABLESPACE SDPTE_LX_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_LX_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('E', 1790, 'E')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; TWO SESSIONS SPILL CONCURRENTLY AND THEN EXIT
+$T0> ##################################
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> # Both workers are gone, so nothing they allocated is still held while the
+$T0> # capacity their spills created is still published.
+$T0> SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.DATAFILE_COUNT = 1
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND D.CURRSIZE > D.INITSIZE
+                AND D.OPENED = 1
+               THEN 1 ELSE 0
+           END AS PASS_RUNTIME_RELEASED_ON_EXIT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_LX_TS';
+PASS_RUNTIME_RELEASED_ON_EXIT 
+--------------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SDPTE_LX_U/SDPTE_LX_U;
+Connect success.
+
+$T0> # Both workers really did complete a spill, so the release above is a release
+$T0> # of work that happened rather than of work that never started.
+$T0> SELECT CASE
+               WHEN COUNT(*) = 2
+                AND SUM(PASS_VALUE) = 2
+                AND COUNT(DISTINCT WORKER_ID) = 2
+               THEN 1 ELSE 0
+           END AS PASS_BOTH_WORKERS_SPILLED
+      FROM SDPTE_LX_RESULT;
+PASS_BOTH_WORKERS_SPILLED 
+----------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; THE FREED CAPACITY IS IMMEDIATELY REUSABLE
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_AFTER_EXIT
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LX_SOURCE
+           ) D;
+PASS_SPILL_AFTER_EXIT 
+------------------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT CASE
+               WHEN T.ALLOCATED_PAGE_COUNT = 0
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+               THEN 1 ELSE 0
+           END AS PASS_QUIESCED_AGAIN
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_LX_TS';
+PASS_QUIESCED_AGAIN 
+----------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_LX_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_LX_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_LX_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

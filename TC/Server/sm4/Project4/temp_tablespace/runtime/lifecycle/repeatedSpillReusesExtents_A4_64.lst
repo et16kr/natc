@@ -1,0 +1,222 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Keep a TEMP file at one working size across repeated identical spills.
+$T0> # Project ID           = workspace/simple_temp_tablespace
+$T0> # Design Coverage      = extents freed at statement end return to the space rather than being
+$T0> #                        abandoned, so the physical file converges instead of growing per statement.
+$T0> # Product Reference    = src/sm/sdp/sdpte/sdpteExtent.cpp free-extent return path
+$T0> #                        src/sm/sdp/sdpte/sdpteAutoExtend.cpp grow-only-when-short policy
+$T0> # Regression Focus     = a leak in the free-extent return path shows up here as CURRSIZE climbing
+$T0> #                        with each repetition while ALLOCATED_PAGE_COUNT still reads zero.
+$T0> # SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_LR_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_LR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_LR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> CREATE DISK TABLESPACE SDPTE_LR_DATA
+        DATAFILE 'sdpte_lr_data.dbf' SIZE 16M
+            AUTOEXTEND ON NEXT 16M MAXSIZE 512M;
+Create success.
+
+$T0> CREATE TEMPORARY TABLESPACE SDPTE_LR_TS
+        TEMPFILE 'sdpte_lr_01.dbf' SIZE 1M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 128M
+        EXTENTSIZE 512K;
+Create success.
+
+$T0> CREATE USER SDPTE_LR_U IDENTIFIED BY SDPTE_LR_U
+        DEFAULT TABLESPACE SDPTE_LR_DATA
+        TEMPORARY TABLESPACE SDPTE_LR_TS;
+Create success.
+
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 3145728;
+Alter success.
+
+$T0> CONNECT SDPTE_LR_U/SDPTE_LR_U;
+Connect success.
+
+$T0> CREATE TABLE SDPTE_LR_SOURCE ( ID INTEGER, K1 VARCHAR(2000) )
+        TABLESPACE SDPTE_LR_DATA;
+Create success.
+
+$T0> INSERT INTO SDPTE_LR_SOURCE
+    SELECT LEVEL,
+           'K' || LPAD(TO_CHAR(LEVEL), 8, '0') || RPAD('L', 1790, 'L')
+      FROM DUAL
+    CONNECT BY LEVEL <= 30000;
+30000 rows inserted.
+
+$T0> COMMIT;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; THE FIRST SPILL ESTABLISHES THE WORKING SIZE
+$T0> ##################################
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_01
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LR_SOURCE
+           ) D;
+PASS_SPILL_01 
+----------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_02
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LR_SOURCE
+           ) D;
+PASS_SPILL_02 
+----------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT D.INITSIZE,
+           D.CURRSIZE,
+           T.TOTAL_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_LR_TS';
+INITSIZE             CURRSIZE             TOTAL_PAGE_COUNT     
+-------------------------------------------------------------------
+ALLOCATED_PAGE_COUNT 
+-----------------------
+128                  7808                 7808                 
+0                    
+1 row selected.
+
+$T0> # 7808 pages is the size this work-area shape settles on. It is recorded here
+$T0> # so a later drift in the growth policy is visible rather than silent.
+$T0> SELECT CASE
+               WHEN D.INITSIZE = 128
+                AND D.CURRSIZE = 7808
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_WORKING_SIZE_ESTABLISHED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_LR_TS';
+PASS_WORKING_SIZE_ESTABLISHED 
+--------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; FOUR MORE IDENTICAL SPILLS DO NOT GROW THE FILE
+$T0> ##################################
+$T0> CONNECT SDPTE_LR_U/SDPTE_LR_U;
+Connect success.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_03
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LR_SOURCE
+           ) D;
+PASS_SPILL_03 
+----------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_04
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LR_SOURCE
+           ) D;
+PASS_SPILL_04 
+----------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_05
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LR_SOURCE
+           ) D;
+PASS_SPILL_05 
+----------------
+1           
+1 row selected.
+
+$T0> SELECT CASE WHEN COUNT(*) = 30000 THEN 1 ELSE 0 END AS PASS_SPILL_06
+      FROM (
+            SELECT /*+ TEMP_TBS_DISK DISTINCT_HASH */ DISTINCT K1
+              FROM SDPTE_LR_SOURCE
+           ) D;
+PASS_SPILL_06 
+----------------
+1           
+1 row selected.
+
+$T0> CONNECT SYS/MANAGER;
+Connect success.
+
+$T0> SELECT D.INITSIZE,
+           D.CURRSIZE,
+           T.TOTAL_PAGE_COUNT,
+           T.ALLOCATED_PAGE_COUNT
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_LR_TS';
+INITSIZE             CURRSIZE             TOTAL_PAGE_COUNT     
+-------------------------------------------------------------------
+ALLOCATED_PAGE_COUNT 
+-----------------------
+128                  7808                 7808                 
+0                    
+1 row selected.
+
+$T0> SELECT CASE
+               WHEN D.CURRSIZE = 7808
+                AND T.TOTAL_PAGE_COUNT = D.CURRSIZE
+                AND T.ALLOCATED_PAGE_COUNT = 0
+               THEN 1 ELSE 0
+           END AS PASS_SIZE_STABLE_ACROSS_REPEATS
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_LR_TS';
+PASS_SIZE_STABLE_ACROSS_REPEATS 
+----------------------------------
+1           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; FINALIZATION
+$T0> ##################################
+$T0> ALTER SYSTEM SET HASH_AREA_SIZE = 4194304;
+Alter success.
+
+$T0> SKIP BEGIN;
+$T0> DROP USER SDPTE_LR_U CASCADE;
+$T0> DROP TABLESPACE SDPTE_LR_TS INCLUDING CONTENTS AND DATAFILES;
+$T0> DROP TABLESPACE SDPTE_LR_DATA INCLUDING CONTENTS AND DATAFILES;
+$T0> SKIP END;
+

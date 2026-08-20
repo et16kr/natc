@@ -1,7 +1,6 @@
-TestSuiteDescription = TEMP tablespace DDL cases
+TestSuiteDescription = TEMP tablespace user binding cases
 ###############################################################################
-create/create.ts
-alter/alter.ts
-tempfile/tempfile.ts
-binding/binding.ts
+alterUserTempTablespace.tc
+rejectNonTempAsTempTablespace.tc
+dropBoundTempTablespace.tc
 -------------------------------------------------------------------------------

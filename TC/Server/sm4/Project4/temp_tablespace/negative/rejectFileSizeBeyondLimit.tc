@@ -1,0 +1,132 @@
+###########################################################################
+# TestCase Description = Refuse TEMP file sizes that exceed the OS or the maximum file size limit.
+# Project ID           = workspace/simple_temp_tablespace
+# Design Coverage      = the size guards run before any file is created or any definition is
+#                        published, on both the CREATE lane and the ALTER AUTOEXTEND lane.
+# Product Reference    = src/sm/sdp/sdpte/sdpteHandler.cpp
+#                          :563 smERR_ABORT_MaxSizeExceedOSLimit
+#                          :569 smERR_ABORT_InitSizeExceedOSLimit
+#                          :606 smERR_ABORT_MaxExceedMaxFileSize
+# SQL Manual           = /home/et16/work/manual/Manuals/Altibase_7.1/eng/SQL Reference.md
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    CONNECT SYS/MANAGER;
+
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_FL_TS INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fl_bad.dbf";
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_FL_TS
+        TEMPFILE 'sdpte_fl_01.dbf' SIZE 4M AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+##################################
+SECTOR; CREATE REFUSES A MAXSIZE PAST THE OS FILE SIZE LIMIT
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_FL_BAD
+        TEMPFILE 'sdpte_fl_bad.dbf' SIZE 4M
+            AUTOEXTEND ON NEXT 1M MAXSIZE 64G
+        EXTENTSIZE 512K;
+
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_MAXSIZE_OS_LIMIT_REFUSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_FL_BAD';
+
+##################################
+SECTOR; CREATE REFUSES AN INITIAL SIZE PAST THE OS FILE SIZE LIMIT
+##################################
+    CREATE TEMPORARY TABLESPACE SDPTE_FL_BAD
+        TEMPFILE 'sdpte_fl_bad.dbf' SIZE 64G AUTOEXTEND OFF
+        EXTENTSIZE 512K;
+
+    SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END AS PASS_INITSIZE_OS_LIMIT_REFUSED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_FL_BAD';
+
+    # No refused statement left a file behind.
+    IF ( FEXIST "${ALTIBASE_HOME}/dbs/sdpte_fl_bad.dbf" )
+    {
+        PRINT "FAIL_NO_ORPHAN_FILE";
+    }
+    ELSE
+    {
+        PRINT "PASS_NO_ORPHAN_FILE";
+    }
+
+##################################
+SECTOR; ADD TEMPFILE REFUSES THE SAME SIZES
+##################################
+    ALTER TABLESPACE SDPTE_FL_TS ADD TEMPFILE
+        'sdpte_fl_bad.dbf' SIZE 64G AUTOEXTEND OFF;
+
+    ALTER TABLESPACE SDPTE_FL_TS ADD TEMPFILE
+        'sdpte_fl_bad.dbf' SIZE 4M AUTOEXTEND ON NEXT 1M MAXSIZE 64G;
+
+    SELECT CASE
+               WHEN DATAFILE_COUNT = 1
+                AND TOTAL_PAGE_COUNT = 512
+               THEN 1 ELSE 0
+           END AS PASS_FILESET_UNCHANGED
+      FROM V$TABLESPACES
+     WHERE NAME = 'SDPTE_FL_TS';
+
+##################################
+SECTOR; ALTER AUTOEXTEND REFUSES A MAXSIZE PAST THE MAXIMUM FILE SIZE
+##################################
+    ALTER TABLESPACE SDPTE_FL_TS
+        ALTER TEMPFILE 'sdpte_fl_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 64G;
+
+    # The refusal left the file at AUTOEXTEND OFF with no NEXTSIZE or MAXSIZE.
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 0
+                AND D.NEXTSIZE = 0
+                AND D.MAXSIZE = 0
+                AND D.INITSIZE = 512
+                AND D.CURRSIZE = 512
+               THEN 1 ELSE 0
+           END AS PASS_AUTOEXTEND_DEFINITION_UNCHANGED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_FL_TS';
+
+##################################
+SECTOR; A LEGAL MAXSIZE STILL SUCCEEDS AFTERWARDS
+##################################
+    ALTER TABLESPACE SDPTE_FL_TS
+        ALTER TEMPFILE 'sdpte_fl_01.dbf'
+            AUTOEXTEND ON NEXT 1M MAXSIZE 64M;
+
+    SELECT CASE
+               WHEN D.AUTOEXTEND = 1
+                AND D.NEXTSIZE = 128
+                AND D.MAXSIZE = 8192
+               THEN 1 ELSE 0
+           END AS PASS_LEGAL_AUTOEXTEND_ACCEPTED
+      FROM V$TABLESPACES T,
+           V$DATAFILES D
+     WHERE T.ID = D.SPACEID
+       AND T.NAME = 'SDPTE_FL_TS';
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    DROP TABLESPACE SDPTE_FL_TS INCLUDING CONTENTS AND DATAFILES;
+    DROP TABLESPACE SDPTE_FL_BAD INCLUDING CONTENTS AND DATAFILES;
+    SKIP END;
+
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_fl_bad.dbf";
+}
