@@ -1,0 +1,305 @@
+###########################################################################
+# TestCase Description = 두 세션이 겹칠 때의 글로벌 인덱스 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 §0.7 의 Z5
+#                        "동시성 -- 파티션 간 유니크는 글로벌 인덱스의 존재
+#                        이유인데 경합을 안 잰다").
+#
+# ★★ 왜 이 축이 통째로 비어 있었나, 그리고 왜 이제 열렸나
+#
+#   메모리 판(`Memory/Transaction/isolation.tc`)이 이렇게 적어 두었다 --
+#   "다중 세션 동시성은 ATAF 계약상(THREAD / DECLARE CLIENT 가
+#   reference-gated) 이 파일에서 생성하지 않는다."  그 판단이 그때는 옳았다.
+#   그 뒤 복제 레인이 `THREAD`/`DECLARE CLIENT`/`JOIN` 을 실제로 쓰는 법을
+#   세웠고(`Replication/globalPkRowMovement.tc`), 이 케이스가 그 배선을
+#   **같은 서버의 두 세션**에 쓴다:
+#
+#       DECLARE SERVER DEFAULT DB1;
+#       DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+#       DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+#
+# ★★ 규칙 하나 -- **막히는 문장을 쓰지 않는다**
+#
+#   `JOIN;` 은 스레드 배리어다. 그러므로 한 스레드가 **기다리는** 문장을
+#   내면 배리어가 영영 안 풀린다. 실측했다: T1 이 커밋하지 않은 중복 키를
+#   쥔 채 T2 가 평범한 `INSERT` 로 같은 키를 넣으면 T2 가 기다리고, T1 은
+#   배리어에 걸려 커밋하지 못한다 -- **케이스가 통째로 멈춘다.** 스위트
+#   하나를 세우는 값보다 거는 값이 크다.
+#
+#   그래서 이 케이스는 **경계가 있는 두 가지만** 쓴다:
+#
+#       SELECT ... FOR UPDATE NOWAIT        기다리지 않고 ERR-11075
+#       DDL + DDL_LOCK_TIMEOUT = 1          1 초 뒤 ERR-11075
+#
+#   다음 사람에게: 여기에 절을 더할 때 그 문장이 기다릴 수 있는지 먼저
+#   물을 것. 기다릴 수 있으면 이 파일에 넣지 않는다.
+#
+# ★★ 무엇을 재는가
+#
+#   A  `FOR UPDATE` 가 글로벌 인덱스를 타고 **로우를 소유한 파티션에서**
+#      잠근다. 글로벌 커서는 논리 테이블 핸들로 열려 있어 그 커서로는 잠글
+#      수 없고, 잠금은 owner 커서로 넘어간다(`qmnSCAN::handoffRowToOwner`).
+#      두 세션으로 그것을 확인하는 방법은 하나뿐이다 -- 하나가 잡고, 다른
+#      하나가 **잡힌 것과 안 잡힌 것을 함께** 물어보는 것이다.
+#
+#   B  잠금이 **로우를 따라간다.** row movement 로 owner 가 바뀌어도
+#      그 키는 잠겨 있어야 하고, 같은 파티션의 **다른** 로우는 자유로워야
+#      한다 -- 잠금이 파티션이 아니라 로우에 걸린다는 뜻이다.
+#
+#   C  ★ **네이티브 글로벌 인덱스가 있으면 파티션 DDL 이 전 파티션의 X 를
+#      요구한다**(`qdbAlter::lockAllPartitionsForNativeGlobalIndex`).
+#      그래서 **아무 파티션에 걸린 로우 잠금 하나**가 **무관한 다른
+#      파티션의 DROP** 을 막는다.
+#
+#      ★ 대조군이 이 절의 무게다. 같은 모양의 테이블에 **로컬 인덱스만**
+#        두면 같은 DROP 이 **성공한다**. 실측으로 확인했고(2026-08-21) 그
+#        대조가 이 절의 주장을 글로벌 인덱스의 성질로 못박는다 -- 대조군이
+#        없으면 "파티션 DDL 은 원래 잠금을 기다린다" 로도 읽힌다.
+#
+# ★ 전사는 시간순이 아니다
+#   `.lst` 는 T0 에 제어 흐름만 담고 그다음 **스레드별로 묶여** 찍힌다.
+#   시간순 인터리브가 아니라서 결정적이다(복제 레인이 같은 성질에 기댄다).
+#   순서를 읽으려면 `JOIN;` 의 자리를 볼 것.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DECLARE SERVER DEFAULT DB1;
+DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+
+DEF MAIN()
+{
+##################################
+SECTOR; PREPARATION
+##################################
+    THREAD T1 C1
+    {
+        AUTOCOMMIT ON;
+        SKIP BEGIN;
+        drop table ngd_cnc;
+        drop table ngd_cnl;
+        SKIP END;
+
+        alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+        alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+        select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+
+        # ★ 경계. 이것 없이는 C 절의 DDL 이 영영 기다린다.
+        alter system set DDL_LOCK_TIMEOUT = 1;
+        select name, value1 from v$property where name = 'DDL_LOCK_TIMEOUT';
+
+        # 대상 -- 파티션 키를 담지 않은 유일 키. 글로벌이어야만 설 수 있다.
+        create table ngd_cnc( p integer, k integer, v varchar(16) )
+        partition by range( p )
+        (
+          partition p1 values less than ( 10 ),
+          partition p2 values less than ( 20 ),
+          partition p3 values less than ( 30 ),
+          partition pd values default
+        ) tablespace sys_tbs_disk_data;
+
+        create unique index ngd_cnc_g on ngd_cnc( k ) tablespace sys_tbs_disk_data;
+        alter table ngd_cnc enable row movement;
+
+        select decode( pi.partition_type, 101, 'NATIVE', 'OTHER' ) as impl
+          from system_.sys_part_indices_ pi, system_.sys_indices_ i
+         where pi.index_id = i.index_id and i.index_name = 'NGD_CNC_G';
+
+        insert into ngd_cnc values (  1, 101, 'A' );
+        insert into ngd_cnc values ( 11, 102, 'B' );
+        insert into ngd_cnc values ( 21, 103, 'C' );
+        insert into ngd_cnc values ( 35, 104, 'D' );
+        commit;
+
+        # ★ 대조군 -- 같은 모양인데 **로컬 인덱스만** 있다.
+        create table ngd_cnl( p integer, k integer, v varchar(16) )
+        partition by range( p )
+        (
+          partition p1 values less than ( 10 ),
+          partition p2 values less than ( 20 ),
+          partition p3 values less than ( 30 ),
+          partition pd values default
+        ) tablespace sys_tbs_disk_data;
+
+        create index ngd_cnl_l on ngd_cnl( p, k ) local;
+
+        select decode( pi.partition_type, 101, 'NATIVE', 'LOCAL-OR-OTHER' ) as impl
+          from system_.sys_part_indices_ pi, system_.sys_indices_ i
+         where pi.index_id = i.index_id and i.index_name = 'NGD_CNL_L';
+
+        insert into ngd_cnl values (  1, 101, 'A' );
+        insert into ngd_cnl values ( 11, 102, 'B' );
+        insert into ngd_cnl values ( 21, 103, 'C' );
+        insert into ngd_cnl values ( 35, 104, 'D' );
+        commit;
+    }
+    JOIN;
+
+##################################
+SECTOR; A -- FOR UPDATE 는 로우를 소유한 파티션에서 잠근다
+##################################
+    THREAD T1 C1
+    {
+        AUTOCOMMIT OFF;
+        # P1 의 로우 하나를 글로벌 인덱스로 찾아 잠근다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 101 for update;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT OFF;
+        # A1. ★ 잠긴 것은 기다리지 않고 거절되어야 한다.
+        #     NOWAIT 이 내는 코드는 ERR-11075 다 -- 문구가 "lock timeout"
+        #     이지만 기다린 시간은 0 이다. 그 코드를 여기 전사에 남겨 두는
+        #     것이 다음 사람이 C 절의 ERR-11075(진짜 1 초 대기)와 같은
+        #     코드임을 알아보는 근거다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 101 for update nowait;
+
+        # A2. 같은 트리의 **다른** 로우는 자유로워야 한다 -- 잠금이 논리
+        #     테이블이 아니라 로우에 걸렸다는 뜻이다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 102 for update nowait;
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 103 for update nowait;
+
+        # A3. 읽기는 막히지 않는다 (MVCC).
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc order by k;
+        rollback;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+    THREAD T1 C1
+    {
+        commit;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT OFF;
+        # A4. 놓아 준 뒤에는 잡을 수 있어야 한다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 101 for update nowait;
+        rollback;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+
+##################################
+SECTOR; B -- 잠금은 로우를 따라간다 (row movement × 경합)
+##################################
+    THREAD T1 C1
+    {
+        AUTOCOMMIT OFF;
+        # 101 을 P1 에서 PD 로 옮긴다. 아직 커밋하지 않는다.
+        update ngd_cnc set p = 35, v = 'MOVED' where k = 101;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT OFF;
+        # B1. ★ 옮겨진 키는 여전히 잠겨 있어야 한다 -- 새 owner 에서.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 101 for update nowait;
+
+        # B2. 옮겨 간 **그 파티션의 다른 로우**는 자유로워야 한다. 잠금이
+        #     파티션 단위였다면 여기서도 거절된다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 104 for update nowait;
+
+        # B3. 커밋 전이므로 읽기에는 옮기기 **전** 값이 보여야 한다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc order by k;
+        rollback;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+    THREAD T1 C1
+    {
+        rollback;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT OFF;
+        # B4. 되돌렸으므로 잠금도 풀리고 값도 돌아와야 한다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 101 for update nowait;
+        rollback;
+        AUTOCOMMIT ON;
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc order by k;
+    }
+    JOIN;
+
+##################################
+SECTOR; C -- ★ 파티션 DDL 은 전 파티션의 X 를 요구한다 (대조군 포함)
+##################################
+    THREAD T1 C1
+    {
+        AUTOCOMMIT OFF;
+        # **P2** 의 로우 하나를 잠근다.
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc
+         where k = 102 for update;
+
+        # 대조군 쪽에서도 **P2** 의 로우 하나를 잠근다.
+        select /*+ index(ngd_cnl, ngd_cnl_l) */ k, p, v from ngd_cnl
+         where p = 11 and k = 102 for update;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT ON;
+
+        # C1. ★ 판정 -- 잠긴 로우는 P2 에 있는데 **P3** 를 지우려 한다.
+        #     네이티브 글로벌 인덱스가 전 파티션 X 를 잡으므로 막혀야 한다.
+        alter table ngd_cnc drop partition p3;
+
+        # C2. ★ 대조군 -- 똑같은 모양에 로컬 인덱스만 있으면 **성공한다.**
+        #     이 한 줄이 C1 을 글로벌 인덱스의 성질로 못박는다.
+        alter table ngd_cnl drop partition p3;
+    }
+    JOIN;
+    THREAD T1 C1
+    {
+        rollback;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT ON;
+        # C3. 놓아 준 뒤에는 지울 수 있어야 한다.
+        alter table ngd_cnc drop partition p3;
+
+        # C4. 지운 뒤에도 트리가 온전한가.
+        select /*+ FULL SCAN(ngd_cnc) */ count(*) as total_heap from ngd_cnc;
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ count(k) as total_tree
+          from ngd_cnc where k is not null;
+        select /*+ index(ngd_cnc, ngd_cnc_g) */ k, p, v from ngd_cnc order by k;
+
+        # C5. 지운 뒤에도 파티션 간 유일성이 실제로 서는가.
+        insert into ngd_cnc values ( 35, 102, 'DUP' );
+        select /*+ FULL SCAN(ngd_cnc) */ count(*) as heap_after_dup from ngd_cnc;
+    }
+    JOIN;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    THREAD T1 C1
+    {
+        SKIP BEGIN;
+        ROLLBACK;
+        AUTOCOMMIT ON;
+        SKIP END;
+        alter system set DDL_LOCK_TIMEOUT = 0;
+        alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+        alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+        DROP TABLE NGD_CNC;
+        DROP TABLE NGD_CNL;
+    }
+    JOIN;
+}

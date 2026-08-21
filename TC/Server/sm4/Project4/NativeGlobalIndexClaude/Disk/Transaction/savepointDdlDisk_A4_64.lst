@@ -1,0 +1,525 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 세이브포인트를 가로지르는 DDL — 글로벌 인덱스 디스크 테이블.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+$T0> #                        커버리지 §0.6.2 의 "savepoint × DDL 조합 Disk 0").
+$T0> #                        모양은 `Memory/Unsupported/savepointDdlCombination.tc`
+$T0> #                        에서 왔고, DDL 의 종류를 늘렸다.
+$T0> #
+$T0> # ★★ 무엇이 계약인가
+$T0> #
+$T0> #   DDL 은 자기 앞의 트랜잭션을 **암묵적으로 커밋한다.** 그 커밋이
+$T0> #   세이브포인트를 함께 없애므로, DDL 뒤의 `ROLLBACK TO SAVEPOINT` 는
+$T0> #   ERR-11016 ("Savepoint not found") 이어야 한다. 메모리 판이 그 계약을
+$T0> #   기록하고 있고, 이 케이스는 **디스크에서도 같은가**를 묻는다.
+$T0> #
+$T0> #   ★ 왜 글로벌 인덱스가 있으면 따로 물어야 하는가
+$T0> #     글로벌 인덱스를 가진 테이블의 파티션 DDL 은 전 파티션을 X 로 잠그고
+$T0> #     (`qdbAlter::lockAllPartitionsForNativeGlobalIndex`) 글로벌 트리를
+$T0> #     **다시 세운다**. 즉 DDL 한 문장 안에서 논리 테이블의 트리 전체가
+$T0> #     교체된다. 그 교체가 암묵 커밋의 **어느 편에** 서는지가 이 케이스의
+$T0> #     물음이다 -- 잘못 서면 커밋된 트리와 커밋되지 않은 힙이 남는다.
+$T0> #
+$T0> #   그리고 디스크는 재구성 경로 자체가 다르다(`recreateTableForDisk` ·
+$T0> #   `recreateIndexForDisk`). **메모리 판이 초록이어도 디스크가 안전하다는
+$T0> #   뜻이 아니다.**
+$T0> #
+$T0> # ★★ 무엇을 재는가
+$T0> #
+$T0> #   DDL 종류마다 같은 물음 셋을 던진다:
+$T0> #
+$T0> #     ① `ROLLBACK TO SAVEPOINT` 가 ERR-11016 인가 (암묵 커밋이 일어났다)
+$T0> #     ② 그 뒤 `ROLLBACK` 이 **DDL 앞의 DML 을 되돌리지 못하는가**
+$T0> #        (이미 커밋됐으므로 되돌아가면 안 된다)
+$T0> #     ③ ★ 힙과 트리가 여전히 같은 수를 말하는가
+$T0> #
+$T0> #   ③ 이 이 케이스가 메모리 판에 더하는 것이다. 메모리 판은 카탈로그
+$T0> #   (인덱스 개수 · `$GIT_` 잔재)만 보고 **트리의 정합성은 보지 않는다.**
+$T0> #   글로벌 트리가 암묵 커밋의 틈에서 반쪽만 서면 카탈로그는 멀쩡하고
+$T0> #   숫자만 갈린다.
+$T0> #
+$T0> #   DDL 사다리:
+$T0> #     A  CREATE INDEX      (새 글로벌 트리를 세운다)
+$T0> #     B  DROP INDEX        (글로벌 트리를 걷는다)
+$T0> #     C  ALTER INDEX REBUILD (트리를 다시 세운다 -- 프로퍼티가 아니라
+$T0> #                            판별자를 따라간다)
+$T0> #     D  TRUNCATE PARTITION (멤버 하나를 비운다)
+$T0> #     E  ADD / DROP PARTITION (멤버 집합이 바뀐다 -- memberNo 가 움직인다)
+$T0> ###########################################################################
+
+$T0> #
+$T0> # ★ 이 케이스의 저울. 힙과 트리가 같은 수를 말하는가.
+$T0> #   암묵 커밋의 틈에서 트리가 반쪽만 서면 여기서 갈린다.
+$T0> #
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_SPD;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> create table ngd_spd ( p integer, k varchar(32), v integer )
+    partition by range ( p )
+    (
+      partition p1 values less than ( 10 ),
+      partition p2 values less than ( 20 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # 파티션 키(p)를 담지 않은 키 -> 글로벌이어야만 설 수 있다
+$T0> create index ngd_spd_ok on ngd_spd( k ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id and i.index_name = 'NGD_SPD_OK';
+IMPL    
+----------
+NATIVE  
+1 row selected.
+
+$T0> insert into ngd_spd values (  1, 'K-101', 201 );
+1 row inserted.
+$T0> insert into ngd_spd values ( 11, 'K-111', 211 );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> select index_name,
+           decode( index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_indices_
+     where user_id = user_id()
+       and index_name like 'NGD_SPD%'
+     order by index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+HIDDEN  
+----------
+NGD_SPD_OK                                                                                                                        
+NO-GIT  
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+2                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+2                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- CREATE INDEX 가 세이브포인트를 없앤다
+$T0> ##################################
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> insert into ngd_spd values ( 21, 'K-121', 221 );
+1 row inserted.
+$T0> savepoint ngd_spd_sp;
+Savepoint success.
+
+$T0> create index ngd_spd_try on ngd_spd( v ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # ① 암묵 커밋이 일어났으므로 세이브포인트가 없어야 한다.
+$T0> rollback to savepoint ngd_spd_sp;
+[ERR-11016 : Savepoint not found]
+
+$T0> # ② 되돌려도 DDL 앞의 DML 은 살아 있어야 한다 (이미 커밋됐다).
+$T0> rollback;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             201         
+11          K-111                             211         
+21          K-121                             221         
+3 rows selected.
+$T0> select index_name,
+           decode( index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_indices_
+     where user_id = user_id()
+       and index_name like 'NGD_SPD%'
+     order by index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+HIDDEN  
+----------
+NGD_SPD_OK                                                                                                                        
+NO-GIT  
+NGD_SPD_TRY                                                                                                                       
+NO-GIT  
+2 rows selected.
+
+$T0> # ③ 힙과 트리가 같은 수를 말하는가 -- 새 트리와 헌 트리 둘 다로.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_try) */ count(v) as try_tree
+      from ngd_spd where v is not null;
+TRY_TREE             
+-----------------------
+3                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- DROP INDEX 가 세이브포인트를 없앤다
+$T0> ##################################
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> insert into ngd_spd values ( 22, 'K-122', 222 );
+1 row inserted.
+$T0> savepoint ngd_spd_sp;
+Savepoint success.
+
+$T0> drop index ngd_spd_try;
+Drop success.
+
+$T0> rollback to savepoint ngd_spd_sp;
+[ERR-11016 : Savepoint not found]
+$T0> rollback;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             201         
+11          K-111                             211         
+21          K-121                             221         
+22          K-122                             222         
+4 rows selected.
+$T0> select index_name,
+           decode( index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_indices_
+     where user_id = user_id()
+       and index_name like 'NGD_SPD%'
+     order by index_name;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+HIDDEN  
+----------
+NGD_SPD_OK                                                                                                                        
+NO-GIT  
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- ALTER INDEX REBUILD 가 세이브포인트를 없앤다
+$T0> ##################################
+$T0> # 리빌드는 프로퍼티가 아니라 **판별자**를 따라간다. 트리를 통째로 다시
+$T0> # 세우므로 암묵 커밋의 편이 특히 중요하다.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> insert into ngd_spd values ( 23, 'K-123', 223 );
+1 row inserted.
+$T0> savepoint ngd_spd_sp;
+Savepoint success.
+
+$T0> alter index ngd_spd_ok rebuild;
+Alter success.
+
+$T0> rollback to savepoint ngd_spd_sp;
+[ERR-11016 : Savepoint not found]
+$T0> rollback;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             201         
+11          K-111                             211         
+21          K-121                             221         
+22          K-122                             222         
+23          K-123                             223         
+5 rows selected.
+
+$T0> # 리빌드 뒤에도 네이티브인가 -- 리빌드가 구현을 바꾸면 안 된다.
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl_after_rebuild
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id and i.index_name = 'NGD_SPD_OK';
+IMPL_AFTER_REBUILD  
+----------------------
+NATIVE  
+1 row selected.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd order by k;
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+11          K-111                             
+21          K-121                             
+22          K-122                             
+23          K-123                             
+5 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- TRUNCATE PARTITION 이 세이브포인트를 없앤다
+$T0> ##################################
+$T0> # 멤버 하나가 비워진다. 글로벌 트리에서 그 멤버의 키가 모두 걷혀야 한다.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> insert into ngd_spd values ( 24, 'K-124', 224 );
+1 row inserted.
+$T0> savepoint ngd_spd_sp;
+Savepoint success.
+
+$T0> alter table ngd_spd truncate partition p1;
+Alter success.
+
+$T0> rollback to savepoint ngd_spd_sp;
+[ERR-11016 : Savepoint not found]
+$T0> rollback;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+P           K                                 V           
+--------------------------------------------------------------
+11          K-111                             211         
+21          K-121                             221         
+22          K-122                             222         
+23          K-123                             223         
+24          K-124                             224         
+5 rows selected.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+5                    
+1 row selected.
+
+$T0> # ★ 비워진 파티션의 키가 트리에 유령으로 남지 않았는가.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(*) as ghost_k101
+      from ngd_spd where k = 'K-101';
+GHOST_K101           
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 그리고 같은 값을 다시 넣을 수 있어야 한다.
+$T0> insert into ngd_spd values ( 1, 'K-101', 201 );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd where k = 'K-101';
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+6                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+6                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- ADD / DROP PARTITION 이 세이브포인트를 없앤다
+$T0> ##################################
+$T0> # 멤버 집합이 바뀐다. 글로벌 트리의 키는 memberNo 로 소유 파티션을 가리키므로
+$T0> # 여기가 가장 많이 움직이는 자리다.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> insert into ngd_spd values ( 25, 'K-125', 225 );
+1 row inserted.
+$T0> savepoint ngd_spd_sp;
+Savepoint success.
+
+$T0> alter table ngd_spd split partition pd at ( 30 ) into
+        ( partition p3, partition pd );
+Alter success.
+
+$T0> rollback to savepoint ngd_spd_sp;
+[ERR-11016 : Savepoint not found]
+$T0> rollback;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             201         
+11          K-111                             211         
+21          K-121                             221         
+22          K-122                             222         
+23          K-123                             223         
+24          K-124                             224         
+25          K-125                             225         
+7 rows selected.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+7                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+7                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd order by k;
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+11          K-111                             
+21          K-121                             
+22          K-122                             
+23          K-123                             
+24          K-124                             
+25          K-125                             
+7 rows selected.
+
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> insert into ngd_spd values ( 5, 'K-105', 205 );
+1 row inserted.
+$T0> savepoint ngd_spd_sp;
+Savepoint success.
+
+$T0> alter table ngd_spd drop partition p2;
+Alter success.
+
+$T0> rollback to savepoint ngd_spd_sp;
+[ERR-11016 : Savepoint not found]
+$T0> rollback;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+P           K                                 V           
+--------------------------------------------------------------
+1           K-101                             201         
+5           K-105                             205         
+21          K-121                             221         
+22          K-122                             222         
+23          K-123                             223         
+24          K-124                             224         
+25          K-125                             225         
+7 rows selected.
+$T0> select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+TOTAL_HEAP           
+-----------------------
+7                    
+1 row selected.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+TOTAL_TREE           
+-----------------------
+7                    
+1 row selected.
+
+$T0> # ★ 걷힌 파티션의 키가 트리에 유령으로 남지 않았는가.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ count(*) as ghost_k111
+      from ngd_spd where k = 'K-111';
+GHOST_K111           
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 마지막으로 트리가 여전히 뜻을 갖는가 -- 파티션을 가로지르는 정렬.
+$T0> select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd order by k;
+P           K                                 
+-------------------------------------------------
+1           K-101                             
+5           K-105                             
+21          K-121                             
+22          K-122                             
+23          K-123                             
+24          K-124                             
+25          K-125                             
+7 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> SKIP END;
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> DROP TABLE NGD_SPD;
+Drop success.
+

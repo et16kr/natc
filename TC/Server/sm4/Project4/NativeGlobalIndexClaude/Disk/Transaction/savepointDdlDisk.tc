@@ -1,0 +1,261 @@
+###########################################################################
+# TestCase Description = 세이브포인트를 가로지르는 DDL — 글로벌 인덱스 디스크 테이블.
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+#                        커버리지 §0.6.2 의 "savepoint × DDL 조합 Disk 0").
+#                        모양은 `Memory/Unsupported/savepointDdlCombination.tc`
+#                        에서 왔고, DDL 의 종류를 늘렸다.
+#
+# ★★ 무엇이 계약인가
+#
+#   DDL 은 자기 앞의 트랜잭션을 **암묵적으로 커밋한다.** 그 커밋이
+#   세이브포인트를 함께 없애므로, DDL 뒤의 `ROLLBACK TO SAVEPOINT` 는
+#   ERR-11016 ("Savepoint not found") 이어야 한다. 메모리 판이 그 계약을
+#   기록하고 있고, 이 케이스는 **디스크에서도 같은가**를 묻는다.
+#
+#   ★ 왜 글로벌 인덱스가 있으면 따로 물어야 하는가
+#     글로벌 인덱스를 가진 테이블의 파티션 DDL 은 전 파티션을 X 로 잠그고
+#     (`qdbAlter::lockAllPartitionsForNativeGlobalIndex`) 글로벌 트리를
+#     **다시 세운다**. 즉 DDL 한 문장 안에서 논리 테이블의 트리 전체가
+#     교체된다. 그 교체가 암묵 커밋의 **어느 편에** 서는지가 이 케이스의
+#     물음이다 -- 잘못 서면 커밋된 트리와 커밋되지 않은 힙이 남는다.
+#
+#   그리고 디스크는 재구성 경로 자체가 다르다(`recreateTableForDisk` ·
+#   `recreateIndexForDisk`). **메모리 판이 초록이어도 디스크가 안전하다는
+#   뜻이 아니다.**
+#
+# ★★ 무엇을 재는가
+#
+#   DDL 종류마다 같은 물음 셋을 던진다:
+#
+#     ① `ROLLBACK TO SAVEPOINT` 가 ERR-11016 인가 (암묵 커밋이 일어났다)
+#     ② 그 뒤 `ROLLBACK` 이 **DDL 앞의 DML 을 되돌리지 못하는가**
+#        (이미 커밋됐으므로 되돌아가면 안 된다)
+#     ③ ★ 힙과 트리가 여전히 같은 수를 말하는가
+#
+#   ③ 이 이 케이스가 메모리 판에 더하는 것이다. 메모리 판은 카탈로그
+#   (인덱스 개수 · `$GIT_` 잔재)만 보고 **트리의 정합성은 보지 않는다.**
+#   글로벌 트리가 암묵 커밋의 틈에서 반쪽만 서면 카탈로그는 멀쩡하고
+#   숫자만 갈린다.
+#
+#   DDL 사다리:
+#     A  CREATE INDEX      (새 글로벌 트리를 세운다)
+#     B  DROP INDEX        (글로벌 트리를 걷는다)
+#     C  ALTER INDEX REBUILD (트리를 다시 세운다 -- 프로퍼티가 아니라
+#                            판별자를 따라간다)
+#     D  TRUNCATE PARTITION (멤버 하나를 비운다)
+#     E  ADD / DROP PARTITION (멤버 집합이 바뀐다 -- memberNo 가 움직인다)
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+
+DEF SHOW_INDEXES()
+{
+    select index_name,
+           decode( index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_indices_
+     where user_id = user_id()
+       and index_name like 'NGD_SPD%'
+     order by index_name;
+}
+
+#
+# ★ 이 케이스의 저울. 힙과 트리가 같은 수를 말하는가.
+#   암묵 커밋의 틈에서 트리가 반쪽만 서면 여기서 갈린다.
+#
+DEF HEAP_VS_TREE( @aIndex )
+{
+    select /*+ FULL SCAN(ngd_spd) */ count(*) as total_heap from ngd_spd;
+    select /*+ index(ngd_spd, @{aIndex}) */ count(k) as total_tree
+      from ngd_spd where k is not null;
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_SPD;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    create table ngd_spd ( p integer, k varchar(32), v integer )
+    partition by range ( p )
+    (
+      partition p1 values less than ( 10 ),
+      partition p2 values less than ( 20 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    # 파티션 키(p)를 담지 않은 키 -> 글로벌이어야만 설 수 있다
+    create index ngd_spd_ok on ngd_spd( k ) tablespace sys_tbs_disk_data;
+
+    select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id and i.index_name = 'NGD_SPD_OK';
+
+    insert into ngd_spd values (  1, 'K-101', 201 );
+    insert into ngd_spd values ( 11, 'K-111', 211 );
+    commit;
+
+    CALL SHOW_INDEXES();
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+
+##################################
+SECTOR; A -- CREATE INDEX 가 세이브포인트를 없앤다
+##################################
+    AUTOCOMMIT OFF;
+    insert into ngd_spd values ( 21, 'K-121', 221 );
+    savepoint ngd_spd_sp;
+
+    create index ngd_spd_try on ngd_spd( v ) tablespace sys_tbs_disk_data;
+
+    # ① 암묵 커밋이 일어났으므로 세이브포인트가 없어야 한다.
+    rollback to savepoint ngd_spd_sp;
+
+    # ② 되돌려도 DDL 앞의 DML 은 살아 있어야 한다 (이미 커밋됐다).
+    rollback;
+    AUTOCOMMIT ON;
+
+    select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+    CALL SHOW_INDEXES();
+
+    # ③ 힙과 트리가 같은 수를 말하는가 -- 새 트리와 헌 트리 둘 다로.
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+    select /*+ index(ngd_spd, ngd_spd_try) */ count(v) as try_tree
+      from ngd_spd where v is not null;
+
+##################################
+SECTOR; B -- DROP INDEX 가 세이브포인트를 없앤다
+##################################
+    AUTOCOMMIT OFF;
+    insert into ngd_spd values ( 22, 'K-122', 222 );
+    savepoint ngd_spd_sp;
+
+    drop index ngd_spd_try;
+
+    rollback to savepoint ngd_spd_sp;
+    rollback;
+    AUTOCOMMIT ON;
+
+    select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+    CALL SHOW_INDEXES();
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+
+##################################
+SECTOR; C -- ALTER INDEX REBUILD 가 세이브포인트를 없앤다
+##################################
+# 리빌드는 프로퍼티가 아니라 **판별자**를 따라간다. 트리를 통째로 다시
+# 세우므로 암묵 커밋의 편이 특히 중요하다.
+    AUTOCOMMIT OFF;
+    insert into ngd_spd values ( 23, 'K-123', 223 );
+    savepoint ngd_spd_sp;
+
+    alter index ngd_spd_ok rebuild;
+
+    rollback to savepoint ngd_spd_sp;
+    rollback;
+    AUTOCOMMIT ON;
+
+    select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+
+    # 리빌드 뒤에도 네이티브인가 -- 리빌드가 구현을 바꾸면 안 된다.
+    select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl_after_rebuild
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id and i.index_name = 'NGD_SPD_OK';
+
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+    select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd order by k;
+
+##################################
+SECTOR; D -- TRUNCATE PARTITION 이 세이브포인트를 없앤다
+##################################
+# 멤버 하나가 비워진다. 글로벌 트리에서 그 멤버의 키가 모두 걷혀야 한다.
+    AUTOCOMMIT OFF;
+    insert into ngd_spd values ( 24, 'K-124', 224 );
+    savepoint ngd_spd_sp;
+
+    alter table ngd_spd truncate partition p1;
+
+    rollback to savepoint ngd_spd_sp;
+    rollback;
+    AUTOCOMMIT ON;
+
+    select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+
+    # ★ 비워진 파티션의 키가 트리에 유령으로 남지 않았는가.
+    select /*+ index(ngd_spd, ngd_spd_ok) */ count(*) as ghost_k101
+      from ngd_spd where k = 'K-101';
+
+    # 그리고 같은 값을 다시 넣을 수 있어야 한다.
+    insert into ngd_spd values ( 1, 'K-101', 201 );
+    commit;
+    select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd where k = 'K-101';
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+
+##################################
+SECTOR; E -- ADD / DROP PARTITION 이 세이브포인트를 없앤다
+##################################
+# 멤버 집합이 바뀐다. 글로벌 트리의 키는 memberNo 로 소유 파티션을 가리키므로
+# 여기가 가장 많이 움직이는 자리다.
+    AUTOCOMMIT OFF;
+    insert into ngd_spd values ( 25, 'K-125', 225 );
+    savepoint ngd_spd_sp;
+
+    alter table ngd_spd split partition pd at ( 30 ) into
+        ( partition p3, partition pd );
+
+    rollback to savepoint ngd_spd_sp;
+    rollback;
+    AUTOCOMMIT ON;
+
+    select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+    select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd order by k;
+
+    AUTOCOMMIT OFF;
+    insert into ngd_spd values ( 5, 'K-105', 205 );
+    savepoint ngd_spd_sp;
+
+    alter table ngd_spd drop partition p2;
+
+    rollback to savepoint ngd_spd_sp;
+    rollback;
+    AUTOCOMMIT ON;
+
+    select /*+ FULL SCAN(ngd_spd) */ p, k, v from ngd_spd order by k;
+    CALL HEAP_VS_TREE( "ngd_spd_ok" );
+
+    # ★ 걷힌 파티션의 키가 트리에 유령으로 남지 않았는가.
+    select /*+ index(ngd_spd, ngd_spd_ok) */ count(*) as ghost_k111
+      from ngd_spd where k = 'K-111';
+
+    # 마지막으로 트리가 여전히 뜻을 갖는가 -- 파티션을 가로지르는 정렬.
+    select /*+ index(ngd_spd, ngd_spd_ok) */ p, k from ngd_spd order by k;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    SKIP END;
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    DROP TABLE NGD_SPD;
+}

@@ -1,0 +1,924 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 가변 폭 글로벌 키 — 디스크 인덱스 레코드의 FIXED/VARIABLE 갈림.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+$T0> #                        커버리지 §0.6.2 의 "NVARCHAR·가변 컬럼 키 Disk 0").
+$T0> #
+$T0> # ★ 이 케이스는 `Memory/DML/nvarcharKey.tc` 의 **사본이 아니다**
+$T0> #
+$T0> #   그 케이스의 헤더가 스스로 적어 두었다 -- "디스크 가변 키는
+$T0> #   `smiGetVariableColumnSize4DiskIndex` 라는 다른 계산을 쓰므로 디스크 판이
+$T0> #   따로 필요하다. 이 케이스의 사본이 아니라 별건이다."  여기가 그 별건이다.
+$T0> #
+$T0> # ★★ 디스크에만 있는 갈림 — 무엇이 다른가
+$T0> #
+$T0> #   메모리 테이블의 컬럼은 FIXED/VARIABLE 속성을 **테이블 레코드에서**
+$T0> #   갖는다. 디스크 테이블 레코드는 PROJ-1705 이후 가변 속성이 없다 -- 전부
+$T0> #   FIXED 다. 그런데 **디스크 인덱스 레코드는 다르다.** varchar 를 인덱스에서
+$T0> #   FIXED 로 다루면 선언 폭만큼의 공간을 매 키마다 잡아 페이지를 낭비하므로,
+$T0> #   `qdbCommon::setIndexKeyColumnTypeFlag` 가 인덱스 키 컬럼에 한해 속성을
+$T0> #   다시 매긴다:
+$T0> #
+$T0> #       column.size > smiGetVariableColumnSize4DiskIndex()  ->  VARIABLE
+$T0> #       그 밖                                                ->  FIXED 유지
+$T0> #
+$T0> #   `smiGetVariableColumnSize4DiskIndex()` 는 `align8( sizeof(sdcVarColHdr) )`
+$T0> #   이고 `sdcVarColHdr` 는 `UShort offset; UShort length;` 라 **8 바이트
+$T0> #   고정**이다(페이지 크기와 무관 -- 4K 축에서도 같다). varchar 의
+$T0> #   `SYS_COLUMNS_.SIZE` 는 선언 폭 + 2 이므로 갈림은 이렇게 떨어진다:
+$T0> #
+$T0> #       varchar(6)  -> size  8   8 > 8 이 거짓  ->  **FIXED**
+$T0> #       varchar(7)  -> size  9   9 > 8 이 참    ->  **VARIABLE**
+$T0> #
+$T0> #   조건에 `module->flag & MTD_COLUMN_TYPE_MASK == MTD_COLUMN_TYPE_VARIABLE`
+$T0> #   가 함께 걸려 있으므로 **CHAR 는 아무리 넓어도 FIXED 로 남는다.**
+$T0> #   char(60) 과 varchar(60) 은 같은 폭인데 인덱스 레코드에서 다른 편에 선다.
+$T0> #
+$T0> #   그리고 두 편은 키 오프셋을 다른 규칙으로 잡는다
+$T0> #   (`qdx::validateKeySizeLimit` 의 디스크 분기):
+$T0> #
+$T0> #       FIXED     offset = align( offset, module->align );  offset += size
+$T0> #       VARIABLE  offset = align( offset, 8 );              offset += 8
+$T0> #
+$T0> # ★★ 무엇을 주장하는가
+$T0> #
+$T0> #   **글로벌 트리는 두 편 모두에서 같은 뜻이어야 한다.** 글로벌 인덱스가
+$T0> #   주는 값은 둘 -- 파티션을 가로지르는 정렬과 파티션을 가로지르는 유일성 --
+$T0> #   이고, 그 값이 키 컬럼의 저장 속성에 따라 달라지면 안 된다. 그래서 이
+$T0> #   케이스는 갈림의 **양쪽을 나란히 세우고 같은 물음을 던진다.**
+$T0> #
+$T0> #     A  갈림의 양쪽이 둘 다 네이티브 글로벌로 서는가 (판별자 101)
+$T0> #     B  정렬·범위·점 조회가 양쪽에서 **각각 옳은** 답인가
+$T0> #        (두 컬럼은 서로 다른 값을 담으므로 계수까지 같을 이유는 없다.
+$T0> #         재는 것은 각 인덱스의 경유 결과 == 그 컬럼의 풀스캔 결과다)
+$T0> #     C  ★ 파티션 간 유일성이 양쪽에서 실제로 서는가 (동작으로 확인)
+$T0> #     D  가변 키의 길이가 자라고 줄고 NULL 이 되는 갱신 -- VARIABLE 쪽에서만
+$T0> #        의미가 있는 경로다. 갈림을 **넘나드는** 갱신도 함께 본다
+$T0> #        (짧은 값 <-> 긴 값)
+$T0> #     E  복합 키에서 가변과 고정을 섞는다 -- 위의 오프셋 규칙 둘이 한 키
+$T0> #        안에서 번갈아 도는 자리다
+$T0> #     F  NVARCHAR -- 문자 하나가 여러 바이트라 길이 계산이 varchar 와 다르다
+$T0> #
+$T0> # ★ 왜 "성공했다" 로는 부족한가
+$T0> #   가변 키의 오프셋이 어긋나면 문장은 성공하고 **답만 틀린다.** 그래서
+$T0> #   C 는 카탈로그가 아니라 INSERT 의 거절로, B 는 인덱스 경유와 풀스캔의
+$T0> #   차집합으로 잰다 -- `alterColumnGlobalKey.tc` 와 같은 저울이다.
+$T0> #
+$T0> # ★ 폭의 절대값을 기대값에 박지 않는다
+$T0> #   갈림 자체(8 바이트)는 페이지 크기와 무관하지만, 이 케이스는 그 숫자를
+$T0> #   주장하지 않는다. 주장하는 것은 **양쪽이 같은 답을 낸다**는 것이고, 그것은
+$T0> #   페이지 크기가 바뀌어도 그대로여야 한다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고 전사에 남긴다 (F07 규약).
+$T0> #
+
+$T0> #
+$T0> # 판별자. 101 이면 네이티브 글로벌이다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스 경유 결과와 풀스캔 결과의 차집합 -- 양쪽 다 비어야 한다.
+$T0> #
+
+$T0> #
+$T0> # 트리가 세는 키 개수와 테이블의 로우 개수를 나란히 둔다.
+$T0> #
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_VK;
+$T0> DROP TABLE NGD_VKU;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION -- 갈림의 양쪽을 한 테이블에 세운다
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # ★ F 절(NVARCHAR)의 전제. 이 두 값이 달라지면 NVARCHAR 가 뜻하는 바가
+$T0> #   달라지므로, 기대값을 읽는 사람이 무엇 위에서 잰 것인지 알아야 한다.
+$T0> #   정식 러너의 인스턴스는 `server create UTF8 UTF8` 로 지어진다.
+$T0> #
+$T0> # ★ 이 한 줄은 **이빨이다.** 값이 다르면 케이스가 아무것도 재기 전에
+$T0> #   붉어진다 -- 조용히 다른 것을 재는 것보다 낫다(이식분의
+$T0> #   `include/pinNative.sql` 과 같은 규약).
+$T0> #
+$T0> #   대가가 하나 있다: 스위트를 끝까지 돌리면 맨 뒤 `Recovery/` 의
+$T0> #   `clean` 이 DB 를 KSC5601/UTF16 으로 다시 짓는다. 그래서 그 뒤에
+$T0> #   `--no-fresh` 로 이 케이스만 다시 돌리면 여기서 붉어진다.
+$T0> #   **인스턴스를 새로 짓고 돌릴 것**(`natc-check.sh` 를 `--no-fresh`
+$T0> #   없이).
+$T0> select distinct nls_characterset, nls_nchar_characterset from v$nls_parameters;
+NLS_CHARACTERSET                          
+--------------------------------------------
+NLS_NCHAR_CHARACTERSET                    
+--------------------------------------------
+UTF8                                      
+UTF8                                      
+1 row selected.
+
+$T0> # FK  varchar(6) -> SIZE 8  -> 인덱스 레코드에서 FIXED 로 남는다
+$T0> # VK  varchar(7) -> SIZE 9  -> VARIABLE 로 내려간다
+$T0> # CK  char(60)   -> 폭은 넓지만 CHAR 라 FIXED
+$T0> # WK  varchar(60)-> 같은 폭인데 VARIABLE
+$T0> # NK  nvarchar(16) -> 문자당 여러 바이트
+$T0> create table ngd_vk
+    (
+        p  integer,
+        fk varchar(6),
+        vk varchar(7),
+        ck char(60),
+        wk varchar(60),
+        nk nvarchar(16),
+        v  varchar(4)
+    )
+    partition by range(p)
+    (
+      partition p1 values less than (10),
+      partition p2 values less than (20),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # 선언 폭과 저장 크기를 전사에 남긴다 -- 갈림이 어디 떨어지는지의 근거다.
+$T0> #
+$T0> # ★ NK(nvarchar)는 **일부러 빼 두었다.** NVARCHAR 의 SIZE 는 국가 문자
+$T0> #   집합의 함수라(UTF16 이면 폭 x2 + 2, UTF8 이면 x3 + 2) DB 를 어떻게
+$T0> #   지었는지가 기대값에 새어 든다. 실측으로 걸렸다 -- 정식 러너가 짓는
+$T0> #   인스턴스(`server create UTF8 UTF8`)에서는 50 이고, 스위트 맨 뒤
+$T0> #   `Recovery/restartCatalogSurvival.sql` 의 `clean`(destroydb+createdb)이
+$T0> #   지나간 뒤의 DB 에서는 34 다. 이 절의 주장은 **varchar 의 갈림**이므로
+$T0> #   NVARCHAR 의 크기는 필요하지 않다. F 절의 전제는 아래 문자셋 한 줄이
+$T0> #   진다.
+$T0> select column_name, precision, size
+      from system_.sys_columns_ c, system_.sys_tables_ t
+     where c.table_id = t.table_id
+       and t.table_name = 'NGD_VK'
+       and column_name in ( 'FK', 'VK', 'CK', 'WK' )
+     order by column_name;
+COLUMN_NAME                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+PRECISION   SIZE                 
+------------------------------------
+CK                                                                                                                                
+60          62                   
+FK                                                                                                                                
+6           8                    
+VK                                                                                                                                
+7           9                    
+WK                                                                                                                                
+60          62                   
+4 rows selected.
+
+$T0> # 파티션 키(p)를 담지 않은 키들 -> 글로벌이어야만 설 수 있다
+$T0> create index ngd_vk_fk on ngd_vk(fk) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_vk_vk on ngd_vk(vk) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_vk_ck on ngd_vk(ck) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_vk_wk on ngd_vk(wk) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_vk_nk on ngd_vk(nk) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 갈림의 양쪽이 둘 다 네이티브 글로벌로 서는가
+$T0> ##################################
+$T0> select i.index_name,
+           decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i,
+           system_.sys_tables_ t
+     where p.index_id = i.index_id
+       and i.table_id = t.table_id
+       and t.table_name = 'NGD_VK'
+     order by 1;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IMPL    HIDDEN  
+-------------------
+NGD_VK_CK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_FK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_NK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_VK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_WK                                                                                                                         
+NATIVE  NO-GIT  
+5 rows selected.
+
+$T0> # 파티션 셋에 흩어 놓는다. 한 파티션에 몰리면 글로벌의 뜻이 사라진다.
+$T0> insert into ngd_vk values ( 1,  'aaa', 'aaa',    'aaa', 'aaa',    N'aaa',    'P1' );
+1 row inserted.
+$T0> insert into ngd_vk values ( 2,  'bbb', 'bbbbbb', 'bbb', 'bbbbbb', N'bbbbbb', 'P1' );
+1 row inserted.
+$T0> insert into ngd_vk values ( 11, 'ccc', 'ccc',    'ccc', 'ccc',    N'ccc',    'P2' );
+1 row inserted.
+$T0> insert into ngd_vk values ( 12, 'ddd', 'dddddd', 'ddd', 'dddddd', N'dddddd', 'P2' );
+1 row inserted.
+$T0> insert into ngd_vk values ( 21, 'eee', 'eee',    'eee', 'eee',    N'eee',    'PD' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 정렬 · 범위 · 점 조회가 양쪽에서 각각 옳은 답인가
+$T0> ##################################
+$T0> # FIXED 쪽
+$T0> select /*+ index(ngd_vk, ngd_vk_fk) */ fk, p, v from ngd_vk order by fk, p;
+FK      P           V     
+------------------------------
+aaa     1           P1    
+bbb     2           P1    
+ccc     11          P2    
+ddd     12          P2    
+eee     21          PD    
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_fk) */ count(*) as fk_range
+      from ngd_vk where fk between 'bbb' and 'ddd';
+FK_RANGE             
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_fk) */ fk, p from ngd_vk where fk = 'ccc';
+FK      P           
+-----------------------
+ccc     11          
+1 row selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_fk) */ p, fk from ngd_vk where fk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, fk from ngd_vk where fk is not null
+    ) order by 1;
+P           FK      
+-----------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, fk from ngd_vk where fk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_fk) */ p, fk from ngd_vk where fk is not null
+    ) order by 1;
+P           FK      
+-----------------------
+No rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_fk) */ count(fk) as via_index
+      from ngd_vk where fk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(fk) as via_full
+      from ngd_vk where fk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> # VARIABLE 쪽 -- 같은 물음. 두 컬럼의 값이 다르므로 계수는 다를 수
+$T0> # 있고, 각자 인덱스 경유 == 풀스캔이면 된다.
+$T0> select /*+ index(ngd_vk, ngd_vk_vk) */ vk, p, v from ngd_vk order by vk, p;
+VK       P           V     
+-------------------------------
+aaa      1           P1    
+bbbbbb   2           P1    
+ccc      11          P2    
+dddddd   12          P2    
+eee      21          PD    
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_vk) */ count(*) as vk_range
+      from ngd_vk where vk between 'bbb' and 'ddd';
+VK_RANGE             
+-----------------------
+2                    
+1 row selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_vk) */ vk, p from ngd_vk where vk = 'ccc';
+VK       P           
+------------------------
+ccc      11          
+1 row selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_vk) */ p, vk from ngd_vk where vk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, vk from ngd_vk where vk is not null
+    ) order by 1;
+P           VK       
+------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, vk from ngd_vk where vk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_vk) */ p, vk from ngd_vk where vk is not null
+    ) order by 1;
+P           VK       
+------------------------
+No rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_vk) */ count(vk) as via_index
+      from ngd_vk where vk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(vk) as via_full
+      from ngd_vk where vk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> # 같은 폭, 다른 편 -- CHAR(60) 은 FIXED, VARCHAR(60) 은 VARIABLE
+$T0> select /*+ index(ngd_vk, ngd_vk_ck) */ p, rtrim(ck) as ck_trim from ngd_vk order by ck, p;
+P           CK_TRIM                                                       
+-----------------------------------------------------------------------------
+1           aaa                                                           
+2           bbb                                                           
+11          ccc                                                           
+12          ddd                                                           
+21          eee                                                           
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk order by wk, p;
+P           WK                                                            
+-----------------------------------------------------------------------------
+1           aaa                                                           
+2           bbbbbb                                                        
+11          ccc                                                           
+12          dddddd                                                        
+21          eee                                                           
+5 rows selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk where wk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, wk from ngd_vk where wk is not null
+    ) order by 1;
+P           WK                                                            
+-----------------------------------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, wk from ngd_vk where wk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk where wk is not null
+    ) order by 1;
+P           WK                                                            
+-----------------------------------------------------------------------------
+No rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_ck) */ count(ck) as via_index
+      from ngd_vk where ck is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(ck) as via_full
+      from ngd_vk where ck is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ count(wk) as via_index
+      from ngd_vk where wk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(wk) as via_full
+      from ngd_vk where wk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- ★ 파티션 간 유일성이 갈림의 양쪽에서 실제로 서는가
+$T0> ##################################
+$T0> # 카탈로그가 아니라 동작으로 확인한다. 오프셋이 어긋나 트리가 다른 값을
+$T0> # 담고 있으면 아래의 중복이 들어가 버린다.
+$T0> create table ngd_vku( p integer, fk varchar(6), vk varchar(7) )
+    partition by range(p)
+    ( partition p1 values less than (100), partition pd values default )
+    tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create unique index ngd_vku_fk on ngd_vku(fk) tablespace sys_tbs_disk_data;
+Create success.
+$T0> create unique index ngd_vku_vk on ngd_vku(vk) tablespace sys_tbs_disk_data;
+Create success.
+$T0> select i.index_name,
+           decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i,
+           system_.sys_tables_ t
+     where p.index_id = i.index_id
+       and i.table_id = t.table_id
+       and t.table_name = 'NGD_VKU'
+     order by 1;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IMPL    HIDDEN  
+-------------------
+NGD_VKU_FK                                                                                                                        
+NATIVE  NO-GIT  
+NGD_VKU_VK                                                                                                                        
+NATIVE  NO-GIT  
+2 rows selected.
+
+$T0> insert into ngd_vku values ( 10, 'dup', 'dupdup' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> # 다른 파티션에 같은 FIXED 키 -> 막혀야 한다
+$T0> insert into ngd_vku values ( 500, 'dup', 'other1' );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> # 다른 파티션에 같은 VARIABLE 키 -> 역시 막혀야 한다
+$T0> insert into ngd_vku values ( 500, 'oth', 'dupdup' );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> # 둘 다 다르면 들어가야 한다
+$T0> insert into ngd_vku values ( 500, 'oth', 'other1' );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select count(*) as rows_after from ngd_vku;
+ROWS_AFTER           
+-----------------------
+2                    
+1 row selected.
+
+$T0> # row movement 로 파티션을 넘겨도 트리는 하나다
+$T0> alter table ngd_vku enable row movement;
+Alter success.
+$T0> update ngd_vku set p = 700 where fk = 'dup';
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vku, ngd_vku_fk) */ p, fk, vk from ngd_vku order by fk;
+P           FK      VK       
+---------------------------------
+700         dup     dupdup   
+500         oth     other1   
+2 rows selected.
+$T0> insert into ngd_vku values ( 10, 'dup', 'other2' );
+[ERR-11058 : The row already exists in a unique index.]
+$T0> select count(*) as rows_after_move from ngd_vku;
+ROWS_AFTER_MOVE      
+-----------------------
+2                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 가변 키의 갱신. 길이가 자라고 줄고 NULL 이 된다
+$T0> ##################################
+$T0> # VARIABLE 쪽에서만 뜻이 있는 경로다. colSpace 가 바뀌는 갱신이 키를 옳게
+$T0> # 옮기는가.
+$T0> update ngd_vk set wk = 'aaa-much-much-longer-than-it-was-before' where p = 1;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk order by wk, p;
+P           WK                                                            
+-----------------------------------------------------------------------------
+1           aaa-much-much-longer-than-it-was-before                       
+2           bbbbbb                                                        
+11          ccc                                                           
+12          dddddd                                                        
+21          eee                                                           
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ count(wk) as via_index
+      from ngd_vk where wk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(wk) as via_full
+      from ngd_vk where wk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> update ngd_vk set wk = 'a' where p = 1;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk order by wk, p;
+P           WK                                                            
+-----------------------------------------------------------------------------
+1           a                                                             
+2           bbbbbb                                                        
+11          ccc                                                           
+12          dddddd                                                        
+21          eee                                                           
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ count(wk) as via_index
+      from ngd_vk where wk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(wk) as via_full
+      from ngd_vk where wk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> update ngd_vk set wk = null where p = 1;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ count(*) as null_keys
+      from ngd_vk where wk is null;
+NULL_KEYS            
+-----------------------
+1                    
+1 row selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_wk) */ count(wk) as via_index
+      from ngd_vk where wk is not null;
+VIA_INDEX            
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(wk) as via_full
+      from ngd_vk where wk is not null;
+VIA_FULL             
+-----------------------
+4                    
+1 row selected.
+
+$T0> update ngd_vk set wk = 'aaa' where p = 1;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk where wk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, wk from ngd_vk where wk is not null
+    ) order by 1;
+P           WK                                                            
+-----------------------------------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, wk from ngd_vk where wk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_wk) */ p, wk from ngd_vk where wk is not null
+    ) order by 1;
+P           WK                                                            
+-----------------------------------------------------------------------------
+No rows selected.
+
+$T0> # ★ 갈림을 넘나드는 갱신 -- FIXED 폭 안의 값과 VARIABLE 폭의 값을 오간다.
+$T0> #   컬럼의 속성은 선언으로 정해지므로 저장 편은 바뀌지 않는다. 바뀌는
+$T0> #   것은 실제 길이뿐이고, 트리는 그것을 따라와야 한다.
+$T0> update ngd_vk set vk = 'zzzzzzz' where p = 11;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vk, ngd_vk_vk) */ p, vk from ngd_vk order by vk, p;
+P           VK       
+------------------------
+1           aaa      
+2           bbbbbb   
+12          dddddd   
+21          eee      
+11          zzzzzzz  
+5 rows selected.
+$T0> update ngd_vk set vk = 'c' where p = 11;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vk, ngd_vk_vk) */ p, vk from ngd_vk order by vk, p;
+P           VK       
+------------------------
+1           aaa      
+2           bbbbbb   
+11          c        
+12          dddddd   
+21          eee      
+5 rows selected.
+$T0> update ngd_vk set vk = 'ccc' where p = 11;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_vk) */ p, vk from ngd_vk where vk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, vk from ngd_vk where vk is not null
+    ) order by 1;
+P           VK       
+------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, vk from ngd_vk where vk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_vk) */ p, vk from ngd_vk where vk is not null
+    ) order by 1;
+P           VK       
+------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- 복합 키. 한 키 안에서 오프셋 규칙 둘이 번갈아 돈다
+$T0> ##################################
+$T0> create index ngd_vk_m1 on ngd_vk( fk, wk )     tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_vk_m2 on ngd_vk( wk, fk )     tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_vk_m3 on ngd_vk( ck, wk, fk ) tablespace sys_tbs_disk_data;
+Create success.
+$T0> select i.index_name,
+           decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i,
+           system_.sys_tables_ t
+     where p.index_id = i.index_id
+       and i.table_id = t.table_id
+       and t.table_name = 'NGD_VK'
+     order by 1;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+IMPL    HIDDEN  
+-------------------
+NGD_VK_CK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_FK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_M1                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_M2                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_M3                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_NK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_VK                                                                                                                         
+NATIVE  NO-GIT  
+NGD_VK_WK                                                                                                                         
+NATIVE  NO-GIT  
+8 rows selected.
+
+$T0> select /*+ index(ngd_vk, ngd_vk_m1) */ p, fk, wk from ngd_vk order by fk, wk, p;
+P           FK      
+-----------------------
+WK                                                            
+----------------------------------------------------------------
+1           aaa     
+aaa                                                           
+2           bbb     
+bbbbbb                                                        
+11          ccc     
+ccc                                                           
+12          ddd     
+dddddd                                                        
+21          eee     
+eee                                                           
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_m2) */ p, wk, fk from ngd_vk order by wk, fk, p;
+P           WK                                                            
+-----------------------------------------------------------------------------
+FK      
+----------
+1           aaa                                                           
+aaa     
+2           bbbbbb                                                        
+bbb     
+11          ccc                                                           
+ccc     
+12          dddddd                                                        
+ddd     
+21          eee                                                           
+eee     
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_m3) */ p, rtrim(ck) as ck_trim, wk, fk
+      from ngd_vk order by ck, wk, fk, p;
+P           CK_TRIM                                                       
+-----------------------------------------------------------------------------
+WK                                                            FK      
+-------------------------------------------------------------------------
+1           aaa                                                           
+aaa                                                           aaa     
+2           bbb                                                           
+bbbbbb                                                        bbb     
+11          ccc                                                           
+ccc                                                           ccc     
+12          ddd                                                           
+dddddd                                                        ddd     
+21          eee                                                           
+eee                                                           eee     
+5 rows selected.
+
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_m1) */ p, fk, wk from ngd_vk where fk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, fk, wk from ngd_vk where fk is not null
+    ) order by 1;
+P           FK      
+-----------------------
+WK                                                            
+----------------------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, fk, wk from ngd_vk where fk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_m1) */ p, fk, wk from ngd_vk where fk is not null
+    ) order by 1;
+P           FK      
+-----------------------
+WK                                                            
+----------------------------------------------------------------
+No rows selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_m2) */ p, wk, fk from ngd_vk where wk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, wk, fk from ngd_vk where wk is not null
+    ) order by 1;
+P           WK                                                            
+-----------------------------------------------------------------------------
+FK      
+----------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, wk, fk from ngd_vk where wk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_m2) */ p, wk, fk from ngd_vk where wk is not null
+    ) order by 1;
+P           WK                                                            
+-----------------------------------------------------------------------------
+FK      
+----------
+No rows selected.
+
+$T0> # 선행 컬럼만으로 여는 범위 -- 뒤 컬럼의 오프셋이 어긋나면 여기서 갈린다
+$T0> select /*+ index(ngd_vk, ngd_vk_m2) */ count(*) as m2_prefix
+      from ngd_vk where wk between 'aaa' and 'dddddd';
+M2_PREFIX            
+-----------------------
+4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; F -- NVARCHAR. 문자 하나가 여러 바이트다
+$T0> ##################################
+$T0> select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk order by nk, p;
+P           NK                                
+-------------------------------------------------
+1           aaa                               
+2           bbbbbb                            
+11          ccc                               
+12          dddddd                            
+21          eee                               
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_nk) */ count(*) as nk_range
+      from ngd_vk where nk between N'bbbbbb' and N'dddddd';
+NK_RANGE             
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk where nk = N'ccc';
+P           NK                                
+-------------------------------------------------
+11          ccc                               
+1 row selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk where nk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, nk from ngd_vk where nk is not null
+    ) order by 1;
+P           NK                                
+-------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, nk from ngd_vk where nk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk where nk is not null
+    ) order by 1;
+P           NK                                
+-------------------------------------------------
+No rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_nk) */ count(nk) as via_index
+      from ngd_vk where nk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(nk) as via_full
+      from ngd_vk where nk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> # 길이가 바뀌는 갱신 -- varchar 와 같은 답을 내야 한다
+$T0> update ngd_vk set nk = N'aaaaaaaaaaaaaaa' where p = 1;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk order by nk, p;
+P           NK                                
+-------------------------------------------------
+1           aaaaaaaaaaaaaaa                   
+2           bbbbbb                            
+11          ccc                               
+12          dddddd                            
+21          eee                               
+5 rows selected.
+$T0> select /*+ index(ngd_vk, ngd_vk_nk) */ count(nk) as via_index
+      from ngd_vk where nk is not null;
+VIA_INDEX            
+-----------------------
+5                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_vk) */ count(nk) as via_full
+      from ngd_vk where nk is not null;
+VIA_FULL             
+-----------------------
+5                    
+1 row selected.
+
+$T0> update ngd_vk set nk = N'aaa' where p = 1;
+1 row updated.
+$T0> commit;
+Commit success.
+$T0> select * from
+    (
+      select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk where nk is not null
+      minus
+      select /*+ FULL SCAN(ngd_vk) */ p, nk from ngd_vk where nk is not null
+    ) order by 1;
+P           NK                                
+-------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_vk) */ p, nk from ngd_vk where nk is not null
+      minus
+      select /*+ index(ngd_vk, ngd_vk_nk) */ p, nk from ngd_vk where nk is not null
+    ) order by 1;
+P           NK                                
+-------------------------------------------------
+No rows selected.
+
+$T0> ##################################
+$T0> SECTOR 8; FINALIZATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> DROP TABLE NGD_VKU;
+Drop success.
+$T0> DROP TABLE NGD_VK;
+Drop success.
+

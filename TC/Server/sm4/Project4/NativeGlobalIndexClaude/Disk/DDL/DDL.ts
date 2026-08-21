@@ -94,4 +94,6 @@ ddl_partitioned_mview.tc                # DDL/partitioned_mview.tc
 #
 copySchemaGate.tc                       # 스키마 복사의 게이트 둘 — 프로퍼티 · $GIT_ 은퇴 (신규)
 alterColumnGlobalKey.tc                 # 글로벌 키 컬럼의 컬럼 DDL — O-2 · O-3 감시자 (신규)
+allIndexEnableDisk.tc                   # ALL INDEX ENABLE/DISABLE — 거부가 걷힌 뒤 (신규)
+foreignKeyGlobalParentDisk.tc           # FK 부모가 네이티브 글로벌 (신규)
 -------------------------------------------------------------------------------

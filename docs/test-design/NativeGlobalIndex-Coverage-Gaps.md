@@ -16,11 +16,12 @@
 
 | | |
 |---|---:|
-| 실행 단위 | **274** |
-| 통과 / 실패 | **274 / 0** |
-| `.tc` · `.sql` · `.lst` | 167 · 160 · 276 |
+| 실행 단위 | **283** |
+| 통과 / 실패 | **283 / 0** |
+| `.tc` · `.sql` · `.lst` | 176 · 160 · 285 |
 
-> **정식 실행기로 잰 값이다** (2026-08-21, GREEN 274/274).
+> **정식 실행기로 잰 값이다** (2026-08-21, GREEN 283/283).
+> 274 -> 283 은 §0.6.4 가 더한 디스크 케이스 아홉이다.
 > `altidev4/scripts/global-index/natc-check.sh` — 격리 인스턴스
 > `~/.ngi-testdb`(UTF8 + 시스템 패키지)를 짓고 `--auto-init=OFF` 로 돈다.
 >
@@ -38,11 +39,12 @@
 |---|---|---:|---|---:|---|
 | **Z1** | **미디어 복구** | **0** | ARCHIVELOG · `ALTER DATABASE RECOVER DATABASE` | 65 | 열림 |
 | **Z2** | **크래시 주입(FIT)** | **0** | 삽입 실패 롤백 · purge 도중 크래시 · DDL pending 순서 | 215 | `docs/FIT_GUIDE.md` 계약 필요 |
-| **Z3** | **memberNo 예산·회수** | **0** | `GLOBAL_INDEX_AUTO_RECLAIM`(GR-09) · 멤버 격자 · LEAVING | 48 | 열림 |
+| ~~**Z3**~~ | **memberNo 예산·회수** | **1** | `GLOBAL_INDEX_AUTO_RECLAIM`(GR-09) · 멤버 격자 · LEAVING | 48 | **부분적으로 닫힘** — `Disk/Catalog/memberDirectory.tc`. 디렉터리·발급·DROPPED·수동 회수를 잰다. **자동 회수의 임계(7,200 발급)는 SQL 로 못 만든다** (§0.6.4) |
 | **Z4** | **4K 페이지 축** | **0** | 키 상한·슬라이스 경계·멤버 격자가 전부 페이지 크기 함수 | 11 | `.lst` 275 개가 전부 `A4_64` |
-| **Z5** | **다중 세션(동시성)** | **0** | 파티션 간 유니크 경합 · 스캔 중 파티션 DDL · ager × 멤버 교체 | 66 | `Concurrency/` 디렉터리 없음 |
+| ~~**Z5**~~ | **다중 세션(동시성)** | **1** | 파티션 간 유니크 경합 · 스캔 중 파티션 DDL · ager × 멤버 교체 | 66 | **열렸다** — `Disk/Transaction/crossPartitionConcurrency.tc`. `THREAD`/`JOIN` 으로 같은 서버 두 세션. **막히는 문장은 쓸 수 없다**(§0.6.4) |
 
-**합 405 단언.** Z2 를 뺀 넷은 계약 없이 오늘 착수할 수 있다.
+**합 405 단언.** 그 중 Z3·Z5 가 2026-08-21 에 열렸다(§0.6.4). 남은 것은
+**Z1(미디어 복구)** · **Z2(FIT)** · **Z4(4K 축)** 이고, Z2 만 계약이 먼저다.
 
 > **닫힌 축 하나**: **재기동·redo·undo** 는 2026-08-20 에 `Disk/Recovery/`
 > 로 열렸다(§10.8). redo 6 종·undo 3 종이 처음 실행됐고 결과는 전부 옳았다.
@@ -146,25 +148,28 @@ shared includes"* 가 `.tc`·`.sql` **243 개**를 고치면서 `.lst` 를 **233
 | 오류 | Memory | Disk |
 |---|---:|---:|
 | `ERR-313D0` non-part index 거절 | 6 | 4 |
-| `ERR-31415` PK/UK 글로벌 거절 | 6 | **0** |
+| `ERR-31415` PK/UK 글로벌 거절 | 6 | **해당 없음** (아래 ★) |
 | `ERR-314AB` 매체 불일치 | 2 | 4 |
 | `ERR-314AC` 인덱스 비트 예산 | 5 | 2 |
 | `ERR-314AD` 지원 못하는 키 | 6 | 5 |
-| `ERR-314B1` FK 참조 인덱스 없음 | **0** | **0** |
+| `ERR-314B1` FK 참조 인덱스 없음 | **도달 불가** | **도달 불가** (아래 ★) |
 | `ERR-314B6` `$GIT_` 은퇴 | 0 (해당 없음) | 7 |
 
 **핵심 의미의 매체별 커버리지**
 
-| 축 | Memory | Disk | 디스크에서 왜 다른가 |
+| 축 | Memory | Disk | 상태 |
 |---|---:|---:|---|
-| ~~MODIFY COLUMN~~ | 1 | ~~0~~ **1** | **닫힘** — `Disk/DDL/alterColumnGlobalKey.tc` |
-| NVARCHAR·가변 컬럼 키 | 3 | **0** | 디스크 컬럼은 항상 `SMI_COLUMN_TYPE_FIXED` — 메모리 플랜을 닫는 게이트가 디스크에선 안 닫힌다 |
-| 트리거 × row movement | 4 | **0** | |
-| MERGE INTO | 3 | **0** | |
-| savepoint × DDL 조합 | 7 | **0** | |
-| ALL INDEX ENABLE/DISABLE | 5 | **0** | 글로벌은 멤버 파티션 핸들 배열로 재구성한다 |
-| PSM 커서·DML | 2 | **0** | |
-| FK 부모가 글로벌 인덱스 | 1 | **0** | `qdnForeignKey.cpp` 의 `lockParentRowInOwner` 경로 |
+| ~~MODIFY COLUMN~~ | 1 | **1** | **닫힘** — `Disk/DDL/alterColumnGlobalKey.tc` |
+| ~~NVARCHAR·가변 컬럼 키~~ | 3 | **1** | **닫힘** — `Disk/DML/variableKeyDisk.tc` |
+| ~~트리거 × row movement~~ | 4 | **1** | **닫힘** — `Disk/DML/triggerRowMovementDisk.tc` |
+| ~~MERGE INTO~~ | 3 | **1** | **닫힘** — `Disk/DML/mergeIntoDisk.tc` (+ `DELETE` 절, 메모리에 없다) |
+| ~~savepoint × DDL 조합~~ | 7 | **1** | **닫힘** — `Disk/Transaction/savepointDdlDisk.tc` (DDL 5 종) |
+| ~~ALL INDEX ENABLE/DISABLE~~ | 5 | **1** | **닫힘** — `Disk/DDL/allIndexEnableDisk.tc` |
+| ~~PSM 커서·DML~~ | 2 | **1** | **닫힘** — `Disk/Query/psmGlobalAccessDisk.tc` (+ `FOR UPDATE`) |
+| ~~FK 부모가 글로벌 인덱스~~ | 1 | **1** | **닫힘** — `Disk/DDL/foreignKeyGlobalParentDisk.tc` |
+
+**여덟 축이 전부 닫혔다 (2026-08-21).** 상세와 각 케이스가 새로 찾은 것은
+§0.6.4.
 
 **곁가지 — 죽은 오류 메시지 5** : `1198 REORG_NOT_SUPPORTED` ·
 `1199 COPY_NOT_SUPPORTED` · `1200 RECREATE_NOT_SUPPORTED` ·
@@ -192,21 +197,145 @@ enum 과 함께 지워야 하고 그것은 오류 코드 표면을 줄이는 결
 현재는 파일 2 개(`qc_JoinTest.tc` · `pdtBug_BUG-9.sql`)만 EUC-KR 로 두고
 헤더에 이유를 적어 두는 쪽을 골랐다.
 
+### 0.6.4 ★ 매체 짝 여덟 · 영(零) 축 둘을 닫았다 (2026-08-21)
+
+`natc-check.sh` GREEN **283/283**. 새 케이스 아홉, 전부 디스크다.
+
+| 케이스 | 닫은 축 | 이 케이스가 새로 찾은 것 |
+|---|---|---|
+| `Disk/DML/variableKeyDisk.tc` | NVARCHAR·가변 키 | 디스크 인덱스 레코드의 **FIXED/VARIABLE 갈림이 `varchar(6)`/`varchar(7)` 사이에 정확히 떨어진다** |
+| `Disk/DML/triggerRowMovementDisk.tc` | 트리거 × row movement | 메모리 판의 D 절(레이아웃 분화)은 **디스크로 옮길 수 없다** — 그 전제가 PROJ-2334 다 |
+| `Disk/DML/mergeIntoDisk.tc` | MERGE INTO | `WHEN MATCHED ... DELETE WHERE` 가 **스위트 어디에도 없었다.** 더했다 |
+| `Disk/Transaction/savepointDdlDisk.tc` | savepoint × DDL | DDL 5 종(CREATE·DROP INDEX / REBUILD / TRUNCATE·SPLIT·DROP PARTITION) 전부 암묵 커밋이 세이브포인트를 없앤다 |
+| `Disk/DDL/allIndexEnableDisk.tc` | ALL INDEX | **계약이 뒤집혔다** (아래 ★1) |
+| `Disk/Query/psmGlobalAccessDisk.tc` | PSM | `FOR UPDATE` 커서가 글로벌 인덱스를 탄다 — 스위트 0 회였다 |
+| `Disk/DDL/foreignKeyGlobalParentDisk.tc` | FK 부모 글로벌 | `ERR-314B1`·`ERR-31415` 가 **도달 불가**임을 소스로 확정 (아래 ★2) |
+| `Disk/Catalog/memberDirectory.tc` | **Z3** memberNo | `V$DISK_BTREE_GLOBAL_MEMBER` 를 읽는 첫 케이스. DROP 과 재구성 DDL 의 차이 (아래 ★3) |
+| `Disk/Transaction/crossPartitionConcurrency.tc` | **Z5** 동시성 | 파티션 DDL 이 **전 파티션 X** 를 요구한다는 것을 대조군으로 확정 (아래 ★4) |
+
+#### ★1 `ALL INDEX ENABLE/DISABLE` — 거부가 걷혔다
+
+V1 은 이 문장을 `ERR-314B2`(메시지 1202) 로 **거부**했다. `DISABLE` 이
+파티션 디렉터리를 없애는데 `ENABLE` 에 다시 거는 코드가 없었기 때문이다.
+V2 A2 가 `smnManager::rebuildGlobalIndexesOfParent` 로 그 수단을 만들었고
+**거부는 걷혔다**(`qdbAlter.cpp` 의 주석). 지금 기대는 성공이다.
+
+> **곁가지 — 메모리 판의 머리말이 낡았다.** `Memory/Boundary/allIndexAndTablespace.tc`
+> 는 아직 "ERR-314B2 로 명시 거부" 라고 적고 있다. **오라클은 최신이다**
+> (`Alter success.` 를 기록한다) — 낡은 것은 주석뿐이라 케이스는 초록이다.
+> 고칠 때 이 항목을 근거로 쓸 것.
+
+#### ★2 살아 있다고 세었으나 **도달 불가**인 오류 둘
+
+§0.6.2 의 표가 이 둘을 "살아 있는데 커버리지 0" 으로 세었다. 소스를 읽어
+보니 **TC 로 못박을 수 있는 것이 아니다.** 세는 자리를 정정한다.
+
+- **`ERR-314B1`** — `qdnForeignKey.cpp` 의 **로컬 분기**에서만 난다.
+  판별자 101 은 위 글로벌 분기로 갈라져 여기 오지 않는다. 주석이 명시한다:
+  "이 거부는 도달 불가다. 그래도 남겨 둔다 — 카탈로그가 어긋난 상태에서
+  서버를 죽이는 대신 문장을 실패시키는 것이 이 검사의 값이다."
+  **카탈로그 손상 방어**이고 SQL 로 만들 수 없다.
+- **`ERR-31415`** — `qdn::checkLocalIndex` 의 조건이
+  `(로컬 아님) && (디스크 TBS 아님) && (네이티브 허용 아님)` 이다.
+  **디스크에서는 둘째 항이 거짓**이라 절대 서지 않는다. 디스크 파티션드
+  테이블의 PK/UK 가 글로벌로 서는 것이 원래 계약이며,
+  `foreignKeyGlobalParentDisk.tc` A 절이 그 계약을 세운다. 메모리 6 이
+  이 오류의 전부이고 그것으로 충분하다.
+
+> **죽은 메시지 5 의 처분도 여기서 정해졌다.** `1202` 는
+> `qdbAlter.cpp` 가 이유를 적어 두었다 — "메시지 1202의 정의는 **번호
+> 재사용을 막기 위해** 남아 있지만 이제 아무도 내지 않는다." 나머지 넷도
+> 같은 성질이다. **지우지 않는 것이 맞다**: enum 은 `qcuErrorCode.ih` 에
+> 컴파일돼 있고, 메시지만 지우면 혹시 raise 될 때 "unknown error" 가 된다.
+> 이 항목으로 이 곁가지를 닫는다.
+
+#### ★3 memberNo — DROP 과 재구성 DDL 은 다른 일을 한다
+
+케이스를 쓰면서 **가설이 틀렸다.** 처음 세운 것은 "번호는 재사용되지
+않으므로 자리 수는 단조 증가한다" 였는데, 실측은 이렇다:
+
+| 문장 | 살아 있는 파티션 | 디렉터리 자리 |
+|---|---:|---|
+| `CREATE INDEX` (파티션 3) | 3 | 0,1,2 ACTIVE |
+| `SPLIT PARTITION` | 4 | 0,1,2,3 ACTIVE |
+| `DROP PARTITION` | 3 | 0,1,3 ACTIVE + **2 DROPPED** (자리 4) |
+| `SPLIT PARTITION` | 4 | 0,1,2,3 ACTIVE (자리 **4**) |
+| `ALTER INDEX REBUILD` | 4 | 0,1,2,3 ACTIVE |
+
+세 번째에서 네 번째로 갈 때 DROPPED 가 사라진다. **슬롯 재사용이 아니다** —
+`sdnbBTree::nextMemberNo` 는 언제나 `mMemberCnt` 를 주고 재사용하지 않는다.
+일어나는 일은 **재구성 DDL 이 인덱스를 통째로 다시 만들고 디렉터리가 새로
+서는 것**이다. 새 디렉터리에는 옛 키가 없으므로 번호가 0 부터 다시 나가도
+안전하고, `nextMemberNo` 의 멱등 분기가 바로 그 경로를 위해 있다.
+
+재사용하지 않는 이유도 그 주석에 있다 — purge 가 중단·크래시·큐 포화로
+옛 키를 다 지우지 못한 사이에 번호를 되팔면 **옛 파티션의 키가 새 파티션의
+키로 보이고 오류 없이 남의 로우를 돌려준다.**
+
+> **자동 회수는 여전히 SQL 밖이다.** 방아쇠는 `SDNB_MEMBER_DIR_WARN_AT`,
+> 즉 8K 페이지에서 **7,200 발급**이다. 파티션 DDL 을 7,200 번 도는 것은
+> 회귀 케이스의 일이 아니다. Z3 을 "부분적으로 닫힘" 으로 적은 것이 그
+> 뜻이고, 임계 경로는 FIT 이나 전용 하네스의 몫이다.
+
+#### ★4 동시성 — 규칙 하나와 발견 하나
+
+**규칙: 막히는 문장을 쓰지 않는다.** `JOIN;` 은 스레드 배리어라, 한
+스레드가 기다리는 문장을 내면 배리어가 영영 안 풀린다. 실측했다 — 커밋
+안 된 중복 키를 쥔 채 다른 세션이 평범한 `INSERT` 로 같은 키를 넣으면
+**케이스가 통째로 멈춘다**(실제로 한 번 멈춰서 러너를 죽여야 했다).
+쓸 수 있는 것은 경계가 있는 둘뿐이다:
+
+    SELECT ... FOR UPDATE NOWAIT     기다리지 않고 ERR-11075
+    DDL + DDL_LOCK_TIMEOUT = 1       1 초 뒤 ERR-11075
+
+**발견: 파티션 DDL 이 전 파티션의 X 를 요구한다.** `P2` 의 로우 하나에
+잠금을 쥐면 **무관한 `P3` 의 DROP 이 막힌다**(ERR-11075).
+`qdbAlter::lockAllPartitionsForNativeGlobalIndex` 가 SQL 에서 보이는
+자리다. **대조군이 이 주장의 무게다** — 같은 모양에 로컬 인덱스만 두면
+같은 DROP 이 **성공한다.** 대조군이 없으면 "파티션 DDL 은 원래 잠금을
+기다린다" 로도 읽힌다.
+
+#### 방법 교훈 — 대조군이 세 번 판정을 바꿨다
+
+이번 작업에서 대조군이 **결함으로 보이던 것 둘을 정상으로**, **정상으로
+보이던 것 하나를 결함으로** 돌렸다.
+
+1. **유일 글로벌 인덱스 × `ALL INDEX DISABLE`** — DISABLE 뒤 중복이
+   들어가고 ENABLE 이 `ERR-11058` 로 실패하며 그 뒤로도 중복이 들어간다.
+   카탈로그는 유일 인덱스가 있다고 말하는데 유일성이 없다 — **O-4 의
+   모양**이다. 대조군: **비파티션드 테이블 + 평범한 유일 인덱스**가 한
+   글자도 다르지 않게 같다. 글로벌의 성질이 아니라 그 문장의 성질이다.
+2. **PSM `FOR UPDATE` 루프 안의 UPDATE** — `ERR-1105D`. 대조군:
+   비파티션드 + 로컬 유일 인덱스도 같다. 열린 갱신 커서의 성질이다.
+3. **파티션 DDL 이 잠금에 막힘** — 잠긴 로우가 **그 파티션에 있으면**
+   글로벌이든 로컬이든 막힌다. **무관한 파티션**을 골라야 갈린다.
+   대조군을 세우고 대상을 바꾼 뒤에야 ★4 가 보였다.
+
+**규약: "글로벌 인덱스에서 X 가 일어난다" 를 적기 전에 글로벌 인덱스가
+없는 자리에서 X 를 해 본다.** §0.5.1 이 매체에 대해 말한 것과 같은 병이고,
+같은 약이다.
+
 ### 0.7 착수 순서
 
 | 순위 | 무엇 | 왜 |
 |---|---|---|
-| 1 | **Z1 미디어 복구** | `Recovery/` 가 이미 섰다. 계약이 같고 65 단언이 바로 온다 |
-| 2 | **Z3 memberNo 회수** | GR-09 한 트랙 전체가 0. `GLOBAL_INDEX_AUTO_RECLAIM` 을 부르는 케이스가 없다 |
-| 3 | **Z5 동시성** | 파티션 간 유니크는 글로벌 인덱스의 존재 이유인데 경합을 안 잰다 |
-| 4 | **Z4 4K 축** | 상한·경계·격자가 전부 페이지 크기 함수인데 오라클이 한 크기뿐 |
-| ~~5~~ | ~~실패 6 건 수리~~ | **닫혔다 (2026-08-21). GREEN 274/274.** §0.6 |
-| **A** | **매체 짝 7 종** | §0.6.2 의 Disk 0 축 — NVARCHAR·트리거·MERGE·savepoint·ALL INDEX·PSM·FK. `alterColumnGlobalKey.tc` 가 본 대로 **메모리가 초록이어도 디스크가 안전하다는 뜻이 아니다** |
-| **B** | `ERR-314B1` 감시자 | 살아 있는데 양쪽 매체 0 |
-| **C** | 하네스 문자셋 | §0.6.3. 풀리면 "이식분은 EUC-KR" 예외가 사라진다 |
-| 6 | 나머지 이식 | |
-| 7 | **Z2 FIT** | 계약(`docs/FIT_GUIDE.md`)이 먼저다 |
-| 8 | 복제 확장 | 그물 15 절 중 2 절만 덮었다. **기본 매체가 먼저**다 |
+| 1 | **Z1 미디어 복구** | `Recovery/` 가 이미 섰다. 계약이 같고 65 단언이 바로 온다. **ARCHIVELOG 모드는 인스턴스 전체를 바꾸므로 레인 격리가 먼저다** |
+| 2 | **Z4 4K 축** | 상한·경계·격자가 전부 페이지 크기 함수인데 오라클이 한 크기뿐. **4K 인스턴스를 따로 지어야 한다** — `testdb.sh` 에 페이지 크기 인자가 없다 |
+| 3 | **Z3 자동 회수의 임계** | 디렉터리 자체는 닫혔다(§0.6.4). 남은 것은 **7,200 발급**이라는 방아쇠뿐이고 SQL 로 못 만든다 — FIT 또는 전용 하네스 |
+| 4 | 하네스 문자셋 | §0.6.3. 풀리면 "이식분은 EUC-KR" 예외가 사라진다 |
+| 5 | 나머지 이식 | |
+| 6 | **Z2 FIT** | 계약(`docs/FIT_GUIDE.md`)이 먼저다. 위의 1·3 이 여기에 매달려 있다 |
+| 7 | 복제 확장 | 그물 15 절 중 2 절만 덮었다. **기본 매체가 먼저**다 |
+
+**닫힌 것 (2026-08-21)**
+
+| | |
+|---|---|
+| ~~실패 6 건 수리~~ | GREEN. §0.6 |
+| ~~**A** 매체 짝 7 종~~ | **여덟이 됐고 전부 닫혔다.** §0.6.2 · §0.6.4 |
+| ~~**B** `ERR-314B1` 감시자~~ | **쓸 수 없다 — 도달 불가**로 확정. §0.6.4 ★2 |
+| ~~**Z3** memberNo 디렉터리~~ | `Disk/Catalog/memberDirectory.tc`. §0.6.4 ★3 |
+| ~~**Z5** 동시성~~ | `Disk/Transaction/crossPartitionConcurrency.tc`. §0.6.4 ★4 |
 
 ### 0.8 이 문서를 읽는 법
 

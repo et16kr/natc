@@ -1,0 +1,263 @@
+###########################################################################
+# TestCase Description = 트리거 × row movement — 글로벌 인덱스가 걸린 디스크 테이블.
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+#                        커버리지 §0.6.2 의 "트리거 × row movement Disk 0").
+#
+# ★ 메모리 판과 무엇이 같고 무엇이 다른가
+#
+#   `Memory/DML/triggerRowMovement.tc` 는 절 넷을 갖는다. 그 중 **D 절은
+#   디스크로 옮길 수 없다.** D 절이 겨눈 것은 리뷰 §2 --
+#   `allocTriggerRowMultiTable` 이 논리 테이블의 컬럼 배열로 파티션 로우를
+#   읽는 문제 -- 이고, 그 문제의 전제인 **레이아웃 분화는 PROJ-2334, 즉
+#   메모리 파티션드 테이블의 성질**이다. 디스크 테이블은 컬럼 DDL 이
+#   `recreateTableForDisk` 로 테이블을 다시 쓰므로 파티션과 논리 테이블의
+#   배열이 갈라지지 않는다. 그래서 이 케이스는 D 절을 옮기지 않는다 --
+#   옮기면 **아무것도 재지 않는 절**이 하나 늘 뿐이다.
+#
+#   나머지 셋은 디스크에서 다른 기계를 탄다:
+#
+#     · row movement 의 삭제+삽입이 디스크 커서(`sdcRow`)로 돈다
+#     · 트리거가 읽는 `:OLD` 가 디스크 레코드에서 뽑혀 온다
+#     · 글로벌 트리의 키 갱신이 디스크 b-tree 의 memberNo 경로를 탄다
+#
+#   **메모리 판이 초록이어도 디스크가 안전하다는 뜻이 아니다** --
+#   `alterColumnGlobalKey.tc` 가 그것을 이미 한 번 보였다.
+#
+# ★★ 무엇을 재는가
+#
+#   A  글로벌 인덱스가 걸린 디스크 파티션드 테이블 위에 트리거가 서는가
+#      (스위트 전량에서 이 조합이 **0** 이었다)
+#   B  단일 테이블 row movement 에서 `:OLD` 가 **옮기기 전** 값인가
+#   C  멀티테이블 row movement + 트리거 (O-8 이 연 경로)
+#   D  ★ 트리거 본문이 **글로벌 인덱스를 경유해 읽는다.** 트리거 안의
+#      SQL 은 밖의 SQL 과 다른 입구로 준비되므로, 글로벌 스캔의 owner
+#      handoff 가 그 안에서도 도는지는 따로 재야 한다
+#   E  트리거가 문장을 되돌리면 글로벌 트리도 되돌아가는가 -- 트리거
+#      본문의 실패가 문장 전체를 무르는 자리다
+#
+#   ★ 각 절은 "문장이 성공했다" 로 끝내지 않는다. 성공한 뒤 **트리가
+#     비지 않았는지**(키 개수 == 로우 개수)를 함께 센다. 글로벌 트리가
+#     조용히 비는 결함(O-2)은 오류를 내지 않으므로 그렇게만 잡힌다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+
+DEF SHOW_IMPL( @aIndex )
+{
+    select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = '@{aIndex}';
+}
+
+DEF CHECK_NOT_EMPTIED( @aTable, @aIndex, @aKeyCol )
+{
+    select /*+ index(@{aTable}, @{aIndex}) */ count(@{aKeyCol}) as via_index
+      from @{aTable} where @{aKeyCol} is not null;
+    select /*+ FULL SCAN(@{aTable}) */ count(@{aKeyCol}) as via_full
+      from @{aTable} where @{aKeyCol} is not null;
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TRIGGER NGD_TRG_T;
+    DROP TRIGGER NGD_TRG_R;
+    DROP TRIGGER NGD_TRG_V;
+    DROP TABLE NGD_TRG;
+    DROP TABLE NGD_TRG_LOG;
+    DROP TABLE NGD_TRG_B;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    # 트리거가 적어 넣을 곳. :OLD 가 옳게 읽혔는지는 여기 남은 값으로 안다.
+    create table ngd_trg_log ( seq integer, tag varchar(16),
+                               old_p integer, old_k integer, old_v varchar(16),
+                               new_p integer )
+        tablespace sys_tbs_disk_data;
+
+    create table ngd_trg ( p integer, k integer, v varchar(16) )
+    partition by range ( p )
+    (
+      partition p1 values less than ( 10 ),
+      partition p2 values less than ( 20 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    create table ngd_trg_b ( k integer, w varchar(16) ) tablespace sys_tbs_disk_data;
+
+    alter table ngd_trg enable row movement;
+
+    insert into ngd_trg values ( 1,  101, 'A' );
+    insert into ngd_trg values ( 2,  102, 'B' );
+    insert into ngd_trg values ( 11, 103, 'C' );
+    insert into ngd_trg_b values ( 101, 'X' );
+    insert into ngd_trg_b values ( 102, 'Y' );
+    insert into ngd_trg_b values ( 103, 'Z' );
+    commit;
+
+    # 파티션 키(p)를 담지 않은 키 -> 글로벌이어야만 설 수 있다
+    create index ngd_trg_g on ngd_trg ( k ) tablespace sys_tbs_disk_data;
+    CALL SHOW_IMPL( "NGD_TRG_G" );
+
+##################################
+SECTOR; A -- 트리거가 글로벌 인덱스 테이블 위에 선다
+##################################
+    create trigger ngd_trg_t
+    before update on ngd_trg
+    referencing old row old_row new row new_row
+    for each row
+    begin
+        insert into ngd_trg_log
+            values ( 1, 'BEFORE-UPD',
+                     old_row.p, old_row.k, old_row.v, new_row.p );
+    end;
+    /
+
+    select count(*) as trigger_rows
+      from system_.sys_triggers_ where trigger_name = 'NGD_TRG_T';
+
+##################################
+SECTOR; B -- 단일 테이블 row movement 에서 :OLD 가 옳은가
+##################################
+    update ngd_trg set p = 15 where k = 101;
+    commit;
+
+    # B1. 트리거가 본 :OLD 는 옮기기 **전** 값이어야 한다 -- P=1, V='A'.
+    select tag, old_p, old_k, old_v, new_p from ngd_trg_log order by old_k;
+
+    # B2. 이동 자체는 옳았는가.
+    select /*+ index(ngd_trg, ngd_trg_g) */ count(*) as k101_rows
+      from ngd_trg where k = 101;
+    select /*+ index(ngd_trg, ngd_trg_g) */ p, k, v from ngd_trg order by k;
+    CALL CHECK_NOT_EMPTIED( "ngd_trg", "ngd_trg_g", "k" );
+
+    delete from ngd_trg_log;
+    commit;
+
+##################################
+SECTOR; C -- 멀티테이블 row movement + 트리거 (O-8 이 연 경로)
+##################################
+    update ngd_trg a, ngd_trg_b b
+       set a.p = 25, a.v = 'MOVED'
+     where a.k = b.k and b.k = 102;
+    commit;
+
+    # C1. 살아 있는가.
+    select count(*) as alive from ngd_trg;
+
+    # C2. :OLD 가 옮기기 전 값인가 -- P=2, V='B'.
+    select tag, old_p, old_k, old_v, new_p from ngd_trg_log order by old_k;
+
+    # C3. 이동이 옳았는가. 한 행이어야 한다.
+    select /*+ index(ngd_trg, ngd_trg_g) */ count(*) as k102_rows
+      from ngd_trg where k = 102;
+    select /*+ index(ngd_trg, ngd_trg_g) */ p, k, v from ngd_trg order by k;
+    select /*+ index(ngd_trg, ngd_trg_g) */ count(distinct k) as distinct_k from ngd_trg;
+    CALL CHECK_NOT_EMPTIED( "ngd_trg", "ngd_trg_g", "k" );
+
+    delete from ngd_trg_log;
+    commit;
+
+##################################
+SECTOR; D -- ★ 트리거 본문이 글로벌 인덱스를 경유해 읽는다
+##################################
+# 트리거 안의 SQL 은 밖의 SQL 과 다른 입구로 준비된다. 글로벌 스캔이
+# 로우를 소유한 파티션으로 넘기는 handoff 가 그 안에서도 도는지를 잰다.
+    drop trigger ngd_trg_t;
+
+    create trigger ngd_trg_r
+    after update on ngd_trg
+    referencing old row old_row new row new_row
+    for each row
+    begin
+        declare
+            v_cnt integer;
+        begin
+            select /*+ index(ngd_trg, ngd_trg_g) */ count(*) into v_cnt
+              from ngd_trg where k = new_row.k;
+
+            insert into ngd_trg_log
+                values ( 2, 'AFTER-UPD',
+                         old_row.p, old_row.k, old_row.v, v_cnt );
+        end;
+    end;
+    /
+
+    # 파티션을 넘기는 갱신. 트리거가 글로벌로 세어 본 값이 NEW_P 에 남는다.
+    update ngd_trg set p = 5 where k = 103;
+    commit;
+
+    select tag, old_p, old_k, old_v, new_p from ngd_trg_log order by old_k;
+    select /*+ index(ngd_trg, ngd_trg_g) */ p, k, v from ngd_trg order by k;
+    CALL CHECK_NOT_EMPTIED( "ngd_trg", "ngd_trg_g", "k" );
+
+    delete from ngd_trg_log;
+    commit;
+
+##################################
+SECTOR; E -- 트리거가 문장을 무르면 글로벌 트리도 되돌아가는가
+##################################
+# 트리거 본문이 실패하면 문장 전체가 무효가 되어야 한다. 이때 row movement
+# 로 이미 옮겨진 로우와 글로벌 트리의 키가 **함께** 되돌아가야 한다 --
+# 한쪽만 되돌아가면 트리와 테이블이 어긋난 채로 남는다.
+    drop trigger ngd_trg_r;
+
+    # 로그 테이블에 유일 제약을 걸고, 트리거가 두 번째 삽입에서 걸리게 한다.
+    create unique index ngd_trg_log_u on ngd_trg_log ( seq )
+        tablespace sys_tbs_disk_data;
+    insert into ngd_trg_log values ( 9, 'SEED', 0, 0, 'S', 0 );
+    commit;
+
+    create trigger ngd_trg_v
+    before update on ngd_trg
+    referencing old row old_row new row new_row
+    for each row
+    begin
+        insert into ngd_trg_log
+            values ( 9, 'DUP', old_row.p, old_row.k, old_row.v, new_row.p );
+    end;
+    /
+
+    # 옮기기 전 상태를 전사에 남긴다.
+    select /*+ index(ngd_trg, ngd_trg_g) */ p, k, v from ngd_trg order by k;
+
+    # ★ 판정 -- 트리거가 유일 제약에 걸리므로 문장이 실패해야 한다.
+    update ngd_trg set p = 250 where k = 101;
+
+    # 실패했으니 아무것도 바뀌지 않아야 한다.
+    select /*+ index(ngd_trg, ngd_trg_g) */ p, k, v from ngd_trg order by k;
+    select seq, tag from ngd_trg_log order by seq, tag;
+    CALL CHECK_NOT_EMPTIED( "ngd_trg", "ngd_trg_g", "k" );
+
+    # 그리고 트리가 여전히 뜻을 갖는가 -- 점 조회가 옳은 파티션을 가리키는가.
+    select /*+ index(ngd_trg, ngd_trg_g) */ p, k from ngd_trg where k = 101;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    DROP TRIGGER NGD_TRG_V;
+    DROP TABLE NGD_TRG;
+    DROP TABLE NGD_TRG_B;
+    DROP TABLE NGD_TRG_LOG;
+}

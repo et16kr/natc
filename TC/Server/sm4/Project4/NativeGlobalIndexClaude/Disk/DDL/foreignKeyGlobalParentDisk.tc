@@ -1,0 +1,283 @@
+###########################################################################
+# TestCase Description = FK 의 부모 인덱스가 네이티브 글로벌인 경우 (디스크).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+#                        커버리지 §0.6.2 의 "FK 부모가 글로벌 인덱스 Disk 0").
+#
+# ★★ 무엇을 재는가 -- FK 검사에는 글로벌 전용 분기가 실재한다
+#
+#   `qdnForeignKey::searchParentKey` 는 부모 인덱스의 판별자를 보고 셋으로
+#   갈린다:
+#
+#     QCM_NONE_PARTITIONED_INDEX          $GIT_ -- 부모를 숨김 인덱스
+#                                          테이블로 **바꿔치기**한다
+#     QCM_GLOBAL_NATIVE_NONE_PARTITIONED_INDEX
+#                                         ★ 논리 테이블 핸들 + 글로벌
+#                                          인덱스로 연다. 파티션 선택도,
+#                                          파티션 `indices[]` 탐색도 하지
+#                                          않는다
+#     그 밖                                로컬 -- 파티션 키로 프루닝한 뒤
+#                                          그 파티션의 인덱스로 연다
+#
+#   글로벌 분기에는 그 위에 하나가 더 있다. **잠금을 커서에서 떼어 낸다**:
+#
+#     > 글로벌 커서로 잠그면 잠금이 논리 테이블에 걸리므로 SM 이 그 커서
+#     > 자체를 거부한다. 그래서 읽기는 글로벌 커서로, 잠금은 로우를 소유한
+#     > 파티션 커서로 나눈다 -- `qdnForeignKey::lockParentRowInOwner`,
+#     > `qmnSCAN` 의 owner handoff 와 같은 분업이다.
+#
+#   즉 FK 하나를 검사할 때마다 **읽기와 잠금이 서로 다른 핸들로 간다.**
+#   그 분업이 어긋나면 부모를 못 찾거나(거짓 ERR-31077), 잠그지 못한 채
+#   통과한다(경합에서 부모가 사라진다). 스위트에서 이 분기를 밟는 디스크
+#   케이스가 **0** 이었다.
+#
+# ★ 왜 디스크에서 또 재는가
+#   글로벌 분기를 지난 뒤 커서 구성이 매체로 다시 갈린다 --
+#   `QCM_TABLE_TYPE_IS_DISK` 이면 레코드 읽기 공간을 따로 잡고
+#   fetch column list 를 세운다. 메모리 판(`Memory/DDL/constraint.tc` 의
+#   FK 절)이 지나간 적 없는 코드다.
+#
+# ★★ 살아 있는 오류 둘의 도달 가능성 -- 소스로 확인하고 여기 적어 둔다
+#
+#   커버리지 §0.6.2 는 `ERR-314B1` 과 `ERR-31415` 를 "살아 있는데 커버리지
+#   0" 으로 세었다. 소스를 읽어 보니 **둘 다 SQL 로는 도달할 수 없다.**
+#   TC 로 못박을 수 있는 것이 아니므로, 세는 자리를 정정하는 대신 이유를
+#   여기 남긴다.
+#
+#     ERR-314B1 (`qpERR_ABORT_QDN_FK_REFERENCES_GLOBAL_INDEX`)
+#       `qdnForeignKey.cpp` 의 **로컬 분기**에서만 난다 -- 프루닝으로 고른
+#       파티션의 `indices[]` 에 부모 인덱스가 없을 때다. 판별자 101 은 위
+#       글로벌 분기로 갈라져 여기 오지 않는다. 주석이 그것을 명시한다:
+#       "이 거부는 도달 불가다. 그래도 남겨 둔다 -- 카탈로그가 어긋난
+#       상태에서 서버를 죽이는 대신 문장을 실패시키는 것이 이 검사의
+#       값이다." 즉 **카탈로그 손상 방어**이고, 그것을 SQL 로 만들 수 없다.
+#
+#     ERR-31415 (`qpERR_ABORT_QDN_NOT_ALLOW_MEM_TBS_PK_UK_OF_GLOBAL_INDEX`)
+#       `qdn::checkLocalIndex` 의 조건은
+#       `(로컬 아님) && (디스크 TBS 아님) && (네이티브 허용 아님)` 이다.
+#       **디스크에서는 둘째 항이 거짓**이라 절대 서지 않는다. 디스크
+#       파티션드 테이블의 PK/UK 는 글로벌로 서는 것이 원래 계약이다 --
+#       이 케이스의 A 절이 바로 그것을 세운다. 메모리 쪽 커버리지 6 이
+#       이 오류의 전부이고, 그것으로 충분하다.
+#
+# ★★ 절 구성
+#   A  디스크 파티션드 테이블의 PK 가 **네이티브 글로벌**로 서는가
+#   B  자식의 FK 가 그 글로벌 PK 를 참조한다 -- 부모가 어느 파티션에 있든
+#   C  참조되는 부모는 지울 수 없다 (읽기 분기)
+#   D  ★ 부모 로우가 파티션 사이를 옮겨도 참조가 유지되는가
+#      (잠금 분기 -- owner 가 바뀐다)
+#   E  UNIQUE 글로벌 인덱스를 참조하는 FK
+#   F  부모의 파티션 DDL 이 참조를 깨지 않는가
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+
+DEF SHOW_IMPL( @aTable )
+{
+    select i.index_name,
+           decode( p.partition_type, 101, 'NATIVE', 'LOCAL-OR-OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i,
+           system_.sys_tables_ t
+     where p.index_id = i.index_id
+       and i.table_id = t.table_id
+       and t.table_name = '@{aTable}'
+     order by 1;
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_FKC;
+    DROP TABLE NGD_FKP;
+    DROP TABLE NGD_FKC2;
+    DROP TABLE NGD_FKP2;
+    SKIP END;
+
+##################################
+SECTOR; A -- 디스크 파티션드 테이블의 PK 가 네이티브 글로벌로 선다
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    create table ngd_fkp( i1 integer, i2 integer, v varchar(10) )
+    partition by range( i1 )
+    (
+      partition p1 values less than ( 100 ),
+      partition p2 values less than ( 200 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    # ★ 파티션 키(i1)를 담지 않은 PK. 디스크 파티션드 테이블에서 이것은
+    #   원래 글로벌로 서는 것이 계약이고(ERR-31415 의 조건이 디스크에서
+    #   거짓이다), 프로퍼티가 켜져 있으므로 **네이티브**로 서야 한다.
+    alter table ngd_fkp add constraint ngd_fkp_pk primary key ( i2 );
+
+    CALL SHOW_IMPL( "NGD_FKP" );
+
+    insert into ngd_fkp values (  10, 1000, 'P1' );
+    insert into ngd_fkp values ( 150, 2000, 'P2' );
+    insert into ngd_fkp values ( 250, 3000, 'PD' );
+    commit;
+
+    select /*+ index(ngd_fkp, ngd_fkp_pk) */ i1, i2, v from ngd_fkp order by i2;
+
+##################################
+SECTOR; B -- 자식의 FK 가 그 글로벌 PK 를 참조한다
+##################################
+    create table ngd_fkc( c1 integer, c2 integer ) tablespace sys_tbs_disk_data;
+    alter table ngd_fkc add constraint ngd_fkc_fk foreign key ( c2 )
+        references ngd_fkp ( i2 );
+
+    # 부모의 **각 파티션**에 있는 값을 참조한다 -- 전부 성공해야 한다.
+    # 글로벌 분기가 서지 않으면 파티션 프루닝이 엉뚱한 파티션을 골라
+    # 여기서 거짓 ERR-31077 이 난다.
+    insert into ngd_fkc values ( 1, 1000 );
+    insert into ngd_fkc values ( 2, 2000 );
+    insert into ngd_fkc values ( 3, 3000 );
+    commit;
+    select c1, c2 from ngd_fkc order by c1;
+
+    # 없는 값을 참조하면 실패해야 한다.
+    insert into ngd_fkc values ( 4, 9999 );
+
+    # NULL 은 참조 검사를 하지 않는다.
+    insert into ngd_fkc values ( 5, null );
+    commit;
+    select c1, nvl( c2, -1 ) as c2 from ngd_fkc order by c1;
+
+##################################
+SECTOR; C -- 참조되는 부모는 지울 수 없다
+##################################
+# 부모 로우가 어느 파티션에 있든 마찬가지여야 한다.
+    delete from ngd_fkp where i2 = 1000;
+    delete from ngd_fkp where i2 = 2000;
+    delete from ngd_fkp where i2 = 3000;
+
+    # 참조되지 않는 값은 지울 수 있어야 한다.
+    insert into ngd_fkp values ( 250, 4000, 'PD2' );
+    commit;
+    delete from ngd_fkp where i2 = 4000;
+    commit;
+
+    select /*+ index(ngd_fkp, ngd_fkp_pk) */ i1, i2, v from ngd_fkp order by i2;
+
+##################################
+SECTOR; D -- ★ 부모 로우가 파티션 사이를 옮겨도 참조가 유지되는가
+##################################
+# 이 절이 잠금 분기를 겨눈다. row movement 는 부모 로우의 **owner 파티션**을
+# 바꾸므로, 다음 FK 검사는 다른 파티션에서 잠금을 잡아야 한다.
+    alter table ngd_fkp enable row movement;
+
+    # PK 값(i2)은 그대로 두고 파티션 키(i1)만 바꾼다 -> 참조는 유지된다.
+    update ngd_fkp set i1 = 250 where i2 = 1000;
+    commit;
+
+    select /*+ index(ngd_fkp, ngd_fkp_pk) */ i1, i2, v from ngd_fkp order by i2;
+    select count(*) as in_p1 from ngd_fkp partition( p1 );
+    select count(*) as in_pd from ngd_fkp partition( pd );
+
+    # D1. 옮긴 뒤에도 부모 삭제는 막혀야 한다 -- 새 owner 에서 잠금이 선다.
+    delete from ngd_fkp where i2 = 1000;
+
+    # D2. 옮긴 뒤에도 그 값을 참조하는 새 자식이 들어가야 한다.
+    insert into ngd_fkc values ( 6, 1000 );
+    commit;
+    select c1, nvl( c2, -1 ) as c2 from ngd_fkc order by c1;
+
+    # D3. 되돌려 옮겨도 마찬가지여야 한다.
+    update ngd_fkp set i1 = 10 where i2 = 1000;
+    commit;
+    delete from ngd_fkp where i2 = 1000;
+    insert into ngd_fkc values ( 7, 1000 );
+    commit;
+    select c1, nvl( c2, -1 ) as c2 from ngd_fkc order by c1;
+
+    # D4. 자식을 먼저 지우면 부모를 지울 수 있어야 한다.
+    delete from ngd_fkc where c2 = 1000;
+    commit;
+    delete from ngd_fkp where i2 = 1000;
+    commit;
+    select /*+ index(ngd_fkp, ngd_fkp_pk) */ i1, i2, v from ngd_fkp order by i2;
+
+##################################
+SECTOR; E -- UNIQUE 글로벌 인덱스를 참조하는 FK
+##################################
+# PK 가 아니라 UNIQUE 제약이 부모인 경우. 같은 글로벌 분기를 타야 한다.
+    create table ngd_fkp2( i1 integer, i2 integer, v varchar(10) )
+    partition by range( i1 )
+    (
+      partition p1 values less than ( 100 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    alter table ngd_fkp2 add constraint ngd_fkp2_uk unique ( i2 );
+    CALL SHOW_IMPL( "NGD_FKP2" );
+
+    insert into ngd_fkp2 values (  10, 100, 'A' );
+    insert into ngd_fkp2 values ( 500, 200, 'B' );
+    commit;
+
+    create table ngd_fkc2( c1 integer, c2 integer ) tablespace sys_tbs_disk_data;
+    alter table ngd_fkc2 add constraint ngd_fkc2_fk foreign key ( c2 )
+        references ngd_fkp2 ( i2 );
+
+    insert into ngd_fkc2 values ( 1, 100 );
+    insert into ngd_fkc2 values ( 2, 200 );
+    commit;
+    select c1, c2 from ngd_fkc2 order by c1;
+
+    insert into ngd_fkc2 values ( 3, 300 );
+
+    # 부모의 유일성이 파티션을 가로질러 서는가 -- 부모가 글로벌인 증거다.
+    insert into ngd_fkp2 values ( 900, 100, 'DUP' );
+
+    delete from ngd_fkp2 where i2 = 100;
+
+##################################
+SECTOR; F -- 부모의 파티션 DDL 이 참조를 깨지 않는가
+##################################
+# 파티션 DDL 은 글로벌 트리를 다시 세운다. 다시 세운 트리로 FK 검사가
+# 계속 서야 한다.
+    alter table ngd_fkp2 split partition pd at ( 1000 ) into
+        ( partition p2, partition pd );
+
+    CALL SHOW_IMPL( "NGD_FKP2" );
+    select /*+ index(ngd_fkp2, ngd_fkp2_uk) */ i1, i2, v from ngd_fkp2 order by i2;
+
+    # F1. DDL 뒤에도 참조되는 부모는 못 지운다.
+    delete from ngd_fkp2 where i2 = 200;
+
+    # F2. DDL 뒤에도 없는 값은 참조할 수 없다.
+    insert into ngd_fkc2 values ( 4, 400 );
+
+    # F3. DDL 뒤에도 있는 값은 참조할 수 있다.
+    insert into ngd_fkc2 values ( 5, 100 );
+    commit;
+    select c1, c2 from ngd_fkc2 order by c1;
+
+    # F4. DDL 뒤에도 부모의 유일성이 파티션을 가로질러 선다.
+    insert into ngd_fkp2 values ( 900, 200, 'DUP2' );
+    select /*+ index(ngd_fkp2, ngd_fkp2_uk) */ i1, i2, v from ngd_fkp2 order by i2;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    DROP TABLE NGD_FKC2;
+    DROP TABLE NGD_FKP2;
+    DROP TABLE NGD_FKC;
+    DROP TABLE NGD_FKP;
+}

@@ -1,0 +1,325 @@
+###########################################################################
+# TestCase Description = PSM 이 글로벌 인덱스 디스크 테이블을 읽고 쓰고 잠근다.
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+#                        커버리지 §0.6.2 의 "PSM 커서·DML Disk 0").
+#
+# ★ 메모리 판(`Memory/Query/psmGlobalAccess.tc`)에 더하는 것
+#
+#   A~C 절은 같은 물음을 디스크 기계에 던진다. 그 위에 **메모리 판에 없는
+#   절 하나**를 더한다:
+#
+#     D  ★ `FOR UPDATE` 커서가 글로벌 인덱스를 탄다
+#
+#        글로벌 커서는 논리 테이블 핸들로 열리므로 **그 커서로는 로우를
+#        잠글 수 없다** -- 잠금은 로우를 실제로 소유한 파티션의 커서로
+#        넘겨야 한다(`qmnSCAN::handoffRowToOwner`, `smiGlobalScanProperties`
+#        의 owner 채널). `FOR UPDATE` 는 그 handoff 를 **읽기마다** 요구하는
+#        유일한 SQL 이다. 스위트 전량에서 글로벌 인덱스를 지정한
+#        `FOR UPDATE` 는 0 회였다.
+#
+# ★ 실측으로 좁힌 것 -- `WHERE CURRENT OF` 와 커서 안의 UPDATE
+#
+#   이 케이스를 쓰면서 두 가지를 재 보고 **케이스에서 뺐다.** 둘 다 글로벌
+#   인덱스와 무관한 일반 제약이기 때문이다. 여기 적어 두는 이유는 다음
+#   사람이 같은 것을 다시 재지 않게 하기 위해서다:
+#
+#     · `WHERE CURRENT OF <커서>` 는 이 문법에 없다 -> ERR-31001.
+#     · `FOR UPDATE` 커서를 도는 **루프 안에서** UPDATE 하면 ERR-1105D
+#       ("Unable to begin a new update statement"). **대조군으로 확인함** --
+#       비파티션드 테이블 + 평범한 로컬 유일 인덱스에서도 같은 오류다.
+#       즉 글로벌 인덱스의 성질이 아니라 열린 갱신 커서의 성질이다.
+#
+#   그래서 D 절은 `FOR UPDATE` 커서를 **끝까지 돌기만** 한다. 재려는 것은
+#   handoff 가 반복마다 서는가이지 중첩 갱신이 되는가가 아니다.
+#
+# ★★ 무엇을 재는가
+#   A  PSM 커서가 글로벌 트리를 순회하고 **파티션을 가로질러 정렬**을 받는가
+#   B  PSM 루프 안의 DML 이 파티션을 넘기고(row movement) 트리가 따라오는가
+#   C  유일성 위반을 PSM 예외로 잡은 **뒤에** 트리가 정합인가
+#   D  ★ `FOR UPDATE` 커서가 글로벌 인덱스를 타고, 잠근 뒤에도 값이 옳은가
+#   E  동적 SQL(`EXECUTE IMMEDIATE`) 이 같은 트리를 본다
+#
+#   ★ C 가 특히 이 스위트의 몫이다. 예외를 잡아 계속 도는 경로는 실패한
+#     키 삽입이 **반쪽만 남았는지**를 드러낸다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+
+DEF SHOW_IMPL( @aIndex )
+{
+    select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = '@{aIndex}';
+}
+
+DEF HEAP_VS_TREE()
+{
+    select /*+ FULL SCAN(ngd_psm) */ count(*) as total_heap from ngd_psm;
+    select /*+ index(ngd_psm, ngd_psm_g) */ count(*)          as total_tree from ngd_psm;
+    select /*+ index(ngd_psm, ngd_psm_g) */ count(distinct k) as distinct_k from ngd_psm;
+}
+
+DEF PART_SPREAD()
+{
+    select count(*) as in_p1 from ngd_psm partition( p1 );
+    select count(*) as in_p2 from ngd_psm partition( p2 );
+    select count(*) as in_pd from ngd_psm partition( pd );
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP PROCEDURE NGD_PSM_WALK;
+    DROP PROCEDURE NGD_PSM_MOVE;
+    DROP PROCEDURE NGD_PSM_DUP;
+    DROP PROCEDURE NGD_PSM_LOCK;
+    DROP PROCEDURE NGD_PSM_DYN;
+    DROP TABLE NGD_PSM;
+    DROP TABLE NGD_PSM_LOG;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    create table ngd_psm ( p integer, k integer, v varchar(16) )
+    partition by range ( p )
+    (
+      partition p1 values less than ( 10 ),
+      partition p2 values less than ( 20 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    create table ngd_psm_log ( tag varchar(24), n integer )
+        tablespace sys_tbs_disk_data;
+
+    insert into ngd_psm select level,      100 + level, 'A' from dual connect by level <= 5;
+    insert into ngd_psm select level + 10, 200 + level, 'B' from dual connect by level <= 5;
+    insert into ngd_psm select level + 20, 300 + level, 'C' from dual connect by level <= 5;
+    commit;
+
+    # 파티션 키(p)를 담지 않은 유일 키 -> 글로벌이어야만 설 수 있다
+    create unique index ngd_psm_g on ngd_psm ( k ) tablespace sys_tbs_disk_data;
+    alter table ngd_psm enable row movement;
+    CALL SHOW_IMPL( "NGD_PSM_G" );
+
+    CALL HEAP_VS_TREE();
+    CALL PART_SPREAD();
+
+##################################
+SECTOR; A -- PSM 커서가 글로벌 트리를 순회한다
+##################################
+    create or replace procedure ngd_psm_walk as
+        cursor c1 is
+            select /*+ index(ngd_psm, ngd_psm_g) */ k, p
+              from ngd_psm order by k;
+        v_cnt   integer := 0;
+        v_prev  integer := -1;
+        v_order integer := 1;
+    begin
+        for r in c1 loop
+            v_cnt := v_cnt + 1;
+            -- 파티션을 가로질러 키 순서가 보존되는가. 글로벌 인덱스가
+            -- 주는 값이 정확히 이것이므로, 어긋나면 0 으로 남는다.
+            if r.k <= v_prev then
+                v_order := 0;
+            end if;
+            v_prev := r.k;
+        end loop;
+        insert into ngd_psm_log values ( 'WALK_COUNT', v_cnt );
+        insert into ngd_psm_log values ( 'WALK_ORDERED', v_order );
+    end;
+    /
+
+    exec ngd_psm_walk();
+    commit;
+
+    select tag, n from ngd_psm_log order by tag;
+    delete from ngd_psm_log;
+    commit;
+
+##################################
+SECTOR; B -- PSM 루프 안의 DML 이 파티션을 넘긴다
+##################################
+    create or replace procedure ngd_psm_move as
+        cursor c2 is select k from ngd_psm where p < 10;
+        v_cnt integer := 0;
+    begin
+        -- P1 의 행들을 PD 쪽으로 민다. 한 문장이 아니라 루프 안의
+        -- 갱신이므로 커서 handoff 가 반복마다 서야 한다.
+        for r in c2 loop
+            update ngd_psm set p = p + 20 where k = r.k;
+            v_cnt := v_cnt + 1;
+        end loop;
+        insert into ngd_psm_log values ( 'MOVED', v_cnt );
+    end;
+    /
+
+    exec ngd_psm_move();
+    commit;
+
+    select tag, n from ngd_psm_log order by tag;
+
+    # B1. 잃지도 겹치지도 않았는가.
+    CALL HEAP_VS_TREE();
+
+    # B2. 파티션 배치가 옮겨졌는가.
+    CALL PART_SPREAD();
+
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p, v from ngd_psm order by k;
+
+    delete from ngd_psm_log;
+    commit;
+
+##################################
+SECTOR; C -- 유일성 위반을 PSM 예외로 잡는다
+##################################
+# ★ 잡은 **뒤에** 트리가 정합인지가 이 절의 핵심이다.
+    create or replace procedure ngd_psm_dup as
+        v_err integer := 0;
+    begin
+        begin
+            -- 이미 있는 키를 다른 파티션에 넣는다. 트리가 하나이므로
+            -- 실패해야 한다.
+            insert into ngd_psm values ( 5, 301, 'DUP' );
+        exception
+            when others then
+                v_err := 1;
+        end;
+        insert into ngd_psm_log values ( 'DUP_REJECTED', v_err );
+
+        -- 예외를 잡은 뒤에도 정상 삽입이 되는가.
+        insert into ngd_psm values ( 6, 901, 'AFTER-EXC' );
+        insert into ngd_psm_log values ( 'AFTER_EXC_OK', 1 );
+    end;
+    /
+
+    exec ngd_psm_dup();
+    commit;
+
+    select tag, n from ngd_psm_log order by tag;
+
+    # C1. 거절된 키가 트리에 유령으로 남지 않았는가 -- 한 행이어야 한다.
+    select /*+ index(ngd_psm, ngd_psm_g) */ count(*) as k301_rows
+      from ngd_psm where k = 301;
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p, v from ngd_psm where k = 301;
+
+    # C2. 예외 뒤의 삽입이 트리에 들어갔는가.
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p, v from ngd_psm where k = 901;
+
+    # C3. 힙과 트리가 여전히 같은가 -- 반쪽이 남았다면 여기서 갈린다.
+    CALL HEAP_VS_TREE();
+
+    delete from ngd_psm_log;
+    commit;
+
+##################################
+SECTOR; D -- ★ FOR UPDATE 커서가 글로벌 인덱스를 탄다
+##################################
+# 글로벌 커서는 논리 테이블 핸들로 열려 있어 그 커서로는 로우를 잠글 수
+# 없다. 잠금은 로우를 소유한 파티션의 커서로 넘어가야 한다. FOR UPDATE 는
+# 그 handoff 를 읽기마다 요구한다.
+#
+# ★ 루프 안에서 갱신하지 않는다 -- 머리말의 실측 참조(ERR-1105D 는 글로벌
+#   인덱스와 무관한 일반 제약이다).
+    create or replace procedure ngd_psm_lock as
+        cursor c3 is
+            select /*+ index(ngd_psm, ngd_psm_g) */ k, p
+              from ngd_psm where k between 201 and 205 for update;
+        v_cnt integer := 0;
+        v_sum integer := 0;
+    begin
+        for r in c3 loop
+            v_cnt := v_cnt + 1;
+            v_sum := v_sum + r.k;
+        end loop;
+        insert into ngd_psm_log values ( 'LOCK_WALK', v_cnt );
+        insert into ngd_psm_log values ( 'LOCK_SUM',  v_sum );
+    end;
+    /
+
+    exec ngd_psm_lock();
+    commit;
+
+    select tag, n from ngd_psm_log order by tag;
+
+    # D1. 잠금이 끝난 뒤에도 값이 그대로인가.
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p, v from ngd_psm
+     where k between 201 and 205 order by k;
+
+    # D2. 같은 것을 PSM 밖에서도 -- 직접 SQL 의 FOR UPDATE.
+    AUTOCOMMIT OFF;
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p from ngd_psm where k = 205 for update;
+    update ngd_psm set v = 'LOCKED' where k = 205;
+    commit;
+    AUTOCOMMIT ON;
+
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p, v from ngd_psm where k = 205;
+    CALL HEAP_VS_TREE();
+
+    delete from ngd_psm_log;
+    commit;
+
+##################################
+SECTOR; E -- 동적 SQL 이 같은 트리를 본다
+##################################
+# EXECUTE IMMEDIATE 는 실행 시점에 준비되므로 정적 커서와 다른 입구다.
+    create or replace procedure ngd_psm_dyn as
+        v_cnt integer := 0;
+    begin
+        execute immediate 'update ngd_psm set v = ''DYN'' where k = 203';
+
+        select /*+ index(ngd_psm, ngd_psm_g) */ count(*) into v_cnt
+          from ngd_psm where v = 'DYN';
+
+        insert into ngd_psm_log values ( 'DYN_UPDATED', v_cnt );
+
+        -- 파티션을 넘기는 갱신도 동적으로.
+        execute immediate 'update ngd_psm set p = 250 where k = 203';
+
+        select /*+ index(ngd_psm, ngd_psm_g) */ count(*) into v_cnt
+          from ngd_psm where k = 203;
+
+        insert into ngd_psm_log values ( 'DYN_MOVED', v_cnt );
+    end;
+    /
+
+    exec ngd_psm_dyn();
+    commit;
+
+    select tag, n from ngd_psm_log order by tag;
+    select /*+ index(ngd_psm, ngd_psm_g) */ k, p, v from ngd_psm where k = 203;
+    CALL HEAP_VS_TREE();
+    CALL PART_SPREAD();
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    SKIP BEGIN;
+    DROP PROCEDURE NGD_PSM_WALK;
+    DROP PROCEDURE NGD_PSM_MOVE;
+    DROP PROCEDURE NGD_PSM_DUP;
+    DROP PROCEDURE NGD_PSM_LOCK;
+    DROP PROCEDURE NGD_PSM_DYN;
+    SKIP END;
+    DROP TABLE NGD_PSM;
+    DROP TABLE NGD_PSM_LOG;
+}

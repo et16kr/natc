@@ -10,4 +10,11 @@ lockTable_IS_NOWAIT.sql                 # pdt/Design/LOCK_TABLE/IS_NOWAIT.sql
 lockTable_IX_NOWAIT.sql                 # pdt/Design/LOCK_TABLE/IX_NOWAIT.sql
 lockTable_X_NOWAIT.sql                  # pdt/Design/LOCK_TABLE/X_NOWAIT.sql
 lockTable_SIX_NOWAIT.sql                # pdt/Design/LOCK_TABLE/SIX_NOWAIT.sql
+#
+# ★ 아래는 **맨 뒤여야 한다.** 위 이식분 다수가 절대 카탈로그 id
+#   (`__SYS_PART_IDX_ID_<n>`)를 기대값에 담고 있어, 앞에 케이스를 끼우면
+#   그 id 가 전부 밀린다. 새 케이스는 이 줄 아래에 붙인다.
+#
+savepointDdlDisk.tc                     # 세이브포인트를 가로지르는 DDL 사다리 (신규)
+crossPartitionConcurrency.tc            # 두 세션의 경합 — FOR UPDATE NOWAIT · 전 파티션 X 잠금 (신규)
 -------------------------------------------------------------------------------

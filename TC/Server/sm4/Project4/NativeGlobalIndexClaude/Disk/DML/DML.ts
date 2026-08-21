@@ -43,4 +43,12 @@ update_integer_list.sql                 # pdt/Design/UPDATE/integer_list.sql
 move_integer_hash.sql                   # pdt/Design/MOVE/integer_hash.sql
 move_integer_range.sql                  # pdt/Design/MOVE/integer_range.sql
 move_integer_list.sql                   # pdt/Design/MOVE/integer_list.sql
+#
+# ★ 아래는 **맨 뒤여야 한다.** 위 이식분 다수가 절대 카탈로그 id
+#   (`__SYS_PART_IDX_ID_<n>`)를 기대값에 담고 있어, 앞에 케이스를 끼우면
+#   그 id 가 전부 밀린다. 새 케이스는 이 줄 아래에 붙인다.
+#
+variableKeyDisk.tc                      # 가변 폭 글로벌 키 — 디스크 인덱스의 FIXED/VARIABLE 갈림 (신규)
+triggerRowMovementDisk.tc               # 트리거 × row movement (신규)
+mergeIntoDisk.tc                        # MERGE INTO — DELETE 절 포함 (신규)
 -------------------------------------------------------------------------------

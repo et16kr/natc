@@ -1,0 +1,802 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = memberNo 디렉터리 — 발급 · DROPPED · 수동 회수 (디스크).
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 §0.7 의 Z3
+$T0> #                        "memberNo 회수 -- GR-09 한 트랙 전체가 0").
+$T0> #
+$T0> # ★★ 왜 이 축이 통째로 비어 있었나
+$T0> #
+$T0> #   memberNo 는 디스크 네이티브 글로벌 인덱스의 **핵심 자료구조**다. 트리는
+$T0> #   하나인데 로우는 파티션마다 흩어져 있으므로, 키 헤더가 소유 파티션을
+$T0> #   가리키는 번호(memberNo, 2 바이트)를 싣는다. 그 번호의 발급·상태·회수를
+$T0> #   담는 것이 **멤버 디렉터리**이고, 제품은 그것을 고정 뷰로 내놓는다:
+$T0> #
+$T0> #       V$DISK_BTREE_GLOBAL_MEMBER
+$T0> #           INDEX_NAME · INDEX_ID · MEMBER_NO · PARTITION_OID ·
+$T0> #           PARTITION_TBS_ID · STATE · STATE_NAME · STORAGE_TYPE · KEY_COUNT
+$T0> #
+$T0> #   스위트 전량에서 이 뷰를 읽는 케이스가 **0** 이었다. 즉 이 프로젝트가
+$T0> #   새로 만든 자료구조를 SQL 수준에서 보는 눈이 하나도 없었다.
+$T0> #
+$T0> # ★★ 무엇을 주장하는가 -- 계약 넷
+$T0> #
+$T0> #   A  **발급은 파티션 하나에 번호 하나**다. 파티션 N 개짜리 테이블에
+$T0> #      글로벌 인덱스를 만들면 0..N-1 이 ACTIVE 로 선다.
+$T0> #
+$T0> #   B  ★ **번호는 재사용되지 않는다.** 발급은 언제나 `mMemberCnt` 이고
+$T0> #      단조 증가한다(`sdnbBTree::nextMemberNo`). 재사용하지 않는 이유가
+$T0> #      그 함수의 주석에 있다 -- purge 가 중단·크래시·큐 포화로 옛 키를
+$T0> #      다 지우지 못한 사이에 번호를 되팔면, **옛 파티션의 키가 새 파티션의
+$T0> #      키로 보이고 오류 없이 남의 로우를 돌려준다.** 생애 발급 수라는
+$T0> #      상한을 무는 대가로 그 창을 없앤다.
+$T0> #
+$T0> #   C  ★ 그래서 **`DROP PARTITION` 은 자리를 비우지 않는다.** 그 자리는
+$T0> #      `DROPPED` 로 남고, 자리 수(slots_total)가 살아 있는 파티션 수보다
+$T0> #      많아진다. 서버 로그가 같은 말을 한다 -- "Member numbers are never
+$T0> #      reused, so dropping partitions frees none".
+$T0> #
+$T0> #   D  ★★ **자리를 되돌리는 것은 인덱스를 다시 세우는 DDL 이다.**
+$T0> #      이 케이스를 쓰면서 실측으로 갈라낸 구분이고, 처음 세운 가설과
+$T0> #      다르다 -- 그러므로 여기 적어 둔다:
+$T0> #
+$T0> #        `DROP PARTITION`          디렉터리를 손대지 않는다. DROPPED 가 남는다
+$T0> #        `SPLIT PARTITION` 등      **인덱스를 통째로 다시 만든다.** 새 인덱스의
+$T0> #          재구성 DDL             디렉터리는 살아 있는 파티션만으로 0..N-1 이
+$T0> #                                 되므로 DROPPED 자리가 사라진다
+$T0> #        `ALTER INDEX ... REBUILD` 같은 일을 명시적으로 부른다. 로그의 문구가
+$T0> #                                 "resets the count to the live partition
+$T0> #                                 count" 다
+$T0> #
+$T0> #      ★ **이것은 슬롯 재사용이 아니다.** 재사용이라면 살아 있는 인덱스의
+$T0> #        DROPPED 자리에 새 파티션이 들어가는 것이고 위의 위험이 그대로
+$T0> #        열린다. 실제로 일어나는 일은 **디렉터리 자체가 새로 서는 것**이며,
+$T0> #        새 디렉터리에는 옛 키가 없으므로 번호가 0 부터 다시 나가도
+$T0> #        안전하다. `nextMemberNo` 의 멱등 분기가 바로 그 재구성 경로를 위해
+$T0> #        있다 -- "리빌드에서 만든 새 인덱스의 디렉터리에 새 파티션들을 이미
+$T0> #        넣어 두고, 그 파티션들이 커밋 pending 의 등록 경로로 한 번 더
+$T0> #        온다."
+$T0> #
+$T0> #      C 절이 이 구분을 한 화면에 담는다: DROP 뒤에 DROPPED 를 보이고,
+$T0> #      곧이어 SPLIT 뒤에 그것이 사라지는 것을 보인다.
+$T0> #
+$T0> # ★★ 자동 회수(GLOBAL_INDEX_AUTO_RECLAIM)는 왜 여기서 못 재는가
+$T0> #
+$T0> #   프로퍼티는 기본값 1 이고 이 케이스가 그것을 전사에 남긴다. 그러나
+$T0> #   **자동 회수가 도는 조건은 SQL 로 만들 수 없다.** 방아쇠는 발급 수가
+$T0> #   상한의 90% 에 닿는 것이고(`SDNB_MEMBER_DIR_WARN_AT`), 8K 페이지에서
+$T0> #   상한은 8,000 이라 임계는 **7,200 발급**이다. 그 지점에 닿으려면 파티션
+$T0> #   DDL 을 7,200 번 돌려야 한다 -- 회귀 스위트의 케이스 하나가 할 일이
+$T0> #   아니다.
+$T0> #
+$T0> #   그래서 이 케이스는 자동 회수를 **주장하지 않는다.** 주장하는 것은
+$T0> #   그 아래 계층 -- 디렉터리가 실재하고, 발급이 단조이고, 수동 회수가
+$T0> #   듣는다는 것 -- 이고, 자동 회수는 그 위에 얹히는 최적화다. 임계 경로는
+$T0> #   FIT 이나 전용 하네스의 몫이며, 그 사실을 여기 적어 두는 것이 이
+$T0> #   케이스가 그 공백에 대해 할 수 있는 정직한 일이다.
+$T0> #
+$T0> # ★ 기대값에 담지 않는 것 -- PARTITION_OID · PARTITION_TBS_ID · INDEX_ID
+$T0> #   셋 다 실행마다 달라지는 값이라 오라클에 담으면 케이스가 환경에 묶인다.
+$T0> #   담는 것은 `INDEX_NAME · MEMBER_NO · STATE_NAME · STORAGE_TYPE ·
+$T0> #   KEY_COUNT` 다.
+$T0> #
+$T0> #   `KEY_COUNT` 는 **마지막 통계 수집이 센 값**이고 DML 이 유지하는
+$T0> #   카운터가 아니다(D18 의 주석). 이 케이스는 통계를 걷지 않으므로 0 이
+$T0> #   나오는 것이 옳다 -- 그 0 이 "카운터가 아니다" 를 못박는다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # ★ 이 케이스의 눈. 실행마다 달라지는 컬럼은 담지 않는다.
+$T0> #
+
+$T0> #
+$T0> # 살아 있는 파티션 수. 위의 slots_active 와 견주는 값이다.
+$T0> #
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_MEM;
+$T0> DROP TABLE NGD_MEM_L;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # 자동 회수의 전제를 전사에 남긴다. 머리말이 적은 대로 이 케이스는
+$T0> # 자동 회수가 도는 것을 주장하지 않는다 -- 값만 못박는다.
+$T0> select name, value1 from v$property where name = 'GLOBAL_INDEX_AUTO_RECLAIM';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+GLOBAL_INDEX_AUTO_RECLAIM                                                                                                                                                                                                                                         
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> create table ngd_mem( p integer, k integer )
+    partition by range( p )
+    (
+      partition p1 values less than ( 10 ),
+      partition p2 values less than ( 20 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # 파티션 키(p)를 담지 않은 키 -> 글로벌이어야만 설 수 있다
+$T0> create index ngd_mem_g on ngd_mem( k ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> select decode( pi.partition_type, 101, 'NATIVE', 'OTHER' ) as impl
+      from system_.sys_part_indices_ pi, system_.sys_indices_ i
+     where pi.index_id = i.index_id and i.index_name = 'NGD_MEM_G';
+IMPL    
+----------
+NATIVE  
+1 row selected.
+
+$T0> insert into ngd_mem select level,      level      from dual connect by level <= 5;
+5 rows inserted.
+$T0> insert into ngd_mem select level + 10, level + 10 from dual connect by level <= 5;
+5 rows inserted.
+$T0> insert into ngd_mem select level + 20, level + 20 from dual connect by level <= 5;
+5 rows inserted.
+$T0> commit;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 발급은 파티션 하나에 번호 하나
+$T0> ##################################
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+3                    
+1 row selected.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           ACTIVE            0           0                    
+3 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+3                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+3                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+0                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+15                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+15                   
+1 row selected.
+
+$T0> # 디렉터리가 몇 장을 쓰는가 -- 격자 한 장이면 1 이다.
+$T0> select index_name, member_dir_page_count
+      from v$disk_btree_header where index_name = 'NGD_MEM_G';
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_DIR_PAGE_COUNT 
+------------------------
+NGD_MEM_G                                                                                                                         
+1           
+1 row selected.
+
+$T0> # ★ 대조군 -- 글로벌이 아닌 인덱스는 이 뷰에 행이 없다.
+$T0> create table ngd_mem_l( p integer, k integer )
+    partition by range( p )
+    ( partition p1 values less than ( 100 ), partition pd values default )
+    tablespace sys_tbs_disk_data;
+Create success.
+$T0> create index ngd_mem_l_l on ngd_mem_l( k ) local;
+Create success.
+
+$T0> select count(*) as local_index_rows_in_view
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_L_L';
+LOCAL_INDEX_ROWS_IN_VIEW 
+---------------------------
+0                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 파티션을 늘리면 다음 번호가 나간다
+$T0> ##################################
+$T0> alter table ngd_mem split partition pd at ( 30 ) into
+        ( partition p3, partition pd );
+Alter success.
+
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+4                    
+1 row selected.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+3           ACTIVE            0           0                    
+4 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+0                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+15                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+15                   
+1 row selected.
+
+$T0> # 트리가 여전히 뜻을 갖는가 -- 파티션을 가로지르는 정렬.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem order by k;
+P           K           
+---------------------------
+1           1           
+2           2           
+3           3           
+4           4           
+5           5           
+11          11          
+12          12          
+13          13          
+14          14          
+15          15          
+21          21          
+22          22          
+23          23          
+24          24          
+25          25          
+15 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- ★ DROP 은 자리를 비우지 않고, 재구성 DDL 은 디렉터리를 새로 세운다
+$T0> ##################################
+$T0> alter table ngd_mem drop partition p2;
+Alter success.
+
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+3                    
+1 row selected.
+
+$T0> # ★ 판정 하나 -- 자리 수는 줄지 않고 하나가 DROPPED 여야 한다.
+$T0> #   여기서 자리가 줄면 살아 있는 인덱스가 번호를 되판 것이고, 그것은
+$T0> #   머리말 B 가 적은 창을 여는 일이다.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           DROPPED           0           0                    
+NGD_MEM_G                                                                                                                         
+3           ACTIVE            0           0                    
+4 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+3                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+1                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+10                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+10                   
+1 row selected.
+
+$T0> # 지워진 파티션의 키가 트리에 유령으로 남지 않았는가.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(*) as ghost_from_p2
+      from ngd_mem where k between 11 and 15;
+GHOST_FROM_P2        
+-----------------------
+0                    
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem order by k;
+P           K           
+---------------------------
+1           1           
+2           2           
+3           3           
+4           4           
+5           5           
+21          21          
+22          22          
+23          23          
+24          24          
+25          25          
+10 rows selected.
+
+$T0> # ★ 판정 둘 -- 재구성 DDL 은 인덱스를 통째로 다시 만든다. 그래서
+$T0> #   **디렉터리가 새로 서고** DROPPED 자리가 사라진다. 자리 수는 살아
+$T0> #   있는 파티션 수와 같아져야 한다.
+$T0> #
+$T0> #   슬롯 재사용과 헷갈리지 말 것 -- 머리말 D 를 볼 것. 여기서 사라지는
+$T0> #   것은 자리가 아니라 **디렉터리 전체**이고, 새 디렉터리에는 옛 키가
+$T0> #   없다.
+$T0> alter table ngd_mem split partition pd at ( 40 ) into
+        ( partition p4, partition pd );
+Alter success.
+
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+4                    
+1 row selected.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+3           ACTIVE            0           0                    
+4 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 새 파티션에 넣은 로우가 트리에 들어가는가.
+$T0> insert into ngd_mem values ( 35, 35 );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem where k = 35;
+P           K           
+---------------------------
+35          35          
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+11                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+11                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- ★ ALTER INDEX ... REBUILD 가 명시적 회수 수단이다
+$T0> ##################################
+$T0> # 서버 로그가 명시한 계약이다 -- "ALTER INDEX ... REBUILD resets the count
+$T0> # to the live partition count".
+$T0> #
+$T0> # ★ C 절이 보인 재구성 DDL 과 같은 일을 **문장 하나로** 부르는 것이 이
+$T0> #   경로다. 차이는 부수 효과뿐이다 -- 재구성 DDL 은 파티션 집합을 바꾸면서
+$T0> #   덤으로 디렉터리를 새로 세우고, 이쪽은 파티션을 건드리지 않고 그것만
+$T0> #   한다. 운용자가 쓸 수 있는 것은 이쪽이다.
+$T0> alter index ngd_mem_g rebuild;
+Alter success.
+
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+4                    
+1 row selected.
+
+$T0> # ★ 판정 -- 자리 수 == 살아 있는 파티션 수, DROPPED 는 0.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+3           ACTIVE            0           0                    
+4 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+0                    
+1 row selected.
+
+$T0> # 리빌드가 구현을 바꾸지 않았는가 -- 판별자는 그대로 101 이어야 한다.
+$T0> select decode( pi.partition_type, 101, 'NATIVE', 'OTHER' ) as impl_after_rebuild
+      from system_.sys_part_indices_ pi, system_.sys_indices_ i
+     where pi.index_id = i.index_id and i.index_name = 'NGD_MEM_G';
+IMPL_AFTER_REBUILD  
+----------------------
+NATIVE  
+1 row selected.
+
+$T0> # 회수 뒤에도 트리가 온전한가.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+11                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+11                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem order by k;
+P           K           
+---------------------------
+1           1           
+2           2           
+3           3           
+4           4           
+5           5           
+21          21          
+22          22          
+23          23          
+24          24          
+25          25          
+35          35          
+11 rows selected.
+
+$T0> # 회수 뒤에도 새 파티션 DDL 이 다음 번호를 받는가 -- 카운터가
+$T0> # 다시 선 자리에서 이어져야 한다.
+$T0> alter table ngd_mem split partition pd at ( 50 ) into
+        ( partition p5, partition pd );
+Alter success.
+
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+5                    
+1 row selected.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+3           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+4           ACTIVE            0           0                    
+5 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+5                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+5                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+0                    
+1 row selected.
+
+$T0> insert into ngd_mem values ( 45, 45 );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem where k = 45;
+P           K           
+---------------------------
+45          45          
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+12                   
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+12                   
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- TRUNCATE PARTITION 은 자리를 없애지 않는다
+$T0> ##################################
+$T0> # 파티션이 살아 있으므로 번호도 ACTIVE 로 남아야 한다. 비워지는 것은
+$T0> # 그 멤버가 가진 키뿐이다.
+$T0> alter table ngd_mem truncate partition p1;
+Alter success.
+
+$T0> select count(*) as live_parts
+      from system_.sys_table_partitions_ p, system_.sys_tables_ t
+     where p.table_id = t.table_id and t.table_name = 'NGD_MEM';
+LIVE_PARTS           
+-----------------------
+5                    
+1 row selected.
+$T0> select index_name, member_no, state_name, storage_type, key_count
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G'
+     order by member_no;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+MEMBER_NO   STATE_NAME        STORAGE_TYPE KEY_COUNT            
+---------------------------------------------------------------------
+NGD_MEM_G                                                                                                                         
+0           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+1           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+2           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+3           ACTIVE            0           0                    
+NGD_MEM_G                                                                                                                         
+4           DROPPED           0           0                    
+NGD_MEM_G                                                                                                                         
+5           ACTIVE            0           0                    
+6 rows selected.
+
+$T0> select count(*) as slots_total
+      from v$disk_btree_global_member where index_name = 'NGD_MEM_G';
+SLOTS_TOTAL          
+-----------------------
+6                    
+1 row selected.
+$T0> select count(*) as slots_active
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'ACTIVE';
+SLOTS_ACTIVE         
+-----------------------
+5                    
+1 row selected.
+$T0> select count(*) as slots_dropped
+      from v$disk_btree_global_member
+     where index_name = 'NGD_MEM_G' and state_name = 'DROPPED';
+SLOTS_DROPPED        
+-----------------------
+1                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+7                    
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+7                    
+1 row selected.
+
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(*) as ghost_from_p1
+      from ngd_mem where k between 1 and 5;
+GHOST_FROM_P1        
+-----------------------
+0                    
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem order by k;
+P           K           
+---------------------------
+21          21          
+22          22          
+23          23          
+24          24          
+25          25          
+35          35          
+45          45          
+7 rows selected.
+
+$T0> # 비운 파티션에 다시 넣을 수 있어야 한다.
+$T0> insert into ngd_mem values ( 3, 3 );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ p, k from ngd_mem where k = 3;
+P           K           
+---------------------------
+3           3           
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mem) */ count(*) as total_heap from ngd_mem;
+TOTAL_HEAP           
+-----------------------
+8                    
+1 row selected.
+$T0> select /*+ index(ngd_mem, ngd_mem_g) */ count(k) as total_tree
+      from ngd_mem where k is not null;
+TOTAL_TREE           
+-----------------------
+8                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> DROP TABLE NGD_MEM_L;
+Drop success.
+$T0> DROP TABLE NGD_MEM;
+Drop success.
+

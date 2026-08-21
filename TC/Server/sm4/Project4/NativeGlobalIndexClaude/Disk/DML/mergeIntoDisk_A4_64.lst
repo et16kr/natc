@@ -1,0 +1,491 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = MERGE INTO 가 글로벌 인덱스 디스크 테이블에 대해 옳게 도는가.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+$T0> #                        커버리지 §0.6.2 의 "MERGE INTO Disk 0").
+$T0> #
+$T0> # ★ 메모리 판(`Memory/DML/mergeInto.tc`)의 사본이 아니다 -- 두 가지가 다르다
+$T0> #
+$T0> #   ① 기계가 다르다. MERGE 의 MATCHED 갱신은 대상 커서로 도는 UPDATE 이고,
+$T0> #      파티션 키를 건드리면 한 문장 안에서 삭제+삽입으로 갈린다. 디스크에서
+$T0> #      그 갈림은 `sdc` 의 로우 경로를 타고, 글로벌 트리의 키 교체는 디스크
+$T0> #      b-tree 의 memberNo 경로를 탄다. 메모리 판이 초록이어도 이쪽은 재 본
+$T0> #      적이 없다.
+$T0> #
+$T0> #   ② ★ **DELETE 절을 더한다.** 메모리 판에 없는 절이다.
+$T0> #      `WHEN MATCHED THEN UPDATE ... DELETE WHERE ...` 는 한 문장이
+$T0> #      **갱신하고 곧바로 지운다.** 글로벌 트리 쪽에서 보면 키를 옮겼다가
+$T0> #      바로 빼는 것이고, 그 둘이 같은 문장 안에서 순서를 지키지 못하면
+$T0> #      트리에 키가 남거나 힙에 로우가 남는다. 이 조합은 스위트 어디에도
+$T0> #      없었다.
+$T0> #
+$T0> # ★★ 무엇을 재는가
+$T0> #
+$T0> #   A  MATCHED 갱신 + NOT MATCHED 삽입이 트리와 힙에 **같이** 반영되는가
+$T0> #   B  MERGE 의 갱신이 파티션 키를 건드릴 때 (row movement) 정확히 한 행인가
+$T0> #   C  글로벌 유일성이 MERGE 의 INSERT 를 통과해도 서는가
+$T0> #   D  ★ DELETE 절 -- 지운 키가 트리에서도 사라지는가
+$T0> #   E  ROLLBACK 이 트리와 힙을 **함께** 되돌리는가
+$T0> #
+$T0> #   ★ 매 절에서 **힙과 트리를 따로 센다.** MERGE 가 인덱스를 빠뜨리면
+$T0> #     문장은 성공하고 두 숫자만 갈린다 -- 오류로는 안 잡힌다.
+$T0> #
+$T0> # ★ 플랜을 보지 않는다
+$T0> #   메모리 판의 D 절은 `TRCLOG_DETAIL_PREDICATE = 1` 로 대상 하위 플랜을
+$T0> #   찍어 본다. 여기서는 그것을 옮기지 않는다 -- 플랜 문자열은 매체와
+$T0> #   옵티마이저 판단에 따라 흔들리는 기대값이고, 이 케이스가 주장하려는
+$T0> #   것은 **결과의 정합성**이다. 플랜 축은 메모리 판이 이미 들고 있다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # ★ 이 케이스의 저울. 힙과 트리를 나란히 둔다 -- MERGE 가 인덱스를
+$T0> #   빠뜨리면 두 숫자만 갈린다.
+$T0> #
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_MRG;
+$T0> DROP TABLE NGD_MRG_S;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # 대상 -- 파티션드 + 글로벌 유일 인덱스
+$T0> create table ngd_mrg ( p integer, k integer, v varchar(16) )
+    partition by range ( p )
+    (
+      partition p1 values less than ( 10 ),
+      partition p2 values less than ( 20 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # 원본 -- 평범한 테이블
+$T0> create table ngd_mrg_s ( p integer, k integer, v varchar(16) )
+        tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into ngd_mrg values ( 1,  101, 'OLD-1' );
+1 row inserted.
+$T0> insert into ngd_mrg values ( 2,  102, 'OLD-2' );
+1 row inserted.
+$T0> insert into ngd_mrg values ( 11, 103, 'OLD-3' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> # 파티션 키(p)를 담지 않은 유일 키 -> 글로벌이어야만 설 수 있다
+$T0> create unique index ngd_mrg_g on ngd_mrg ( k ) tablespace sys_tbs_disk_data;
+Create success.
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_MRG_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- MATCHED 갱신 + NOT MATCHED 삽입
+$T0> ##################################
+$T0> # 101·102 는 있고(MATCHED), 201 은 없다(NOT MATCHED).
+$T0> insert into ngd_mrg_s values ( 1,  101, 'NEW-1' );
+1 row inserted.
+$T0> insert into ngd_mrg_s values ( 2,  102, 'NEW-2' );
+1 row inserted.
+$T0> insert into ngd_mrg_s values ( 21, 201, 'NEW-INS' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> merge into ngd_mrg t using ngd_mrg_s s on ( t.k = s.k )
+        when matched then update set t.v = s.v
+        when not matched then insert values ( s.p, s.k, s.v );
+3 rows merged.
+$T0> commit;
+Commit success.
+
+$T0> # A1. 갱신이 반영됐는가 -- 트리로 읽는다.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         1           NEW-1             
+102         2           NEW-2             
+103         11          OLD-3             
+201         21          NEW-INS           
+4 rows selected.
+
+$T0> # A2. 힙과 트리가 같은 수를 말하는가.
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as total_heap from ngd_mrg;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*)          as total_tree from ngd_mrg;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(distinct k) as distinct_k from ngd_mrg;
+DISTINCT_K           
+-----------------------
+4                    
+1 row selected.
+
+$T0> # A3. 삽입된 행이 옳은 파티션으로 갔는가.
+$T0> select count(*) as in_p1 from ngd_mrg partition( p1 );
+IN_P1                
+-----------------------
+2                    
+1 row selected.
+$T0> select count(*) as in_p2 from ngd_mrg partition( p2 );
+IN_P2                
+-----------------------
+1                    
+1 row selected.
+$T0> select count(*) as in_pd from ngd_mrg partition( pd );
+IN_PD                
+-----------------------
+1                    
+1 row selected.
+
+$T0> # A4. 점 조회로 새 행을 트리에서 찾을 수 있는가.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg where k = 201;
+K           P           V                 
+----------------------------------------------
+201         21          NEW-INS           
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- MERGE 의 갱신이 파티션 키를 건드리면 row movement 다
+$T0> ##################################
+$T0> delete from ngd_mrg_s;
+3 rows deleted.
+$T0> insert into ngd_mrg_s values ( 15, 101, 'MOVED-BY-MERGE' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> alter table ngd_mrg enable row movement;
+Alter success.
+
+$T0> merge into ngd_mrg t using ngd_mrg_s s on ( t.k = s.k )
+        when matched then update set t.p = s.p, t.v = s.v
+        when not matched then insert values ( s.p, s.k, s.v );
+1 row merged.
+$T0> commit;
+Commit success.
+
+$T0> # B1. ★ 정확히 한 행인가. 갈린 채로 남으면 둘이 되거나 사라진다.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*) as k101_rows
+      from ngd_mrg where k = 101;
+K101_ROWS            
+-----------------------
+1                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg where k = 101;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+1 row selected.
+
+$T0> # B2. 옮겨졌는가 -- P1 에서 P2 로.
+$T0> select count(*) as in_p1 from ngd_mrg partition( p1 );
+IN_P1                
+-----------------------
+1                    
+1 row selected.
+$T0> select count(*) as in_p2 from ngd_mrg partition( p2 );
+IN_P2                
+-----------------------
+2                    
+1 row selected.
+$T0> select count(*) as in_pd from ngd_mrg partition( pd );
+IN_PD                
+-----------------------
+1                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as total_heap from ngd_mrg;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*)          as total_tree from ngd_mrg;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(distinct k) as distinct_k from ngd_mrg;
+DISTINCT_K           
+-----------------------
+4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 글로벌 유일성이 MERGE 의 INSERT 를 통과해도 서는가
+$T0> ##################################
+$T0> # 원본이 이미 있는 키를 **다른 파티션에** 새로 넣으려 한다.
+$T0> # ON 조건이 K 가 아니라 P 이므로 MATCHED 가 아니고, INSERT 가 시도된다.
+$T0> delete from ngd_mrg_s;
+1 row deleted.
+$T0> insert into ngd_mrg_s values ( 25, 102, 'DUP-ACROSS-PART' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> merge into ngd_mrg t using ngd_mrg_s s on ( t.p = s.p )
+        when matched then update set t.v = s.v
+        when not matched then insert values ( s.p, s.k, s.v );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as total_heap from ngd_mrg;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*)          as total_tree from ngd_mrg;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(distinct k) as distinct_k from ngd_mrg;
+DISTINCT_K           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+103         11          OLD-3             
+201         21          NEW-INS           
+4 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- ★ DELETE 절. 지운 키가 트리에서도 사라지는가
+$T0> ##################################
+$T0> # 한 문장이 갱신하고 곧바로 지운다. 트리 쪽에서 보면 키를 옮겼다가 바로
+$T0> # 빼는 것이다. 둘이 순서를 지키지 못하면 트리에 키가 남거나 힙에 로우가
+$T0> # 남는다 -- 그것을 힙/트리 두 숫자로 잡는다.
+$T0> delete from ngd_mrg_s;
+1 row deleted.
+$T0> insert into ngd_mrg_s values ( 11, 103, 'DEL-ME' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> # 지우기 전 상태를 전사에 남긴다.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+103         11          OLD-3             
+201         21          NEW-INS           
+4 rows selected.
+
+$T0> merge into ngd_mrg t using ngd_mrg_s s on ( t.k = s.k )
+        when matched then update set t.v = s.v delete where t.k = 103
+        when not matched then insert values ( s.p, s.k, s.v );
+1 row merged.
+$T0> commit;
+Commit success.
+
+$T0> # D1. 103 이 힙에서 사라졌는가.
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as k103_heap from ngd_mrg where k = 103;
+K103_HEAP            
+-----------------------
+0                    
+1 row selected.
+
+$T0> # D2. ★ 103 이 **트리에서도** 사라졌는가. 여기서 1 이 나오면 트리에
+$T0> #     유령 키가 남은 것이다.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*) as k103_tree from ngd_mrg where k = 103;
+K103_TREE            
+-----------------------
+0                    
+1 row selected.
+
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as total_heap from ngd_mrg;
+TOTAL_HEAP           
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*)          as total_tree from ngd_mrg;
+TOTAL_TREE           
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(distinct k) as distinct_k from ngd_mrg;
+DISTINCT_K           
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+201         21          NEW-INS           
+3 rows selected.
+
+$T0> # D3. 유령 키가 없다면 같은 값을 다시 넣을 수 있어야 한다.
+$T0> insert into ngd_mrg values ( 11, 103, 'REINSERTED' );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg where k = 103;
+K           P           V                 
+----------------------------------------------
+103         11          REINSERTED        
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as total_heap from ngd_mrg;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*)          as total_tree from ngd_mrg;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(distinct k) as distinct_k from ngd_mrg;
+DISTINCT_K           
+-----------------------
+4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- ROLLBACK 이 트리와 힙을 함께 되돌리는가
+$T0> ##################################
+$T0> delete from ngd_mrg_s;
+1 row deleted.
+$T0> insert into ngd_mrg_s values ( 5, 101, 'ROLLED-BACK' );
+1 row inserted.
+$T0> insert into ngd_mrg_s values ( 5, 301, 'ROLLED-BACK-INS' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+
+$T0> merge into ngd_mrg t using ngd_mrg_s s on ( t.k = s.k )
+        when matched then update set t.p = s.p, t.v = s.v
+        when not matched then insert values ( s.p, s.k, s.v );
+2 rows merged.
+
+$T0> # 되돌리기 전 -- 문장이 보였던 상태.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         5           ROLLED-BACK       
+102         2           NEW-2             
+103         11          REINSERTED        
+201         21          NEW-INS           
+301         5           ROLLED-BACK-INS   
+5 rows selected.
+
+$T0> ROLLBACK;
+Rollback success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> # ★ 판정 -- 힙과 트리가 **함께** 되돌아가야 한다.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+103         11          REINSERTED        
+201         21          NEW-INS           
+4 rows selected.
+$T0> select /*+ FULL SCAN(ngd_mrg) */ count(*) as total_heap from ngd_mrg;
+TOTAL_HEAP           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(*)          as total_tree from ngd_mrg;
+TOTAL_TREE           
+-----------------------
+4                    
+1 row selected.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ count(distinct k) as distinct_k from ngd_mrg;
+DISTINCT_K           
+-----------------------
+4                    
+1 row selected.
+$T0> select count(*) as in_p1 from ngd_mrg partition( p1 );
+IN_P1                
+-----------------------
+1                    
+1 row selected.
+$T0> select count(*) as in_p2 from ngd_mrg partition( p2 );
+IN_P2                
+-----------------------
+2                    
+1 row selected.
+$T0> select count(*) as in_pd from ngd_mrg partition( pd );
+IN_PD                
+-----------------------
+1                    
+1 row selected.
+
+$T0> # 되돌린 뒤에도 유일성이 서는가 -- 트리에 유령 키가 남았다면 여기서
+$T0> # 엉뚱하게 막힌다.
+$T0> insert into ngd_mrg values ( 5, 301, 'AFTER-ROLLBACK' );
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select /*+ index(ngd_mrg, ngd_mrg_g) */ k, p, v from ngd_mrg order by k;
+K           P           V                 
+----------------------------------------------
+101         15          MOVED-BY-MERGE    
+102         2           NEW-2             
+103         11          REINSERTED        
+201         21          NEW-INS           
+301         5           AFTER-ROLLBACK    
+5 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> DROP TABLE NGD_MRG;
+Drop success.
+$T0> DROP TABLE NGD_MRG_S;
+Drop success.
+

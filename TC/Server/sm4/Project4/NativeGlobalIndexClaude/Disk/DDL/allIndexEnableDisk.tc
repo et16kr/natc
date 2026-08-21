@@ -1,0 +1,278 @@
+###########################################################################
+# TestCase Description = ALTER TABLE ... ALL INDEX ENABLE / DISABLE (디스크 글로벌).
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (매체 짝 조사 2026-08-21,
+#                        커버리지 §0.6.2 의 "ALL INDEX ENABLE/DISABLE Disk 0").
+#                        모양은 `Memory/Boundary/allIndexAndTablespace.tc` 에서
+#                        왔고, 유일 글로벌 인덱스 절을 더했다.
+#
+# ★★ 계약이 한 번 뒤집혔다 -- 기대값을 읽기 전에 이것을 알아야 한다
+#
+#   V1 은 이 문장을 **거부**했다(ERR-314B2 / 메시지 1202). 사유는
+#   `qdbAlter.cpp` 가 적어 두었다 -- `DISABLE` 은 런타임 헤더와 함께 파티션
+#   디렉터리를 없애는데(`destroyPartDir`), `ENABLE` 에 그것을 **다시 거는
+#   코드가 없어** `getGlobalBuildNullRow` 에서 실패했다.
+#
+#   V2 A2 가 그 수단을 만들었다(`smnManager::rebuildGlobalIndexesOfParent`).
+#   실행 쪽이 멤버 파티션 핸들 배열을 넘기면 `ENABLE` 이 디렉터리를 새로
+#   만들어 걸고 빌드한다. **그래서 거부가 걷혔다.** 메시지 1202 는 번호
+#   재사용을 막으려고 정의만 남아 있고 아무도 내지 않는다.
+#
+#   즉 이 케이스가 기대하는 것은 **거부가 아니라 성공**이다. 언젠가 이
+#   기대가 ERR-314B2 로 되돌아간다면 그것은 회귀다.
+#
+# ★ 왜 디스크 판이 따로 필요한가
+#   `rebuildGlobalIndexesOfParent` 가 다시 세우는 트리는 매체마다 다른
+#   b-tree 다. 디스크는 memberNo 를 키 헤더에 싣는 `sdnb` 트리이고,
+#   그 빌드는 페이지·CTS·슬라이스 경계를 지나간다. 메모리 판이 초록이어도
+#   여기가 안전하다는 뜻이 아니다.
+#
+# ★★ 무엇을 재는가
+#   A  글로벌만 있는 테이블 -- DISABLE/ENABLE 뒤 트리가 온전한가
+#   B  글로벌 + 로컬이 섞인 테이블 -- 둘 다 살아 오는가
+#   C  글로벌을 지운 뒤 -- 종전 동작으로 돌아가는가
+#   D  글로벌이 전혀 없는 테이블 (회귀)
+#   E  ★ **유일** 글로벌 인덱스 -- DISABLE 이 유일성을 걷고, ENABLE 이
+#      되돌리는가. 그리고 되돌릴 수 없을 때 어떻게 실패하는가
+#
+#   ★ 매 절에서 "Alter success." 로 끝내지 않는다. 성공한 뒤 **힙과 트리가
+#     같은 수를 말하는지** 센다. 다시 세운 트리가 반쪽이면 문장은 성공하고
+#     숫자만 갈린다 -- 오류로는 안 잡힌다(O-2 의 교훈).
+#
+# ★★ E 절을 읽는 법 -- 실측하고 대조군으로 좁힌 것 (2026-08-21)
+#
+#   유일 글로벌 인덱스에서 이 사다리를 밟으면 이렇게 된다:
+#
+#     ALL INDEX DISABLE          성공. 유일성이 사라진다(인덱스가 없다)
+#     파티션을 가로지르는 중복    **들어간다**
+#     ALL INDEX ENABLE           ERR-11058 -- 중복 위에 유일 트리를 세울 수 없다
+#     그 뒤의 중복               **또 들어간다** (인덱스가 여전히 없다)
+#     카탈로그                   여전히 판별자 101 · NATIVE
+#
+#   즉 **카탈로그는 유일 글로벌 인덱스가 있다고 말하는데 유일성은 서지
+#   않는 상태**가 남는다. 모양이 O-4 와 닮았다.
+#
+#   ★ 그러나 이것은 글로벌 인덱스의 결함이 **아니다.** 대조군으로 좁혔다:
+#     **비파티션드 디스크 테이블 + 평범한 유일 인덱스**에 같은 사다리를
+#     밟으면 **한 글자도 다르지 않게 같은 일**이 일어난다 -- DISABLE 뒤
+#     중복이 들어가고, ENABLE 이 ERR-11058 로 실패하고, 그 뒤로도 중복이
+#     들어간다. 파티션도 글로벌도 없는 자리에서 같으므로, 이것은
+#     `ALL INDEX DISABLE` 이라는 문장 자체의 성질이다 -- 사용자가 인덱스를
+#     스스로 걷고 중복을 넣은 것이고, 서버는 되살릴 수 없다고 정직하게
+#     말한다.
+#
+#   E 절이 하는 일은 그래서 **거기까지의 계약을 못박는 것**이다. 글로벌
+#   인덱스가 그 계약에서 벗어나면 -- 예컨대 DISABLE 이 유일성만 남기거나,
+#   ENABLE 이 조용히 성공해 놓고 트리가 비거나 -- 이 절이 붉어진다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+
+DEF SHOW_IMPL( @aTable )
+{
+    select i.index_name,
+           decode( p.partition_type, 101, 'NATIVE', 'LOCAL-OR-OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i,
+           system_.sys_tables_ t
+     where p.index_id = i.index_id
+       and i.table_id = t.table_id
+       and t.table_name = '@{aTable}'
+     order by 1;
+}
+
+#
+# 인덱스가 세는 키 개수와 테이블의 로우 개수. 다시 세운 트리가 반쪽이면
+# 앞의 값만 줄어든다.
+#
+DEF HEAP_VS_TREE( @aTable, @aIndex, @aKeyCol )
+{
+    select /*+ index(@{aTable}, @{aIndex}) */ count(@{aKeyCol}) as via_index
+      from @{aTable} where @{aKeyCol} is not null;
+    select /*+ FULL SCAN(@{aTable}) */ count(@{aKeyCol}) as via_full
+      from @{aTable} where @{aKeyCol} is not null;
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_AIX;
+    DROP TABLE NGD_AIX_L;
+    DROP TABLE NGD_AIX_U;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    create table ngd_aix( i1 integer, i2 integer, i3 integer )
+    partition by range( i1 )
+    (
+      partition p1 values less than ( 100 ),
+      partition p2 values less than ( 200 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    # i1 을 담지 않은 키 -> 글로벌이어야만 설 수 있다
+    create index ngd_aix_g on ngd_aix( i2 ) tablespace sys_tbs_disk_data;
+
+    insert into ngd_aix select level,       level,       level       from dual connect by level <= 50;
+    insert into ngd_aix select level + 100, level + 100, level + 100 from dual connect by level <= 50;
+    insert into ngd_aix select level + 200, level + 200, level + 200 from dual connect by level <= 50;
+    commit;
+
+    CALL SHOW_IMPL( "NGD_AIX" );
+    CALL HEAP_VS_TREE( "ngd_aix", "ngd_aix_g", "i2" );
+
+##################################
+SECTOR; A -- 글로벌만 있는 테이블
+##################################
+    alter table ngd_aix all index disable;
+    alter table ngd_aix all index enable;
+
+    # 다시 세운 트리가 온전한가.
+    CALL SHOW_IMPL( "NGD_AIX" );
+    CALL HEAP_VS_TREE( "ngd_aix", "ngd_aix_g", "i2" );
+
+    # 파티션을 가로지르는 정렬이 여전히 서는가 -- 글로벌이 주는 값이다.
+    select /*+ index(ngd_aix, ngd_aix_g) */ i1, i2 from ngd_aix
+     where i2 between 95 and 105 order by i2;
+
+    # 인덱스 경유와 풀스캔의 차집합 -- 양쪽 다 비어야 한다.
+    select * from
+    (
+      select /*+ index(ngd_aix, ngd_aix_g) */ i1, i2 from ngd_aix where i2 is not null
+      minus
+      select /*+ FULL SCAN(ngd_aix) */ i1, i2 from ngd_aix where i2 is not null
+    ) order by 1;
+    select * from
+    (
+      select /*+ FULL SCAN(ngd_aix) */ i1, i2 from ngd_aix where i2 is not null
+      minus
+      select /*+ index(ngd_aix, ngd_aix_g) */ i1, i2 from ngd_aix where i2 is not null
+    ) order by 1;
+
+##################################
+SECTOR; B -- 글로벌 + 로컬이 섞인 테이블
+##################################
+    create index ngd_aix_l on ngd_aix( i3 ) local;
+
+    CALL SHOW_IMPL( "NGD_AIX" );
+
+    alter table ngd_aix all index disable;
+    alter table ngd_aix all index enable;
+
+    CALL SHOW_IMPL( "NGD_AIX" );
+    CALL HEAP_VS_TREE( "ngd_aix", "ngd_aix_g", "i2" );
+    CALL HEAP_VS_TREE( "ngd_aix", "ngd_aix_l", "i3" );
+
+##################################
+SECTOR; C -- 글로벌을 지운 뒤에는 종전 동작으로
+##################################
+    drop index ngd_aix_g;
+
+    alter table ngd_aix all index disable;
+    alter table ngd_aix all index enable;
+
+    CALL SHOW_IMPL( "NGD_AIX" );
+    CALL HEAP_VS_TREE( "ngd_aix", "ngd_aix_l", "i3" );
+
+##################################
+SECTOR; D -- 글로벌이 전혀 없는 테이블 (회귀)
+##################################
+    create table ngd_aix_l( i1 integer, i2 integer )
+    partition by range( i1 )
+    ( partition p1 values less than ( 100 ), partition pd values default )
+    tablespace sys_tbs_disk_data;
+
+    create index ngd_aix_l2 on ngd_aix_l( i2 ) local;
+
+    insert into ngd_aix_l select level, level from dual connect by level <= 50;
+    commit;
+
+    alter table ngd_aix_l all index disable;
+    alter table ngd_aix_l all index enable;
+
+    select count(*) as local_only_rows from ngd_aix_l;
+    CALL HEAP_VS_TREE( "ngd_aix_l", "ngd_aix_l2", "i2" );
+
+##################################
+SECTOR; E -- ★ 유일 글로벌 인덱스. 머리말의 실측·대조군을 함께 읽을 것
+##################################
+    create table ngd_aix_u( i1 integer, i2 integer )
+    partition by range( i1 )
+    ( partition p1 values less than ( 100 ), partition pd values default )
+    tablespace sys_tbs_disk_data;
+
+    create unique index ngd_aix_u_g on ngd_aix_u( i2 ) tablespace sys_tbs_disk_data;
+    CALL SHOW_IMPL( "NGD_AIX_U" );
+
+    insert into ngd_aix_u values ( 10, 555 );
+    insert into ngd_aix_u values ( 20, 666 );
+    commit;
+
+    # E1. 전제 -- 파티션을 가로질러 막힌다.
+    insert into ngd_aix_u values ( 500, 555 );
+
+    # E2. 중복이 **없는** 상태에서의 DISABLE/ENABLE 은 온전히 되돌아와야 한다.
+    alter table ngd_aix_u all index disable;
+    alter table ngd_aix_u all index enable;
+
+    CALL SHOW_IMPL( "NGD_AIX_U" );
+    CALL HEAP_VS_TREE( "ngd_aix_u", "ngd_aix_u_g", "i2" );
+
+    # ★ 유일성이 되돌아왔는가 -- 카탈로그가 아니라 동작으로 확인한다.
+    insert into ngd_aix_u values ( 500, 555 );
+    select /*+ index(ngd_aix_u, ngd_aix_u_g) */ i1, i2 from ngd_aix_u order by i2;
+
+    # E3. 이제 되돌릴 수 **없는** 경우. DISABLE 뒤 중복을 넣는다.
+    #     머리말의 대조군이 보인 대로, 여기서부터는 글로벌 인덱스의 성질이
+    #     아니라 ALL INDEX DISABLE 이라는 문장 자체의 성질이다.
+    alter table ngd_aix_u all index disable;
+    insert into ngd_aix_u values ( 500, 555 );
+    commit;
+    select count(*) as heap_while_disabled from ngd_aix_u;
+
+    # ★ 판정 -- 중복 위에 유일 트리를 세울 수 없으므로 **정직하게 실패**해야
+    #   한다. 조용히 성공하고 트리가 비면 그것이 결함이다.
+    alter table ngd_aix_u all index enable;
+
+    # 실패했으므로 카탈로그는 그대로다. 이 두 줄이 그 상태를 전사에 남긴다.
+    CALL SHOW_IMPL( "NGD_AIX_U" );
+    select count(*) as heap_after_failed_enable from ngd_aix_u;
+
+    # E4. 중복을 걷어 내면 다시 설 수 있어야 한다 -- 회복 경로가 있는가.
+    delete from ngd_aix_u where i1 = 500;
+    commit;
+    alter table ngd_aix_u all index enable;
+
+    CALL SHOW_IMPL( "NGD_AIX_U" );
+    CALL HEAP_VS_TREE( "ngd_aix_u", "ngd_aix_u_g", "i2" );
+
+    # ★ 회복 뒤 유일성이 실제로 서는가.
+    insert into ngd_aix_u values ( 500, 555 );
+    select /*+ index(ngd_aix_u, ngd_aix_u_g) */ i1, i2 from ngd_aix_u order by i2;
+    select count(*) as heap_final from ngd_aix_u;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    DROP TABLE NGD_AIX_U;
+    DROP TABLE NGD_AIX_L;
+    DROP TABLE NGD_AIX;
+}

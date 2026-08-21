@@ -44,4 +44,10 @@ qc_index_disable.tc                     # qc/index_disable.tc
 qc_indexThrMovement.sql                 # qc/indexThrMovement.sql
 qc_JoinTest.tc                          # qc/JoinTest.tc
 qc_keyrange.tc                          # qc/keyrange.tc
+#
+# ★ 아래는 **맨 뒤여야 한다.** 위 이식분 다수가 절대 카탈로그 id
+#   (`__SYS_PART_IDX_ID_<n>`)를 기대값에 담고 있어, 앞에 케이스를 끼우면
+#   그 id 가 전부 밀린다. 새 케이스는 이 줄 아래에 붙인다.
+#
+psmGlobalAccessDisk.tc                  # PSM 커서·DML·FOR UPDATE (신규)
 -------------------------------------------------------------------------------

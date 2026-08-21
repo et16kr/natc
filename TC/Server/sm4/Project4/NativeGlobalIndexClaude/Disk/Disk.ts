@@ -21,6 +21,15 @@ Query/Query.ts                          # Query
 Transaction/Transaction.ts              # Transaction
 Boundary/Boundary.ts                    # Boundary
 
+#
+# ★ 새로 쓴 케이스가 절대 카탈로그 id 를 밀 수 있다 -- **영역 안의 맨 뒤로는
+#   부족하다.** Catalog/ 는 Create/ 보다 먼저 돌고, Create/ 의 이식분 넷이
+#   `__SYS_PART_IDX_ID_<n>` 을 기대값에 담고 있다. 실측: Catalog.ts 끝에
+#   케이스 하나를 붙였더니 그 넷이 +2 만큼 밀려 붉어졌다(2026-08-21).
+#   객체를 만드는 새 케이스는 **여기**, 모든 영역 뒤에 붙인다.
+#
+Catalog/memberDirectory.tc              # memberNo 디렉터리 — 발급 · DROPPED · 수동 회수 (신규)
+
 pdtDesign_FINALIZE.sql                  # 전제 정리 -- PDT_TBS/2/3
 
 Recovery/Recovery.ts                    # 재기동·복구 — clean 이 DB 를 지우므로 **맨 뒤**
