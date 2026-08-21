@@ -39,6 +39,12 @@ $T0> DROP TABLESPACE SDPTE_CK_TS INCLUDING CONTENTS AND DATAFILES;
 $T0> DROP TABLESPACE SDPTE_CK_DATA INCLUDING CONTENTS AND DATAFILES;
 $T0> SKIP END;
 
+$T0> # This case aborts the server on purpose, so a previous run may not have
+$T0> # reached its FINALIZATION. Clear every path it owns, including the two the
+$T0> # CREATE below names: a survivor of an aborted run makes that CREATE fail
+$T0> # and takes the rest of the case with it.
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_01.dbf";
+$T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_02.dbf";
 $T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_03.dbf";
 $T0> RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_04.dbf";
 

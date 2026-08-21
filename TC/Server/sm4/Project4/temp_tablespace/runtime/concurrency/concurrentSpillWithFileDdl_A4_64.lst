@@ -9,12 +9,19 @@ $T0> THREAD T0 C0;
 $T0> ###########################################################################
 $T0> # TestCase Description = Run TEMP file DDL while a spilling session holds the TEMP runtime.
 $T0> # Project ID           = workspace/simple_temp_tablespace
-$T0> # Design Coverage      = design 13 lock order and gate/drain rules; F-01 reader leases keep a
-$T0> #                        retired runtime bundle alive; F-02 old-or-new publication.
+$T0> # Design Coverage      = design 13 registry-to-lifecycle lock order and replacement gate/drain
+$T0> #                        rules; F-02 readers observe only the old or the new file-set publication.
 $T0> # Regression Focus     = the TEMP page-lookup and reopen paths must resolve a runtime owner without
 $T0> #                        re-entering the tablespace registry latch that their caller already holds
-$T0> #                        (commits 6ea851df, 6bee37ee, a0e0ad84).
-$T0> # Product Reference    = src/sm/sdd/sddTableSpace.cpp getDataFileNodeByPageID TEMP branch
+$T0> #                        (commits 6ea851df, 6bee37ee, a0e0ad84). For page I/O, a file-set publication
+$T0> #                        is transient contention rather than a missing page: treating it as gone
+$T0> #                        raised smERR_FATAL_NotFoundDataFile and took the server down.
+$T0> # Coverage Limit       = this case does not force the REPLACING window open. It is a crash guard for
+$T0> #                        the outer page-I/O path, while unittestSdpteWiring deterministically proves
+$T0> #                        the facade's typed REPLACING/no-error handoff. The sdd retry loop itself and
+$T0> #                        reopen during REPLACING are not forced by this case.
+$T0> # Product Reference    = src/sm/sdd/sddDiskMgr.cpp TEMP-aware page-node resolution retry
+$T0> #                        src/sm/sdp/sdpte/sdpteFileFacade.cpp typed owner classification
 $T0> #                        src/sm/sdd/sddDataFile.cpp sddDataFile::open reopen validation
 $T0> #                        src/sm/sdp/sdpte/sdpteAddTempFile.cpp, sdpteDropTempFile.cpp
 $T0> # iSQL Manual          = /home/et16/work/manual/Manuals/Altibase_7.1/eng/iSQL User's Manual.md

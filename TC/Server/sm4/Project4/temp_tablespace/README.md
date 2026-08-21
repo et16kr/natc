@@ -136,14 +136,12 @@ independent error-reporting defect in the two handlers. Both are fixed.
 now passes against that same untouched oracle. The three `safety/binding`
 failures recorded on 2026-08-19 are also resolved.
 
-**Still open:** `runtime/concurrency/concurrentSpillWithFileDdl.tc` can FATAL
-late in the full suite although both standalone execution and the isolated
-concurrency suite pass. The logged page decodes to the valid primary-file page
-`FID 0 / FPID 797`; the current hypothesis is a race between AUTOEXTEND growth
-and file-set publication, not an invalid page ID or a proven retired-bundle
-use-after-free. A second open issue leaves a discarded tablespace with a
-CREATING file node that none of the three DROP TABLESPACE forms can remove.
-Evidence and current limits are recorded in
+The late-suite `concurrentSpillWithFileDdl.tc` FATAL and the discarded-space
+CREATING residue are resolved. Page I/O now distinguishes transient file-set
+replacement from a missing owner and retries outside the registry mutex; startup
+definition derivation omits only pure, uncommitted CREATING residue. T-03 still
+has narrower reopen, V$ projection and no-exception-reader gaps, so this is not
+recorded as complete reader coverage. Evidence and current limits are in
 [FILESET_DDL_AFTER_SPILL_20260820.md](FILESET_DDL_AFTER_SPILL_20260820.md).
 
 ## Known execution issues (2026-08-19)

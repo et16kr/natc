@@ -33,6 +33,12 @@ SECTOR; INITIALIZATION
     DROP TABLESPACE SDPTE_CK_DATA INCLUDING CONTENTS AND DATAFILES;
     SKIP END;
 
+    # This case aborts the server on purpose, so a previous run may not have
+    # reached its FINALIZATION. Clear every path it owns, including the two the
+    # CREATE below names: a survivor of an aborted run makes that CREATE fail
+    # and takes the rest of the case with it.
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_01.dbf";
+    RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_02.dbf";
     RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_03.dbf";
     RM -f "${ALTIBASE_HOME}/dbs/sdpte_ck_04.dbf";
 

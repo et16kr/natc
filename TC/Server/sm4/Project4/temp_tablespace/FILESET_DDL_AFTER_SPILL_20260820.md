@@ -1,8 +1,9 @@
 # TEMP file-set DDL is broken after a spill (2026-08-20)
 
-> **상태: 순차 file-set DDL 결함은 해결됨 (2026-08-20).** 원인과 수정은
-> 아래 "근본 원인과 수정" 절 참고. 전체 suite에서만 재현되는 동시 spill
-> FATAL과 CREATING 노드가 남은 discarded tablespace의 DROP 실패는 미해결이다.
+> **상태: 순차 file-set DDL, 동시 spill page-I/O FATAL, discarded/CREATING
+> DROP 실패를 모두 해결함 (2026-08-21).** 다만 T-03 전체가 끝난 것은 아니다.
+> reopen validation, V$ projection, no-exception page reader는 아래에 잔여 범위로
+> 분리해 둔다.
 
 ## 요약
 
@@ -200,29 +201,82 @@ commit 되지 않은 파일은 committed size 에 기여하지 않는다.
 이 수정으로, 그전까지 **어떤 방법으로도 기동되지 않던** 데이터베이스가 정상
 기동했다.
 
-## 미해결 1: 동시 spill 중 DROP TEMPFILE
+## 해결: 동시 spill 중 file DDL 이 서버를 죽이던 문제 (2026-08-21)
 
-위 수정으로 file-set DDL 이 실제로 진행되면서, 그동안 가려져 있던 두 번째 결함이
-드러났다. `runtime/concurrency/concurrentSpillWithFileDdl.tc` 는 여전히 FATAL 이다.
+### 정정
 
-대표 로그의 page 값은 22-bit FPID 분할로 다시 확인했다. `FID 0 / FPID 797`이며
-primary file 안의 **정상 page 번호**다. 이전의 "무효 page ID" 및
-"retired-bundle use-after-free" 단정은 잘못이므로 철회한다.
+2026-08-20 기록에서 이 FATAL 의 원인을 "은퇴한 runtime bundle 을 reader lease 가
+붙들어 성장이 안 보인다"로 적었다. **틀렸다.** 할당자도 페이지 조회도 매번 lease
+를 새로 얻는다(`sdpteExtentFacade::allocate`, `sdpteFileFacadeBuildExpectation`).
+또 로그의 `page [797]` 은 22bit 로 나누면 `FID 0 / FPID 797` 로, 손상된 값이 아니라
+primary file 의 정상 페이지다.
 
-현재 확인된 현상은 work area가 기억한 page가 file-set DDL 게시 뒤의 runtime `R`
-범위 밖에 놓인다는 것이다. 그 page는 primary file이 AUTOEXTEND로 성장한 뒤에만
-존재하므로, 현재 가설은 AUTOEXTEND 성장 게시와 file-set DDL 게시 사이의 경합이다.
-정확한 ownership 위반 지점은 아직 확정하지 않았다.
+### 실제 원인
 
-순차 DROP 은 정상이다 — `runtime/fileset/dropFilePreservesRuntime.tc` 와
-`ddl/tempfile` 14건이 모두 통과한다.
+ADD/DROP TEMPFILE 이 bundle 을 교체하는 동안 게시자는
 
-재현은 **실행 순서에 의존한다.** 단독 실행과 `runtime/concurrency` 단독 실행에서는
-통과하고, 전체 suite 실행의 뒤쪽(약 77%)에서만 나타난다. 2026-08-19 문서가
-`concurrentSpillWithShrink.tc` 에 대해 기록한 "전체 suite FATAL / 단독 PASS" 와
-같은 성격이다.
+```c
+sPrivate->mRuntimeReplacementStarted = ID_TRUE;   /* sdpteModule.cpp */
+```
 
-## 미해결 2: 미해소 CREATING 노드를 가진 discarded tablespace 는 drop 되지 않는다
+로 창을 열고 기존 lease 가 빠지기를 기다린다. 그 창에서 새 lease 는
+`SDPTE_RUNTIME_ACQUIRE_REPLACING` 으로 거부된다. 여기까지는 설계대로다.
+
+문제는 **두 소비자가 이 거부를 정반대로 해석**한 것이다.
+
+| 소비자 | 해석 | 결과 |
+|---|---|---|
+| 할당자 `sdpteExtentFacade::allocate` | `BUSY` → 락 놓고 대기 후 재시도 | 정상 |
+| 페이지 조회 `sdpteFileFacadeBuildExpectation` | `ID_FALSE` 로 뭉갬 → "주인 없음" | `sWithinSize=ID_FALSE` → not found → `smERR_FATAL_NotFoundDataFile` → **서버 abort** |
+
+즉 **"지금은 답할 수 없다"가 "그런 페이지는 없다"로 번역**됐다.
+
+### 수정 — typed 결과를 락 밖 재시도까지 전달
+
+| 층 | 파일 | 내용 |
+|---|---|---|
+| 1 | `sdpteModule.cpp/.h` | `sdpteModuleAcquireRuntimeLocked` 가 거부 이유를 `REPLACING`/`NO_OWNER` 로 구분. **판정 순서는 NO_OWNER 우선** — teardown/unpublished 인 owner 를 `REPLACING` 이라 부르면 성공할 수 없는 재시도로 보내게 된다 |
+| 2 | `sdpteFileFacade.cpp/.h` | 이유를 버리지 않고 전달. raw registry 재조회를 버리고 공식 `sdpteModule::acquireRuntimeUnderRegistryLock()` 사용 (설계 3.3.1) |
+| 3 | `sddDiskMgr.cpp` | TEMP page-node resolution prefix가 typed facade를 직접 호출한다. `REPLACING`이면 FATAL/IDE 오류를 설정하지 않고, outer helper가 registry mutex를 **놓고** 대기한 뒤 space ID로 node를 재조회한다. 소진 시에만 `smERR_ABORT_NOT_ENOUGH_WORKAREA`를 설정하고 세션 취소/타임아웃 오류는 보존한다. DATA/UNDO는 기존 `sddTableSpace::getDataFileNodeByPageID()`로 그대로 위임하며 public `sddTableSpace` API는 바꾸지 않았다 |
+
+재시도 정책은 검증된 할당자와 동일하다 — 1ms, 최대 10000회.
+
+TEMP ordinary page-I/O 진입점 10곳은 같은 helper로 통일했다. 남은 직접
+`getDataFileNodeByPageID` 호출은 non-TEMP만 받는 direct-path/segment 경로다. 이전 시도에서 쓰던
+lock-free 헬퍼는 **제거했다**: raw `sddTableSpaceNode*` 를 대기 너머로 보관해
+그 사이 DROP 이 노드를 은퇴시키면 수명이 보장되지 않았고, 내부적으로는 이름 그대로
+락 보유를 전제한 `buildExpectationUnderRegistryLock()` 을 부르고 있었다.
+
+### T-03 상태 — 부분 해결
+
+**page I/O 경로는 해결**됐다. 그러나 같은 창을 만나는 다른 reader 는 남아 있다.
+
+- `sdpteFileFacade::validateReopenUnderRegistryLock()` — `REPLACING` 을 ordinary
+  DATA/UNDO 의 `NO_OWNER` 와 같은 success-skip 으로 처리한다. registry 락 밖 재시도 또는
+  reopen 완료까지의 lease 보존이 필요하다.
+- `sdpteViewFacade.cpp` — `REPLACING` 을 `SDPTE_VIEW_RUNTIME_ERROR` 로 처리해
+  `V$TABLESPACES`/`V$DATAFILES` 가 실패한다. 이 경로는 노드 순회 내내 registry
+  락을 쥐므로 안에서 재시도할 수 없고, 값싼 fallback(=committed `D` 로 답하기)은
+  같은 파일의 설계 주석이 "stale current 를 runtime 인 것처럼 publish 하게 된다"고
+  명시적으로 금지한다. FT 빌더에서 락 밖 재시도로 올려야 한다.
+- `getDataFileNodeByPageIDWithoutException()` — `REPLACING` 을 단순 invalid page
+  로 처리한다. 유일한 호출처는 `sddDiskMgr::isValidPageID()` 로 FATAL 경로는
+  아니지만, 창 안에서 정상 페이지를 invalid 로 보고한다.
+
+따라서 **"concurrentSpillWithFileDdl FATAL 해결"은 맞고, "T-03 종결"로 기록하면
+안 된다.**
+
+### 검증의 한계
+
+전체 suite 의 마지막 기록은 `PASS 134 / FAIL 0 / FATAL 0` 이다. 다만 그 NATC 실행은
+**재시도 분기가 실제로 실행됐다는 증거가 아니다.** `concurrentSpillWithFileDdl.tc` 는
+창을 결정적으로 열지 않으므로 outer crash guard 로만 본다. 대신
+`unittestSdpteWiringRegistryLockedReopen()`이 replacement reservation을 직접 열고 facade가
+`REPLACING`을 반환하며 IDE 오류를 남기지 않고 owner-missing 통계를 올리지 않는 것을
+결정적으로 검증한다. 이 테스트는 원래 boolean collapse를 잡지만, `sddDiskMgr`의 실제
+unlock/sleep/relock 반복이나 reopen 경로까지 실행하지는 않는다.
+
+## 해결: 미해소 CREATING 노드를 가진 discarded tablespace 가 drop 되지 않던 문제
 
 위 FATAL 이 남긴 tablespace 는 `DISCARD` 된 상태에서 파일 노드 하나가
 `SMI_FILE_CREATING` 으로 남는다. 이 상태의 tablespace 는
@@ -237,11 +291,17 @@ DROP TABLESPACE t INCLUDING CONTENTS AND DATAFILES;
 해소되지 않는다. `control/discardLifecycle.tc` 가 규정한 "discarded 공간은 DROP 을
 받는다" 계약을 어긴다.
 
-기존 실행에서 단계 태깅 로그가 없었던 것은 handler 이전 실패의 증거가 아니다.
-DISCARDED/cache-null 공간은 `sdpteHandlerDropTBSNoOwner()`로 진입할 수 있는데,
-당시에는 그 lane에 단계 로그가 없었다. 이번 체크포인트는 no-owner lane에도 단계
-태깅을 추가했지만 결함 자체는 수정하지 않았다. 다음 재현에서 QP/SM 진입 전인지,
-owner-backed handler인지, no-owner handler인지 로그로 다시 분류해야 한다.
+DISCARDED/cache-null DROP은 runtime 없이 standard node에서 committed definition을
+유도해야 한다. 수정 후 survey와 collection은 **pure `CREATING`** node만 커밋되지 않은
+ADD residue로 함께 제외하고, 남은 stable file들로 no-owner DROP을 진행한다. 제외한
+body는 committed evidence가 없으므로 자동 unlink하지 않는다.
+
+이 예외는 모든 unstable node에 적용하지 않는다. `DROPPING`과 `RESIZING`은 작업 전부터
+committed definition에 속했던 파일일 수 있고, mixed transient bit도 의미가 모호하다.
+이들을 제외해 definition을 만들면 membership 또는 D를 조용히 바꾸므로 계속
+`SDPTE_RECONCILE_DEFINITION_ERROR`로 거절한다. `unittestSdpteReconcile`이 stable +
+CREATING은 1-file definition으로 유도하고, RESIZING/DROPPING/mixed state는 모두
+거절하는 것을 직접 검증한다.
 
 ## 최종 검증 결과
 
@@ -251,11 +311,14 @@ owner-backed handler인지, no-owner handler인지 로그로 다시 분류해야
 | 2026-08-20 (순차 수정 후 한 실행) | `PASS 132 / FAIL 1 / FATAL 0` — 앞선 crash residue 때문에 concurrency case의 CREATE가 실패 |
 | 2026-08-20 (별도 전체 suite 실행) | 약 77%에서 `concurrentSpillWithFileDdl.tc` FATAL |
 | 2026-08-20 (`abruptDuringFileDdl.tc` focused) | clean 상태 첫 실행은 모든 불변식 PASS. 즉시 재실행은 종료 시 남은 CREATING/discarded residue 때문에 준비 CREATE가 실패하여 미해결 2를 재현 |
+| 2026-08-21 (typed page lookup + CREATING derive 후 전체 suite) | `PASS 134 / FAIL 0 / FATAL 0` |
+| 2026-08-21 (최종 코드로 focused 재검증) | `concurrentSpillWithFileDdl.tc` 1/1, `runtime/concurrency` 4/4, `abruptDuringFileDdl.tc` 1/1, `recovery/reconcile` 6/6 — 모두 FAIL/FATAL 0 |
 
-두 결과는 모순이 아니다. 이 case는 단독 실행과 `runtime/concurrency` 단독 suite에서는
-통과하고, 전체 suite 뒤쪽에서만 FATAL이 재현된다. FATAL 뒤에 남은 drop 불가
-tablespace가 정리되지 않은 다음 실행에서는 같은 case가 CREATE 단계에서 FAIL한다.
-따라서 현재 상태를 green full-suite로 해석해서는 안 된다.
+수정 전 결과들은 모순이 아니었다. 당시 case는 단독 실행과 `runtime/concurrency` 단독
+suite에서는 통과했지만 전체 suite 뒤쪽에서만 FATAL이 재현됐고, 그 residue가 다음
+실행의 CREATE까지 막았다. 2026-08-21의 green run은 두 증상이 사라진 첫 전체 결과다.
+다만 위에 적은 대로 NATC가 REPLACING 재시도 분기 자체를 결정적으로 열지는 않으며,
+reopen/V$/no-exception reader는 T-03 잔여 범위다.
 
 해소된 기존 이슈:
 
