@@ -16,11 +16,11 @@
 
 | | |
 |---|---:|
-| 실행 단위 | **273** |
-| 통과 / 실패 | **273 / 0** |
+| 실행 단위 | **274** |
+| 통과 / 실패 | **274 / 0** |
 | `.tc` · `.sql` · `.lst` | 167 · 160 · 276 |
 
-> **정식 실행기로 잰 값이다** (2026-08-21, GREEN 273/273).
+> **정식 실행기로 잰 값이다** (2026-08-21, GREEN 274/274).
 > `altidev4/scripts/global-index/natc-check.sh` — 격리 인스턴스
 > `~/.ngi-testdb`(UTF8 + 시스템 패키지)를 짓고 `--auto-init=OFF` 로 돈다.
 >
@@ -137,6 +137,61 @@ shared includes"* 가 `.tc`·`.sql` **243 개**를 고치면서 `.lst` 를 **233
 > 커밋에서 다시 찍는다.** 이번 것은 243 대 233 이라 세기만 해도 잡혔다.
 > 인코딩을 바꾸는 커밋은 **한글 개수를 원본과 대조**한다.
 
+### 0.6.2 ★ 매체 비대칭 전수 조사 (2026-08-21)
+
+제품 표면에서 시작해 세었다. Memory 신규 **54** vs Disk 신규 **13**.
+
+**살아 있는 오류 코드의 매체별 커버리지** (소스에서 raise 되는 것만)
+
+| 오류 | Memory | Disk |
+|---|---:|---:|
+| `ERR-313D0` non-part index 거절 | 6 | 4 |
+| `ERR-31415` PK/UK 글로벌 거절 | 6 | **0** |
+| `ERR-314AB` 매체 불일치 | 2 | 4 |
+| `ERR-314AC` 인덱스 비트 예산 | 5 | 2 |
+| `ERR-314AD` 지원 못하는 키 | 6 | 5 |
+| `ERR-314B1` FK 참조 인덱스 없음 | **0** | **0** |
+| `ERR-314B6` `$GIT_` 은퇴 | 0 (해당 없음) | 7 |
+
+**핵심 의미의 매체별 커버리지**
+
+| 축 | Memory | Disk | 디스크에서 왜 다른가 |
+|---|---:|---:|---|
+| ~~MODIFY COLUMN~~ | 1 | ~~0~~ **1** | **닫힘** — `Disk/DDL/alterColumnGlobalKey.tc` |
+| NVARCHAR·가변 컬럼 키 | 3 | **0** | 디스크 컬럼은 항상 `SMI_COLUMN_TYPE_FIXED` — 메모리 플랜을 닫는 게이트가 디스크에선 안 닫힌다 |
+| 트리거 × row movement | 4 | **0** | |
+| MERGE INTO | 3 | **0** | |
+| savepoint × DDL 조합 | 7 | **0** | |
+| ALL INDEX ENABLE/DISABLE | 5 | **0** | 글로벌은 멤버 파티션 핸들 배열로 재구성한다 |
+| PSM 커서·DML | 2 | **0** | |
+| FK 부모가 글로벌 인덱스 | 1 | **0** | `qdnForeignKey.cpp` 의 `lockParentRowInOwner` 경로 |
+
+**곁가지 — 죽은 오류 메시지 5** : `1198 REORG_NOT_SUPPORTED` ·
+`1199 COPY_NOT_SUPPORTED` · `1200 RECREATE_NOT_SUPPORTED` ·
+`1202 ALL_INDEX_NOT_SUPPORTED` · `1203 REPLICATION_NOT_SUPPORTED` 는
+`E_QP_US7ASCII.msg` 에 있으나 코드 어디서도 raise 하지 않는다(V1 거부가
+걷힌 자리). **지우지 않았다** — 코드 id 는 `qcuErrorCode.ih` 에 컴파일돼
+있고 메시지만 지우면 혹시 raise 될 때 "unknown error" 가 된다. 지우려면
+enum 과 함께 지워야 하고 그것은 오류 코드 표면을 줄이는 결정이다.
+
+### 0.6.3 하네스 문자셋 — 근본 원인 (2026-08-21)
+
+`conf/server.conf` 의 `[DEFAULT]` 가 `ALTIBASE_NLS_USE=KO16KSC5601` 을
+박아 두고, 그 값이 `ats2/serviceThread.cpp` → `aLogonData->nls` →
+`ats2/altibaseHandler.cpp` 의 `isql ... -nls_use %s` 로 넘어간다.
+**명시 인자라 환경변수가 이기지 못한다** -- `natc-check.sh` 가
+`ALTIBASE_NLS_USE=UTF8` 을 export 해도 무효다.
+
+그래서 이 하네스에서 한글 SQL 리터럴은 EUC-KR 이어야 한다. 고치는 길 둘:
+
+1. `[DEFAULT]` 를 UTF8 로 — **저장소 전체에 영향.** 다른 스위트 전부가
+   EUC-KR 이라 그쪽이 깨진다. 우리가 단독으로 할 결정이 아니다.
+2. 이 스위트 전용 서버 블록(UTF8) + 케이스마다 `DECLARE SERVER` —
+   270 개 파일을 건드리고 접속 방식이 바뀐다.
+
+현재는 파일 2 개(`qc_JoinTest.tc` · `pdtBug_BUG-9.sql`)만 EUC-KR 로 두고
+헤더에 이유를 적어 두는 쪽을 골랐다.
+
 ### 0.7 착수 순서
 
 | 순위 | 무엇 | 왜 |
@@ -145,7 +200,10 @@ shared includes"* 가 `.tc`·`.sql` **243 개**를 고치면서 `.lst` 를 **233
 | 2 | **Z3 memberNo 회수** | GR-09 한 트랙 전체가 0. `GLOBAL_INDEX_AUTO_RECLAIM` 을 부르는 케이스가 없다 |
 | 3 | **Z5 동시성** | 파티션 간 유니크는 글로벌 인덱스의 존재 이유인데 경합을 안 잰다 |
 | 4 | **Z4 4K 축** | 상한·경계·격자가 전부 페이지 크기 함수인데 오라클이 한 크기뿐 |
-| ~~5~~ | ~~실패 6 건 수리~~ | **닫혔다 (2026-08-21). GREEN 273/273.** §0.6 |
+| ~~5~~ | ~~실패 6 건 수리~~ | **닫혔다 (2026-08-21). GREEN 274/274.** §0.6 |
+| **A** | **매체 짝 7 종** | §0.6.2 의 Disk 0 축 — NVARCHAR·트리거·MERGE·savepoint·ALL INDEX·PSM·FK. `alterColumnGlobalKey.tc` 가 본 대로 **메모리가 초록이어도 디스크가 안전하다는 뜻이 아니다** |
+| **B** | `ERR-314B1` 감시자 | 살아 있는데 양쪽 매체 0 |
+| **C** | 하네스 문자셋 | §0.6.3. 풀리면 "이식분은 EUC-KR" 예외가 사라진다 |
 | 6 | 나머지 이식 | |
 | 7 | **Z2 FIT** | 계약(`docs/FIT_GUIDE.md`)이 먼저다 |
 | 8 | 복제 확장 | 그물 15 절 중 2 절만 덮었다. **기본 매체가 먼저**다 |
