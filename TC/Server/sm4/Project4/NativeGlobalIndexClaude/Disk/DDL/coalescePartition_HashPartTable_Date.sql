@@ -60,7 +60,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; ���� üũ
+--+SECTOR; 문법 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 INTEGER )
@@ -83,7 +83,7 @@ COALESCE PARTITION P5;
 DROP TABLE TEST;
 
 --##############################
---+SECTOR; ��Ƽ�ǵ� ���̺����� üũ
+--+SECTOR; 파티션드 테이블인지 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 INTEGER );
@@ -96,7 +96,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; ���� ��Ƽ�� ���� üũ
+--+SECTOR; 남은 파티션 개수 체크
 --##############################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Date_Schema_Hash_Date.sql;
 
@@ -148,7 +148,7 @@ SELECT COUNT(*) FROM T2;
 
 
 --##############################
---+SECTOR; DstPart�� TBS üũ
+--+SECTOR; DstPart의 TBS 체크
 --##############################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Date_Schema_Hash_Date.sql;
 
@@ -178,7 +178,7 @@ ORDER BY A.PARTITION_NAME;
 
 
 --##############################
---+SECTOR; LOB �÷��� �ִ� ����� COALESCE
+--+SECTOR; LOB 컬럼이 있는 경우의 COALESCE
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 DATE, I2 BLOB, I3 CLOB )
@@ -223,7 +223,7 @@ SELECT COUNT(*) FROM T2;
 
 
 --##################################################################
---+SECTOR; DATA ��
+--+SECTOR; DATA 비교
 --# ( create 4 partition VS. create 5 partition + coalesce partition )
 --##################################################################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Date_Schema_Hash_Date.sql;

@@ -120,7 +120,7 @@ ALTER TABLE T2 DROP COLUMN I4;
 --+ SECTOR; PARSING + VALIDATION
 --#########################################################################
 ---------------------------------------------------
--- ���� üũ
+-- 문법 체크
 ---------------------------------------------------
 -- should be fail
 ALTER TABLE T1 ADD COLUMN ( I4 INTEGER )
@@ -138,7 +138,7 @@ ALTER TABLE T1 ADD COLUMN ( I4 INTEGER )
 
 
 ---------------------------------------------------
--- ��Ƽ�ǵ� ���̺����� üũ
+-- 파티션드 테이블인지 체크
 ---------------------------------------------------
 --+SKIP BEGIN;
 DROP TABLE TEST;
@@ -158,7 +158,7 @@ DROP TABLE TEST;
 --+SKIP END;
 
 ---------------------------------------------------
--- �ش� ��Ƽ���� �����ϴ��� üũ
+-- 해당 파티션이 존재하는지 체크
 ---------------------------------------------------
 -- should be fail
 ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 BLOB )
@@ -169,7 +169,7 @@ ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 BLOB )
 );
 
 ---------------------------------------------------
--- LOB �÷��� �ִ��� üũ
+-- LOB 컬럼이 있는지 체크
 ---------------------------------------------------
 -- should be fail
 ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 INTEGER )
@@ -180,7 +180,7 @@ ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 INTEGER )
 );
 
 ---------------------------------------------------
--- LOB �÷� ������ �߸��� ���
+-- LOB 컬럼 지정이 잘못된 경우
 ---------------------------------------------------
 -- should be fail
 ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 CLOB )
@@ -245,7 +245,7 @@ ALTER TABLE T1 DROP COLUMN I4;
 --+SECTOR; BLOB
 --##############################
 --###############
---# ��Ƽ�ǵ� ���̺��� LOB �÷� ����
+--# 파티션드 테이블에 LOB 컬럼 지정
 --###############
 ALTER TABLE T1 ADD COLUMN ( I4 BLOB  )
 LOB (I4) STORE AS ( TABLESPACE PDT_TBS5 );
@@ -288,7 +288,7 @@ ALTER TABLE T1 DROP COLUMN I4;
 
 
 --###############
---# �� ��Ƽ�� �� LOB �÷� ����
+--# 각 파티션 별 LOB 컬럼 지정
 --###############
 ALTER TABLE T1 ADD COLUMN ( I4 BLOB  )
 LOB STORE AS ( TABLESPACE PDT_TBS2 )
@@ -338,7 +338,7 @@ ALTER TABLE T1 DROP COLUMN I4;
 --+SECTOR; BLOB + INTEGER + BLOB
 --##############################
 --###############
---# ��� ��Ƽ�� ����
+--# 모든 파티션 지정
 --###############
 ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 BLOB )
 (
@@ -387,7 +387,7 @@ ALTER TABLE T1 DROP COLUMN I6;
 
 
 --###############
---# �Ϻ� ��Ƽ�� ����
+--# 일부 파티션 지정
 --###############
 ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 BLOB )
 (
@@ -435,7 +435,7 @@ ALTER TABLE T1 DROP COLUMN I6;
 
 
 --###############
---# ��Ƽ�ǵ� ���̺����� LOB �÷� ����
+--# 파티션드 테이블에도 LOB 컬럼 지정
 --###############
 ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 BLOB )
 LOB (I4) STORE AS ( TABLESPACE PDT_TBS3 )
@@ -530,7 +530,7 @@ ALTER TABLE T2 DROP COLUMN I6;
 
 
 --###############
---# LOB �÷� �ݺ� ����
+--# LOB 컬럼 반복 지정
 --###############
 ---------------------------------------------------
 -- SYS_PART_KEY_COLUMNS_

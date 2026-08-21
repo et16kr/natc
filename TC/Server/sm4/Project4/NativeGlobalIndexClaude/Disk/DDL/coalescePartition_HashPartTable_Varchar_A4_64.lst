@@ -134,7 +134,7 @@ CREATE INDEX IDX4 ON T2(I1) LOCAL
 --+SECTOR 2; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR 3; πÆπ˝ √º≈©
+--+SECTOR 3; Î¨∏Î≤ï Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -177,7 +177,7 @@ $P0> DROP TABLE TEST;
 Drop success.
 
 --##############################
---+SECTOR 4; ∆ƒ∆ºº«µÂ ≈◊¿Ã∫Ì¿Œ¡ˆ √º≈©
+--+SECTOR 4; ÌååÌã∞ÏÖòÎìú ÌÖåÏù¥Î∏îÏù∏ÏßÄ Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -197,7 +197,7 @@ Drop success.
 
 
 --##############################
---+SECTOR 5; ≥≤¿∫ ∆ƒ∆ºº« ∞≥ºˆ √º≈©
+--+SECTOR 5; ÎÇ®ÏùÄ ÌååÌã∞ÏÖò Í∞úÏàò Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Varchar_Schema_Hash_Varchar.sql;
 
@@ -273,7 +273,7 @@ COUNT
 
 
 --##############################
---+SECTOR 6; DstPart¿« TBS √º≈©
+--+SECTOR 6; DstPartÏùò TBS Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Varchar_Schema_Hash_Varchar.sql;
 
@@ -316,7 +316,7 @@ PDT_TBS
 
 
 --##############################
---+SECTOR 7; LOB ƒ√∑≥¿Ã ¿÷¥¬ ∞ÊøÏ¿« COALESCE
+--+SECTOR 7; LOB Ïª¨ÎüºÏù¥ ÏûàÎäî Í≤ΩÏö∞Ïùò COALESCE
 --##############################
 $P0> DROP TABLE T1;
 Drop success.
@@ -383,7 +383,7 @@ COUNT
 
 
 --##################################################################
---+SECTOR 8; DATA ∫Ò±≥
+--+SECTOR 8; DATA ÎπÑÍµê
 --# ( create 4 partition VS. create 5 partition + coalesce partition )
 --##################################################################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Varchar_Schema_Hash_Varchar.sql;

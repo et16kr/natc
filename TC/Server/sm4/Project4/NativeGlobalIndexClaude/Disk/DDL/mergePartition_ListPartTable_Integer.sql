@@ -59,7 +59,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; ���� üũ
+--+SECTOR; 문법 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 INTEGER, I2 INTEGER )
@@ -79,7 +79,7 @@ MERGE PARTITIONS P1 TABLESPACE PDT_TBS2, P2 INTO
 DROP TABLE TEST;
 
 --##############################
---+SECTOR; ��Ƽ�ǵ� ���̺����� üũ
+--+SECTOR; 파티션드 테이블인지 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 INTEGER, I2 INTEGER );
@@ -93,7 +93,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; SrcPart ��Ƽ�� �̸� üũ
+--+SECTOR; SrcPart 파티션 이름 체크
 --##############################
 -- should be fail
 ALTER TABLE T1 
@@ -102,7 +102,7 @@ MERGE PARTITIONS P5, P1 INTO
 
 
 --##############################
---+SECTOR; DstPart�� TBS üũ
+--+SECTOR; DstPart의 TBS 체크
 --##############################
 --##############
 --# Left In-place 
@@ -222,7 +222,7 @@ ORDER BY A.PARTITION_NAME ASC;
 
 
 --##############################
---+SECTOR; DstPart�� LOB �÷��� TBS üũ
+--+SECTOR; DstPart의 LOB 컬럼의 TBS 체크
 --##############################
 --##############
 --# Left In-place 
@@ -475,7 +475,7 @@ ORDER BY LOBS.COLUMN_ID ASC;
 
 
 --###################################################################
---+ SECTOR; SrcPart1, SrcPart2, DstPart �̸� üũ
+--+ SECTOR; SrcPart1, SrcPart2, DstPart 이름 체크
 --###################################################################
 --##############################
 --+SECTOR; Left In-place
@@ -548,10 +548,10 @@ MERGE PARTITIONS P1, P2 INTO
 
 
 --###################################################################
---+ SECTOR; SrcPart1�� SrcPart2�� ��ġ�� ���� ����
+--+ SECTOR; SrcPart1과 SrcPart2의 위치에 따른 병합
 --###################################################################
 --##############################
---+SECTOR; ���� ���� ��Ƽ�� + �߰� ��Ƽ��
+--+SECTOR; 가장 작은 파티션 + 중간 파티션
 --##############################
 --##############
 --# Left In-place 
@@ -633,7 +633,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P3);
 SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 --##############################
---+SECTOR; �߰� ��Ƽ�� + �߰� ��Ƽ��
+--+SECTOR; 중간 파티션 + 중간 파티션
 --##############################
 --##############
 --# Left In-place 
@@ -716,7 +716,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 
 --##############################
---+SECTOR; �߰� ��Ƽ�� + �⺻ ��Ƽ��
+--+SECTOR; 중간 파티션 + 기본 파티션
 --##############################
 --##############
 --# Left In-place 
@@ -800,7 +800,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P3_4);
 
 
 --###################################################################
---+ SECTOR; ���� �׽�Ʈ + ���� �׽�Ʈ
+--+ SECTOR; 병합 테스트 + 분할 테스트
 --###################################################################
 --+LOAD_SQL mergePartition_ListPartTable_Integer_Schema_List_Integer.sql;
 

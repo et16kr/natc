@@ -60,7 +60,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; ¹®¹ý Ã¼Å©
+--+SECTOR; ë¬¸ë²• ì²´í¬
 --##############################
 DROP TABLE TEST;
 
@@ -96,10 +96,10 @@ PARTITION BY LIST(I1)
 
 
 --##############################
---+SECTOR; ÆÄÆ¼¼ÇÀÇ °³¼ö
+--+SECTOR; íŒŒí‹°ì…˜ì˜ ê°œìˆ˜
 --##############################
 --#############
---# 4°³
+--# 4ê°œ
 --#############
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Date_Schema_List_Date.sql;
 
@@ -133,7 +133,7 @@ SELECT COUNT(*) FROM T2 PARTITION (P3);
 SELECT COUNT(*) FROM T2 PARTITION (P4);
 
 --#############
---# 1°³
+--# 1ê°œ
 --#############
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Date_Schema_List_Date.sql;
 
@@ -174,7 +174,7 @@ SELECT COUNT(*) FROM T2;
 
 
 --##############################
---+SECTOR; LOB ÄÃ·³ÀÌ ÀÖ´Â °æ¿ì
+--+SECTOR; LOB ì»¬ëŸ¼ì´ ìžˆëŠ” ê²½ìš°
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 DATE, I2 BLOB, I3 CLOB )
@@ -220,10 +220,10 @@ SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 
 --##################################################################
---+SECTOR; UPDATE Á¶°Ç¿¡ µû¸¥ °Ë»ç
+--+SECTOR; UPDATE ì¡°ê±´ì— ë”°ë¥¸ ê²€ì‚¬
 --##################################################################
 --##############################
---+SECTOR; ¿©·¯ ÆÄÆ¼¼ÇÀ¸·Î ºÐ»ê
+--+SECTOR; ì—¬ëŸ¬ íŒŒí‹°ì…˜ìœ¼ë¡œ ë¶„ì‚°
 --##############################
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Date_Schema_List_Date.sql;
 
@@ -258,7 +258,7 @@ SELECT COUNT(*) FROM T2 PARTITION (P4);
 
 
 --##############################
---+SECTOR; ¸ðµÎ °°Àº ÆÄÆ¼¼ÇÀ¸·Î ÀÌµ¿
+--+SECTOR; ëª¨ë‘ ê°™ì€ íŒŒí‹°ì…˜ìœ¼ë¡œ ì´ë™
 --##############################
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Date_Schema_List_Date.sql;
 
@@ -351,7 +351,7 @@ SELECT COUNT(*) FROM T2 PARTITION (P4);
 
 
 --##############################
---+SECTOR; ÇöÀç ÆÄÆ¼¼Ç¿¡ ±×´ë·Î ÀÖ´Â °æ¿ì
+--+SECTOR; í˜„ìž¬ íŒŒí‹°ì…˜ì— ê·¸ëŒ€ë¡œ ìžˆëŠ” ê²½ìš°
 --##############################
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Date_Schema_List_Date.sql;
 

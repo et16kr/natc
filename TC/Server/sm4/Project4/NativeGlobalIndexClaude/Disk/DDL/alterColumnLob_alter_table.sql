@@ -104,7 +104,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T1 COALESCE PARTITION;
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T1 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -125,7 +125,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T1 COALESCE PARTITION;
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T1 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -146,7 +146,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T1 COALESCE PARTITION;
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T1 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -172,7 +172,7 @@ ALTER TABLE T1 COALESCE PARTITION;
 --#########################################################################
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -193,7 +193,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T2 MERGE PARTITIONS P4, P5 INTO PARTITION P4;
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -214,7 +214,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T2 MERGE PARTITIONS P4, P5 INTO PARTITION P4;
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -235,7 +235,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T2 MERGE PARTITIONS P4, P5 INTO PARTITION P4;
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -260,7 +260,7 @@ ALTER TABLE T2 MERGE PARTITIONS P4, P5 INTO PARTITION P4;
 --#########################################################################
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -281,7 +281,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T2 SPLIT PARTITION P5 AT(4) INTO ( PARTITION P3, PARTITION P4 );
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -302,7 +302,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T2 SPLIT PARTITION P5 AT(4) INTO ( PARTITION P3, PARTITION P4 );
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 
@@ -323,7 +323,7 @@ ORDER BY PART.PARTITION_NAME, LOBS.COLUMN_ID;
 ALTER TABLE T2 SPLIT PARTITION P5 AT(4) INTO ( PARTITION P3, PARTITION P4 );
 
 ---------------------------------------------------
--- �ʱ�ȭ
+-- 초기화
 ---------------------------------------------------
 ALTER TABLE T2 ALTER COLUMN LOB STORE AS ( LOGGING BUFFER );
 

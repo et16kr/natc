@@ -93,4 +93,5 @@ ddl_partitioned_mview.tc                # DDL/partitioned_mview.tc
 #   그 id 가 전부 밀린다. 새 케이스는 이 줄 아래에 붙인다.
 #
 copySchemaGate.tc                       # 스키마 복사의 게이트 둘 — 프로퍼티 · $GIT_ 은퇴 (신규)
+alterColumnGlobalKey.tc                 # 글로벌 키 컬럼의 컬럼 DDL — O-2 · O-3 감시자 (신규)
 -------------------------------------------------------------------------------

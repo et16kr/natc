@@ -1,0 +1,239 @@
+###########################################################################
+# TestCase Description = 글로벌 인덱스 키 컬럼의 컬럼 DDL (디스크). O-2 · O-3 의 감시자.
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다 (커버리지 조사 2026-08-21).
+#
+# ★ 왜 이 자리인가 -- P0 둘이 나온 곳에 감시자가 없었다
+#
+#   `DISK_GLOBAL_INDEX_ENABLE` 의 기본값을 1 로 올린 근거가
+#   `idpDescResource.cpp` 에 적혀 있다. 그 근거는 **디스크 컬럼 DDL 에서
+#   P0 가 둘 나왔다**는 것이다:
+#
+#     O-2  재생성 DDL 이 인덱스를 조용히 비운다
+#          -- 오류도 크래시도 없는 **오답**
+#     O-3  글로벌 키 컬럼 MODIFY COLUMN 이 IDE_ASSERT + 부팅 루프
+#
+#   둘 다 상시 그물 1429 검사가 전부 초록인 채로 숨어 있었고 표적 작업으로만
+#   찾혔다. 그런데 스위트를 세어 보니(2026-08-21) 이렇다:
+#
+#     ADD COLUMN     Memory 3  Disk 8   (이식분이 덮는다)
+#     DROP COLUMN    Memory 1  Disk 8   (이식분이 덮는다)
+#     RENAME COLUMN  Memory 1  Disk 2
+#     MODIFY COLUMN  Memory 1  Disk **0**   <- O-3 이 나온 자리
+#
+#   즉 **O-3 의 감시자가 메모리에만 있다.** 그리고 이식분의 ADD/DROP COLUMN
+#   은 글로벌 인덱스를 **키에 걸고** 하는 것이 아니라 일반 컬럼 DDL 이라
+#   O-2 의 표적(글로벌 트리가 비는가)을 겨누지 않는다.
+#
+# ★ 매체가 다르면 다른 것을 잰다
+#   메모리 판(`Memory/DDL/alterTableColumn.tc`)이 초록이어도 디스크가
+#   안전하다는 뜻이 아니다. 컬럼 DDL 의 재생성 경로가 매체마다 갈린다 --
+#   메모리는 인덱스를 **먼저** 만들고 나중에 moveRow 로 로우를 옮기며
+#   (BUG-44230), 그 뒤 `qdbAlter::recreateNativeGlobalIndexes` 가 논리
+#   테이블의 글로벌 트리를 다시 세운다. 디스크는 `recreateTableForDisk` 와
+#   `recreateIndexForDisk` 로 간다. 같은 문장, 다른 기계다.
+#
+# ★★ 무엇을 재는가
+#
+#   A  MODIFY COLUMN 이 **글로벌 키 컬럼**에 (O-3 의 표적)
+#      -- 문장이 성공하고, 서버가 살아 있고, 판별자 101 이 그대로고,
+#         인덱스 경유 결과 == 풀스캔 결과여야 한다.
+#   B  ADD COLUMN / DROP COLUMN 뒤에 **글로벌 트리가 비지 않았는가**
+#      (O-2 의 표적) -- 키 개수 == 로우 개수.
+#   C  컬럼 DDL 뒤에도 **파티션 간 유일성이 실제로 선다**
+#      -- 카탈로그가 아니라 동작으로 확인한다. 트리가 조용히 비었다면
+#         중복이 들어가 버린다.
+#
+#   ★ B·C 가 O-2 를 잡는 방식이 이 케이스의 요점이다. O-2 는 오류를 내지
+#     않으므로 "문장이 성공했다" 로는 못 잡는다. **성공한 뒤의 트리를
+#     세어야** 잡힌다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+#
+# 전제를 세우고 전사에 남긴다 (F07 규약).
+#
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+}
+
+#
+# 판별자를 전사에 남긴다. 101 이면 네이티브 글로벌이다.
+#
+DEF SHOW_IMPL( @aIndex )
+{
+    select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = '@{aIndex}';
+}
+
+#
+# 인덱스 경유 결과와 풀스캔 결과가 같은가. 어느 쪽에만 있는 행도 없어야 한다.
+#
+DEF CHECK_INDEX_SCAN( @aTable, @aIndex, @aCols, @aPred )
+{
+    select * from
+    (
+      select /*+ index(@{aTable}, @{aIndex}) */ @{aCols} from @{aTable} where @{aPred}
+      minus
+      select /*+ FULL SCAN(@{aTable}) */ @{aCols} from @{aTable} where @{aPred}
+    ) order by 1;
+
+    select * from
+    (
+      select /*+ FULL SCAN(@{aTable}) */ @{aCols} from @{aTable} where @{aPred}
+      minus
+      select /*+ index(@{aTable}, @{aIndex}) */ @{aCols} from @{aTable} where @{aPred}
+    ) order by 1;
+}
+
+#
+# ★ O-2 의 저울. 인덱스가 세는 키 개수와 테이블의 로우 개수를 나란히 둔다.
+#   트리가 조용히 비면 앞의 값만 줄어든다.
+#
+DEF CHECK_NOT_EMPTIED( @aTable, @aIndex, @aKeyCol )
+{
+    select /*+ index(@{aTable}, @{aIndex}) */ count(@{aKeyCol}) as via_index
+      from @{aTable} where @{aKeyCol} is not null;
+    select /*+ FULL SCAN(@{aTable}) */ count(@{aKeyCol}) as via_full
+      from @{aTable} where @{aKeyCol} is not null;
+}
+
+DEF MAKE_SRC( @aKeyType )
+{
+    NODISPLAY ON;
+    SKIP BEGIN;
+    drop table ngd_acg;
+    SKIP END;
+    NODISPLAY OFF;
+
+    create table ngd_acg( i1 integer, i2 @{aKeyType}, i3 integer, i4 integer )
+    partition by range(i1)
+    (
+      partition p1 values less than (100),
+      partition p2 values less than (200),
+      partition p3 values default
+    ) tablespace sys_tbs_disk_data;
+
+    # i1 을 포함하지 않는 키 -> 글로벌이어야만 설 수 있다
+    create index ngd_acg_g on ngd_acg(i2) tablespace sys_tbs_disk_data;
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_ACG;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    CALL MAKE_SRC( "varchar(20)" );
+    CALL SHOW_IMPL( "NGD_ACG_G" );
+
+    insert into ngd_acg values (  10, 'aaa', 1, 1 );
+    insert into ngd_acg values ( 150, 'bbb', 2, 2 );
+    insert into ngd_acg values ( 250, 'ccc', 3, 3 );
+    commit;
+
+    CALL CHECK_INDEX_SCAN( "ngd_acg", "ngd_acg_g", "i1, i2", "i2 is not null" );
+    CALL CHECK_NOT_EMPTIED( "ngd_acg", "ngd_acg_g", "i2" );
+
+##################################
+SECTOR; A -- ★ MODIFY COLUMN 이 글로벌 키 컬럼에 (O-3 의 표적)
+##################################
+# O-3 은 여기서 IDE_ASSERT 로 죽고 부팅 루프에 들어갔다. 지금은 문장이
+# 성공해야 하고, 성공한 뒤의 트리가 온전해야 한다.
+    alter table ngd_acg modify column ( i2 varchar(100) );
+
+    desc ngd_acg;
+    CALL SHOW_IMPL( "NGD_ACG_G" );
+    CALL CHECK_INDEX_SCAN( "ngd_acg", "ngd_acg_g", "i1, i2", "i2 is not null" );
+    CALL CHECK_NOT_EMPTIED( "ngd_acg", "ngd_acg_g", "i2" );
+
+    # 서버가 살아 있다는 것을 전사에 남긴다
+    select count(*) as alive from dual;
+
+##################################
+SECTOR; B -- ADD / DROP COLUMN 뒤에 트리가 비지 않았는가 (O-2 의 표적)
+##################################
+    alter table ngd_acg add column ( i5 integer default 7 );
+
+    desc ngd_acg;
+    CALL SHOW_IMPL( "NGD_ACG_G" );
+    CALL CHECK_NOT_EMPTIED( "ngd_acg", "ngd_acg_g", "i2" );
+    CALL CHECK_INDEX_SCAN( "ngd_acg", "ngd_acg_g", "i1, i2", "i2 is not null" );
+
+    # 키가 아닌 컬럼을 지운다
+    alter table ngd_acg drop column ( i4 );
+
+    desc ngd_acg;
+    CALL SHOW_IMPL( "NGD_ACG_G" );
+    CALL CHECK_NOT_EMPTIED( "ngd_acg", "ngd_acg_g", "i2" );
+    CALL CHECK_INDEX_SCAN( "ngd_acg", "ngd_acg_g", "i1, i2", "i2 is not null" );
+
+    # 이름만 바꾼다 -- 인덱스는 영향받지 않아야 한다
+    alter table ngd_acg rename column i3 to k3;
+
+    desc ngd_acg;
+    CALL SHOW_IMPL( "NGD_ACG_G" );
+    CALL CHECK_NOT_EMPTIED( "ngd_acg", "ngd_acg_g", "i2" );
+
+##################################
+SECTOR; C -- 컬럼 DDL 뒤에도 파티션 간 유일성이 실제로 서는가
+##################################
+# 카탈로그가 아니라 동작으로 확인한다. 트리가 조용히 비었다면 아래 중복이
+# 들어가 버린다.
+    NODISPLAY ON;
+    SKIP BEGIN;
+    drop table ngd_acgu;
+    SKIP END;
+    NODISPLAY OFF;
+
+    create table ngd_acgu( i1 integer, i2 varchar(20) )
+    partition by range(i1)
+    ( partition p1 values less than (100), partition pd values default )
+    tablespace sys_tbs_disk_data;
+
+    create unique index ngd_acgu_g on ngd_acgu(i2) tablespace sys_tbs_disk_data;
+    CALL SHOW_IMPL( "NGD_ACGU_G" );
+
+    insert into ngd_acgu values (  10, 'dup' );
+    commit;
+
+    # 전제 -- 컬럼 DDL 전에는 파티션을 가로질러 막힌다
+    insert into ngd_acgu values ( 500, 'dup' );
+
+    alter table ngd_acgu modify column ( i2 varchar(60) );
+
+    desc ngd_acgu;
+    CALL SHOW_IMPL( "NGD_ACGU_G" );
+
+    # ★ 판정 -- 컬럼 DDL 뒤에도 같은 거절이어야 한다.
+    #   여기서 "1 row inserted." 가 나오면 트리가 비었다는 뜻이다(O-2).
+    insert into ngd_acgu values ( 500, 'dup' );
+
+    select count(*) as rows_after from ngd_acgu;
+    commit;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    DROP TABLE NGD_ACGU;
+    DROP TABLE NGD_ACG;
+}

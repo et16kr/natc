@@ -161,7 +161,7 @@ Alter success.
 --+SECTOR 3; PARSING + VALIDATION
 --#########################################################################
 ---------------------------------------------------
--- ¹®¹ý Ã¼Å©
+-- ë¬¸ë²• ì²´í¬
 ---------------------------------------------------
 -- should be fail
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 INTEGER )
@@ -193,7 +193,7 @@ line 3: missing or invalid syntax
 
 
 ---------------------------------------------------
--- ÆÄÆ¼¼Çµå Å×ÀÌºíÀÎÁö Ã¼Å©
+-- íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì¸ì§€ ì²´í¬
 ---------------------------------------------------
 --+SKIP BEGIN; 
 $P0> DROP TABLE TEST;
@@ -215,7 +215,7 @@ $P0> DROP TABLE TEST;
 --+SKIP END; 
 
 ---------------------------------------------------
--- ÇØ´ç ÆÄÆ¼¼ÇÀÌ Á¸ÀçÇÏ´ÂÁö Ã¼Å©
+-- í•´ë‹¹ íŒŒí‹°ì…˜ì´ ì¡´ìž¬í•˜ëŠ”ì§€ ì²´í¬
 ---------------------------------------------------
 -- should be fail
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 BLOB )
@@ -230,7 +230,7 @@ $P0> ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 BLOB )
 ]
 
 ---------------------------------------------------
--- LOB ÄÃ·³ÀÌ ÀÖ´ÂÁö Ã¼Å©
+-- LOB ì»¬ëŸ¼ì´ ìžˆëŠ”ì§€ ì²´í¬
 ---------------------------------------------------
 -- should be fail
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 INTEGER )
@@ -242,7 +242,7 @@ $P0> ALTER TABLE T1 ADD COLUMN ( I4 INTEGER, I5 INTEGER )
 [ERR-31244 : LOB type column not found.]
 
 ---------------------------------------------------
--- LOB ÄÃ·³ ÁöÁ¤ÀÌ Àß¸øµÈ °æ¿ì
+-- LOB ì»¬ëŸ¼ ì§€ì •ì´ ìž˜ëª»ëœ ê²½ìš°
 ---------------------------------------------------
 -- should be fail
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 CLOB )
@@ -336,7 +336,7 @@ Alter success.
 --+SECTOR 6; BLOB
 --##############################
 --###############
---# ÆÄÆ¼¼Çµå Å×ÀÌºí¿¡ LOB ÄÃ·³ ÁöÁ¤
+--# íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì— LOB ì»¬ëŸ¼ ì§€ì •
 --###############
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 BLOB  )
      LOB (I4) STORE AS ( TABLESPACE PDT_TBS5 );
@@ -401,7 +401,7 @@ Alter success.
 
 
 --###############
---# °¢ ÆÄÆ¼¼Ç º° LOB ÄÃ·³ ÁöÁ¤
+--# ê° íŒŒí‹°ì…˜ ë³„ LOB ì»¬ëŸ¼ ì§€ì •
 --###############
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 BLOB  )
      LOB STORE AS ( TABLESPACE PDT_TBS2 )
@@ -473,7 +473,7 @@ Alter success.
 --+SECTOR 7; BLOB + INTEGER + BLOB
 --##############################
 --###############
---# ¸ðµç ÆÄÆ¼¼Ç ÁöÁ¤
+--# ëª¨ë“  íŒŒí‹°ì…˜ ì§€ì •
 --###############
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 BLOB )
      (
@@ -549,7 +549,7 @@ Alter success.
 
 
 --###############
---# ÀÏºÎ ÆÄÆ¼¼Ç ÁöÁ¤
+--# ì¼ë¶€ íŒŒí‹°ì…˜ ì§€ì •
 --###############
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 BLOB )
      (
@@ -624,7 +624,7 @@ Alter success.
 
 
 --###############
---# ÆÄÆ¼¼Çµå Å×ÀÌºí¿¡µµ LOB ÄÃ·³ ÁöÁ¤
+--# íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì—ë„ LOB ì»¬ëŸ¼ ì§€ì •
 --###############
 $P0> ALTER TABLE T1 ADD COLUMN ( I4 BLOB, I5 INTEGER, I6 BLOB )
      LOB (I4) STORE AS ( TABLESPACE PDT_TBS3 )
@@ -767,7 +767,7 @@ Alter success.
 
 
 --###############
---# LOB ÄÃ·³ ¹Ýº¹ ÁöÁ¤
+--# LOB ì»¬ëŸ¼ ë°˜ë³µ ì§€ì •
 --###############
 ---------------------------------------------------
 -- SYS_PART_KEY_COLUMNS_

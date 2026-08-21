@@ -40,7 +40,7 @@ SELECT CAST(VALUE1 AS VARCHAR(10)) DISK_GLOBAL_INDEX_ENABLE
 FROM V$PROPERTY WHERE NAME = 'DISK_GLOBAL_INDEX_ENABLE';
 
 --###################################################################
---# ÀÎµ¦½º ÆÄÆ¼¼ÇÀ» Á÷Á¢ ÁöÁ¤ÇÏ´Â °æ¿ì
+--# ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì„ ì§ì ‘ ì§€ì •í•˜ëŠ” ê²½ìš°
 --###################################################################
 
 --###################################################################
@@ -57,7 +57,7 @@ DROP TABLE T3;
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
 --###################################################################
---+ SECTOR; ¹®¹ý Ã¼Å©
+--+ SECTOR; ë¬¸ë²• ì²´í¬
 --###################################################################
 -- should be fail
 ALTER TABLE T1 
@@ -77,7 +77,7 @@ PARTITION P6 TABLESPACE PDT_TBS3
 
 
 --##############################
---+SECTOR; ÆÄÆ¼¼Çµå Å×ÀÌºíÀÎÁö Ã¼Å©
+--+SECTOR; íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì¸ì§€ ì²´í¬
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 INTEGER, I2 INTEGER );
@@ -93,7 +93,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; ÁöÁ¤ÇÑ ÀÎµ¦½º°¡ ÀÖ´ÂÁö Ã¼Å©
+--+SECTOR; ì§€ì •í•œ ì¸ë±ìŠ¤ê°€ ìžˆëŠ”ì§€ ì²´í¬
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
@@ -129,11 +129,11 @@ ADD
 
 
 --##############################
---+SECTOR; ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§ Áßº¹ Ã¼Å©
+--+SECTOR; ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„ ì¤‘ë³µ ì²´í¬
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
--- ÆÄÆ¼¼Çµå ÀÎµ¦½º ÀÌ¸§ Áßº¹
+-- íŒŒí‹°ì…˜ë“œ ì¸ë±ìŠ¤ ì´ë¦„ ì¤‘ë³µ
 -- should be fail
 ALTER TABLE T2 
 ADD
@@ -142,7 +142,7 @@ ADD
                 IDX2 PARTITION P6_IDX2 TABLESPACE PDT_TBS4,
                 IDX1 PARTITION P6_IDX3 TABLESPACE PDT_TBS4 );
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§ Áßº¹
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„ ì¤‘ë³µ
 -- should be fail
 ALTER TABLE T2 
 ADD
@@ -151,7 +151,7 @@ ADD
                 IDX2 PARTITION P6_IDX2 TABLESPACE PDT_TBS4,
                 IDX3 PARTITION P6_IDX1 TABLESPACE PDT_TBS4 );
 
--- ÀÌ¹Ì ÀÖ´Â ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§
+-- ì´ë¯¸ ìžˆëŠ” ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„
 -- should be fail
 ALTER TABLE T2 
 ADD
@@ -160,7 +160,7 @@ ADD
                 IDX2 PARTITION P6_IDX2 TABLESPACE PDT_TBS4,
                 IDX3 PARTITION P1_IDX3 TABLESPACE PDT_TBS4 );
 
--- ÀÌ¹Ì ÀÖ´Â ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§
+-- ì´ë¯¸ ìžˆëŠ” ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„
 -- should be fail
 ALTER TABLE T2 
 ADD
@@ -169,7 +169,7 @@ ADD
                 IDX2 PARTITION P6_IDX2 TABLESPACE PDT_TBS4,
                 IDX3 PARTITION P2_IDX3 TABLESPACE PDT_TBS4 );
 
--- ÀÌ¹Ì ÀÖ´Â ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§
+-- ì´ë¯¸ ìžˆëŠ” ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„
 -- should be fail
 ALTER TABLE T2 
 ADD
@@ -181,7 +181,7 @@ ADD
 
 
 --##################################################################
---+SECTOR; ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+--+SECTOR; ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 --##################################################################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
@@ -239,11 +239,11 @@ ORDER BY B.INDEX_PARTITION_NAME;
 
 
 --##############################
---+SECTOR; LOB COLUMNÀÌ ¾ø´Â °æ¿ì(ÀÎµ¦½º ÆÄÆ¼¼Ç¿¡ TBSÁöÁ¤ÇÒ °æ¿ì)
+--+SECTOR; LOB COLUMNì´ ì—†ëŠ” ê²½ìš°(ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì— TBSì§€ì •í•  ê²½ìš°)
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -265,7 +265,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P5'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -287,7 +287,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P6'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -311,7 +311,7 @@ ORDER BY B.INDEX_PARTITION_NAME;
 
 
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -332,7 +332,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P8'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -353,7 +353,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P9'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -375,7 +375,7 @@ WHERE B.TBS_ID = D.ID AND
 ORDER BY B.INDEX_PARTITION_NAME;
 
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -394,7 +394,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P11'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -413,7 +413,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P12'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -434,11 +434,11 @@ ORDER BY B.INDEX_PARTITION_NAME;
 
 
 --##############################
---+SECTOR; LOB COLUMNÀÌ ¾ø´Â °æ¿ì(ÀÎµ¦½º ÆÄÆ¼¼Ç¿¡ TBSÁöÁ¤ÇÏÁö ¾ÊÀ» °æ¿ì)
+--+SECTOR; LOB COLUMNì´ ì—†ëŠ” ê²½ìš°(ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì— TBSì§€ì •í•˜ì§€ ì•Šì„ ê²½ìš°)
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -460,7 +460,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P5'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -482,7 +482,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P6'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -506,7 +506,7 @@ ORDER BY B.INDEX_PARTITION_NAME;
 
 
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -527,7 +527,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P8'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -548,7 +548,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P9'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -570,7 +570,7 @@ WHERE B.TBS_ID = D.ID AND
 ORDER BY B.INDEX_PARTITION_NAME;
 
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T2 
 ADD
@@ -591,11 +591,11 @@ ORDER BY B.INDEX_PARTITION_NAME;
 
 
 --##############################
---+SECTOR; LOB COLUMNÀÌ ÀÖ´Â °æ¿ì(ÀÎµ¦½º ÆÄÆ¼¼Ç¿¡ TBSÁöÁ¤ÇÒ °æ¿ì)
+--+SECTOR; LOB COLUMNì´ ìžˆëŠ” ê²½ìš°(ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì— TBSì§€ì •í•  ê²½ìš°)
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition_Lob.sql;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -617,7 +617,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P5'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -639,7 +639,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P6'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -663,7 +663,7 @@ ORDER BY B.INDEX_PARTITION_NAME;
 
 
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition_Lob.sql;
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -684,7 +684,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P8'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -705,7 +705,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P9'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -727,7 +727,7 @@ WHERE B.TBS_ID = D.ID AND
 ORDER BY B.INDEX_PARTITION_NAME;
 
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -746,7 +746,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P11'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T3 
 ADD
@@ -765,7 +765,7 @@ WHERE B.TBS_ID = D.ID AND
       A.PARTITION_NAME='P12'
 ORDER BY B.INDEX_PARTITION_NAME;
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 ALTER TABLE T3 
 ADD

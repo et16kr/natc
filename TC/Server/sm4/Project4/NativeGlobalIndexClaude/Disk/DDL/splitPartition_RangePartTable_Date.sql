@@ -56,7 +56,7 @@ DROP TABLE T3;
 --+LOAD_SQL splitPartition_RangePartTable_Date_Schema_Range_Date.sql;
 
 --###################################################################
---+ SECTOR; πÆπ˝ √º≈©
+--+ SECTOR; Î¨∏Î≤ï Ï≤¥ÌÅ¨
 --###################################################################
 -- should be fail
 ALTER TABLE T1 
@@ -76,7 +76,7 @@ SPLIT PARTITION P1 AT ( 100 ) INTO
 
 
 --##############################
---+SECTOR; ∆ƒ∆ºº«µÂ ≈◊¿Ã∫Ì¿Œ¡ˆ √º≈©
+--+SECTOR; ÌååÌã∞ÏÖòÎìú ÌÖåÏù¥Î∏îÏù∏ÏßÄ Ï≤¥ÌÅ¨
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 DATE);
@@ -93,7 +93,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; SrcPart ∆ƒ∆ºº« ¿Ã∏ß √º≈©
+--+SECTOR; SrcPart ÌååÌã∞ÏÖò Ïù¥Î¶Ñ Ï≤¥ÌÅ¨
 --##############################
 -- should be fail
 ALTER TABLE T1 
@@ -105,7 +105,7 @@ SPLIT PARTITION P5 AT ( TO_DATE('2007-05-05', 'YYYY-MM-DD') ) INTO
 
 
 --##############################
---+SECTOR; DstPart1, DstPart2¿« TBS √º≈©
+--+SECTOR; DstPart1, DstPart2Ïùò TBS Ï≤¥ÌÅ¨
 --##############################
 --##############
 --# Left In-place 
@@ -219,7 +219,7 @@ ORDER BY A.PARTITION_NAME ASC;
 
 
 --##############################
---+SECTOR; DstPart1, DstPart2¿« LOB ƒ√∑≥¿« TBS √º≈©
+--+SECTOR; DstPart1, DstPart2Ïùò LOB Ïª¨ÎüºÏùò TBS Ï≤¥ÌÅ¨
 --##############################
 --##############
 --# Left In-place 
@@ -429,11 +429,11 @@ ORDER BY LOBS.COLUMN_ID ASC;
 
 
 --###################################################################
---+ SECTOR; ∆ƒ∆ºº« ∫–«“ ±‚¡ÿ ∞™ √º≈©
+--+ SECTOR; ÌååÌã∞ÏÖò Î∂ÑÌï† Í∏∞Ï§Ä Í∞í Ï≤¥ÌÅ¨
 --###################################################################
 
 --##############################
---+SECTOR; ∫–«“ ∞≥ºˆ √º≈©
+--+SECTOR; Î∂ÑÌï† Í∞úÏàò Ï≤¥ÌÅ¨
 --##############################
 --+LOAD_SQL splitPartition_RangePartTable_Date_Schema_Range_Date.sql;
 
@@ -493,12 +493,12 @@ SELECT COUNT(*) FROM T2 PARTITION (P4);
 
 
 --##############################
---+SECTOR; ∫–«“ ∞™¿« ±Ê¿Ã √º≈©
+--+SECTOR; Î∂ÑÌï† Í∞íÏùò Í∏∏Ïù¥ Ï≤¥ÌÅ¨
 --##############################
 -- PartKey: VARCHAR
 
 --##############################
---+SECTOR; SrcPartø° º”«œ¥¬¡ˆ √º≈©
+--+SECTOR; SrcPartÏóê ÏÜçÌïòÎäîÏßÄ Ï≤¥ÌÅ¨
 --##############################
 --+LOAD_SQL splitPartition_RangePartTable_Date_Schema_Range_Date.sql;
 
@@ -554,7 +554,7 @@ SPLIT PARTITION P3 AT (TO_DATE('2007-07-01', 'YYYY-MM-DD'), TO_DATE('2007-05-05'
 
 
 --###################################################################
---+ SECTOR; DstPart1, DstPart2 ¿Ã∏ß √º≈©
+--+ SECTOR; DstPart1, DstPart2 Ïù¥Î¶Ñ Ï≤¥ÌÅ¨
 --###################################################################
 --##############################
 --+SECTOR; Left In-place
@@ -684,11 +684,11 @@ SPLIT PARTITION P1 AT (TO_DATE('2007-05-01', 'YYYY-MM-DD')) INTO
 
 
 --###################################################################
---+ SECTOR; SrcPart¿« ≈∏¿‘ø° µ˚∏• ∫–«“
+--+ SECTOR; SrcPartÏùò ÌÉÄÏûÖÏóê Îî∞Î•∏ Î∂ÑÌï†
 --###################################################################
 
 --##############################
---+SECTOR; ∞°¿Â ¿€¿∫ ∆ƒ∆ºº«
+--+SECTOR; Í∞ÄÏû• ÏûëÏùÄ ÌååÌã∞ÏÖò
 --##############################
 --##############
 --# Left In-place 
@@ -797,7 +797,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P3);
 SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 --##############################
---+SECTOR; ¡ﬂ∞£ ∆ƒ∆ºº«
+--+SECTOR; Ï§ëÍ∞Ñ ÌååÌã∞ÏÖò
 --##############################
 --##############
 --# Left In-place 
@@ -904,7 +904,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 
 --##############################
---+SECTOR; ±‚∫ª ∆ƒ∆ºº«
+--+SECTOR; Í∏∞Î≥∏ ÌååÌã∞ÏÖò
 --##############################
 --##############
 --# Left In-place 
@@ -1012,7 +1012,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P4_1);
 SELECT COUNT(*) FROM T1 PARTITION (P4_2);
 
 --###################################################################
---+ SECTOR; ∞Ëº” ∫–«“ ≈◊Ω∫∆Æ
+--+ SECTOR; Í≥ÑÏÜç Î∂ÑÌï† ÌÖåÏä§Ìä∏
 --###################################################################
 --+LOAD_SQL splitPartition_RangePartTable_Date_Schema_Range_Date.sql;
 
@@ -1163,7 +1163,7 @@ FROM T2 PARTITION (P4) LIMIT 1;
 
 
 --##################################################################
---+SECTOR; DATE FORMAT √º≈©
+--+SECTOR; DATE FORMAT Ï≤¥ÌÅ¨
 --##################################################################
 DROP TABLE T1;
 ALTER SESSION SET DEFAULT_DATE_FORMAT='YYYY-MM-DD';

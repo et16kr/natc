@@ -56,7 +56,7 @@ DROP TABLE T3;
 --+LOAD_SQL splitPartition_ListPartTable_Varchar_Schema_List_Varchar.sql;
 
 --###################################################################
---+ SECTOR; ���� üũ
+--+ SECTOR; 문법 체크
 --###################################################################
 -- should be fail
 ALTER TABLE T1 
@@ -76,7 +76,7 @@ SPLIT PARTITION P1 VALUES ( '100' ) INTO
 
 
 --##############################
---+SECTOR; ��Ƽ�ǵ� ���̺����� üũ
+--+SECTOR; 파티션드 테이블인지 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 INTEGER, I2 INTEGER );
@@ -93,7 +93,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; SrcPart ��Ƽ�� �̸� üũ
+--+SECTOR; SrcPart 파티션 이름 체크
 --##############################
 -- should be fail
 ALTER TABLE T1 
@@ -105,7 +105,7 @@ SPLIT PARTITION P5 VALUES ( '100' ) INTO
 
 
 --##############################
---+SECTOR; DstPart1, DstPart2�� TBS üũ
+--+SECTOR; DstPart1, DstPart2의 TBS 체크
 --##############################
 --##############
 --# Left In-place 
@@ -219,7 +219,7 @@ ORDER BY A.PARTITION_NAME ASC;
 
 
 --##############################
---+SECTOR; DstPart1, DstPart2�� LOB �÷��� TBS üũ
+--+SECTOR; DstPart1, DstPart2의 LOB 컬럼의 TBS 체크
 --##############################
 --##############
 --# Left In-place 
@@ -429,11 +429,11 @@ ORDER BY LOBS.COLUMN_ID ASC;
 
 
 --###################################################################
---+ SECTOR; ��Ƽ�� ���� ���� �� üũ
+--+ SECTOR; 파티션 분할 기준 값 체크
 --###################################################################
 
 --##############################
---+SECTOR; ���� ���� üũ
+--+SECTOR; 분할 개수 체크
 --##############################
 --+LOAD_SQL splitPartition_ListPartTable_Varchar_Schema_List_Varchar.sql;
 
@@ -493,12 +493,12 @@ SELECT COUNT(*) FROM T2 PARTITION (P4);
 
 
 --##############################
---+SECTOR; ���� ���� ���� üũ
+--+SECTOR; 분할 값의 길이 체크
 --##############################
 -- PartKey: VARCHAR
 
 --##############################
---+SECTOR; SrcPart�� ���ϴ��� üũ
+--+SECTOR; SrcPart에 속하는지 체크
 --##############################
 --+LOAD_SQL splitPartition_ListPartTable_Varchar_Schema_List_Varchar.sql;
 
@@ -610,7 +610,7 @@ SPLIT PARTITION P4 VALUES ('350', NULL) INTO
 
 
 --###################################################################
---+ SECTOR; DstPart1, DstPart2 �̸� üũ
+--+ SECTOR; DstPart1, DstPart2 이름 체크
 --###################################################################
 --##############################
 --+SECTOR; Left In-place
@@ -740,11 +740,11 @@ SPLIT PARTITION P1 VALUES ('050') INTO
 
 
 --###################################################################
---+ SECTOR; SrcPart�� Ÿ�Կ� ���� ����
+--+ SECTOR; SrcPart의 타입에 따른 분할
 --###################################################################
 
 --##############################
---+SECTOR; �⺻ ��Ƽ���� �ƴ� ��Ƽ��
+--+SECTOR; 기본 파티션이 아닌 파티션
 --##############################
 --##############
 --# Left In-place 
@@ -877,7 +877,7 @@ WHERE TAB.TABLE_ID = PART.TABLE_ID AND
 
 
 --##############################
---+SECTOR; �⺻ ��Ƽ��
+--+SECTOR; 기본 파티션
 --##############################
 --##############
 --# Left In-place 
@@ -1011,7 +1011,7 @@ WHERE TAB.TABLE_ID = PART.TABLE_ID AND
 
 
 --###################################################################
---+ SECTOR; ��� ���� �׽�Ʈ
+--+ SECTOR; 계속 분할 테스트
 --###################################################################
 --+LOAD_SQL splitPartition_ListPartTable_Varchar_Schema_List_Varchar.sql;
 

@@ -93,14 +93,14 @@ SELECT COUNT(*) FROM PDT_RANGE PARTITION( P1 );
 --#########################################
 
 ----------------------------
--- 2.1 ∆ƒ∆ºº« ¿Ã∏ß ∞ÀªÁ
+-- 2.1 ÌååÌã∞ÏÖò Ïù¥Î¶Ñ Í≤ÄÏÇ¨
 ----------------------------
 -- should be fail
 ALTER TABLE PDT_RANGE
 TRUNCATE PARTITION P5;
 
 ----------------------------
--- 2.2 ¬¸¡∂≈∞ ∞ÀªÁ 
+-- 2.2 Ï∞∏Ï°∞ÌÇ§ Í≤ÄÏÇ¨ 
 ----------------------------
 DROP TABLE PDT_RANGE CASCADE;
 CREATE TABLE PDT_RANGE

@@ -135,7 +135,7 @@ CREATE INDEX IDX4 ON T2(I1) LOCAL
 --+SECTOR 2; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR 3; πÆπ˝ √º≈©
+--+SECTOR 3; Î¨∏Î≤ï Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -167,7 +167,7 @@ $P0> DROP TABLE TEST;
 Drop success.
 
 --##############################
---+SECTOR 4; ∆ƒ∆ºº«µÂ ≈◊¿Ã∫Ì¿Œ¡ˆ √º≈©
+--+SECTOR 4; ÌååÌã∞ÏÖòÎìú ÌÖåÏù¥Î∏îÏù∏ÏßÄ Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -187,7 +187,7 @@ Drop success.
 
 
 --##############################
---+SECTOR 5; DstPart ∆ƒ∆ºº« ¿Ã∏ß √º≈©
+--+SECTOR 5; DstPart ÌååÌã∞ÏÖò Ïù¥Î¶Ñ Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f addPartition_HashPartTable_Date_Schema_Hash_Date.sql;
 
@@ -262,7 +262,7 @@ $P0> ALTER TABLE T1
 
 
 --##############################
---+SECTOR 6; DstPart¿« TBS √º≈©
+--+SECTOR 6; DstPartÏùò TBS Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f addPartition_HashPartTable_Date_Schema_Hash_Date.sql;
 
@@ -334,7 +334,7 @@ PDT_TBS3
 
 
 --##############################
---+SECTOR 7; DstPart¿« LOB ƒ√∑≥¿« TBS √º≈©
+--+SECTOR 7; DstPartÏùò LOB Ïª¨ÎüºÏùò TBS Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE T1;
 Drop success.
@@ -574,7 +574,7 @@ PDT_TBS3
 
 
 --##################################################################
---+SECTOR 8; DATA ∫Ò±≥(create 5 partition VS. create 4 partition + add partition)
+--+SECTOR 8; DATA ÎπÑÍµê(create 5 partition VS. create 4 partition + add partition)
 --##################################################################
 --+SYSTEM is -silent -f addPartition_HashPartTable_Date_Schema_Hash_Date.sql;
 

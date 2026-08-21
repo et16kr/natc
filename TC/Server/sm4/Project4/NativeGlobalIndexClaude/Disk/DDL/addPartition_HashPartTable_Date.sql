@@ -60,7 +60,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; πÆπ˝ √º≈©
+--+SECTOR; Î¨∏Î≤ï Ï≤¥ÌÅ¨
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 INTEGER )
@@ -79,7 +79,7 @@ ADD PARTITION P1_1 TABLESPACE PDT_TBS2, P1_2;
 DROP TABLE TEST;
 
 --##############################
---+SECTOR; ∆ƒ∆ºº«µÂ ≈◊¿Ã∫Ì¿Œ¡ˆ √º≈©
+--+SECTOR; ÌååÌã∞ÏÖòÎìú ÌÖåÏù¥Î∏îÏù∏ÏßÄ Ï≤¥ÌÅ¨
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 INTEGER );
@@ -92,7 +92,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; DstPart ∆ƒ∆ºº« ¿Ã∏ß √º≈©
+--+SECTOR; DstPart ÌååÌã∞ÏÖò Ïù¥Î¶Ñ Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f addPartition_HashPartTable_Date_Schema_Hash_Date.sql;
 
@@ -134,7 +134,7 @@ ADD PARTITION P3 TABLESPACE PDT_TBS;
 
 
 --##############################
---+SECTOR; DstPart¿« TBS √º≈©
+--+SECTOR; DstPartÏùò TBS Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f addPartition_HashPartTable_Date_Schema_Hash_Date.sql;
 
@@ -186,7 +186,7 @@ WHERE A.TABLE_ID = B.TABLE_ID AND
 
 
 --##############################
---+SECTOR; DstPart¿« LOB ƒ√∑≥¿« TBS √º≈©
+--+SECTOR; DstPartÏùò LOB Ïª¨ÎüºÏùò TBS Ï≤¥ÌÅ¨
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 DATE, I2 BLOB, I3 CLOB )
@@ -346,7 +346,7 @@ ORDER BY LOBS.COLUMN_ID ASC;
 
 
 --##################################################################
---+SECTOR; DATA ∫Ò±≥(create 5 partition VS. create 4 partition + add partition)
+--+SECTOR; DATA ÎπÑÍµê(create 5 partition VS. create 4 partition + add partition)
 --##################################################################
 --+SYSTEM is -silent -f addPartition_HashPartTable_Date_Schema_Hash_Date.sql;
 

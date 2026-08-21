@@ -134,7 +134,7 @@ CREATE INDEX IDX4 ON T2(I1) LOCAL
 --+SECTOR 2; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR 3; ¹®¹ý Ã¼Å©
+--+SECTOR 3; ë¬¸ë²• ì²´í¬
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -166,7 +166,7 @@ $P0> DROP TABLE TEST;
 Drop success.
 
 --##############################
---+SECTOR 4; ÆÄÆ¼¼Çµå Å×ÀÌºíÀÎÁö Ã¼Å©
+--+SECTOR 4; íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì¸ì§€ ì²´í¬
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -186,7 +186,7 @@ Drop success.
 
 
 --##############################
---+SECTOR 5; ÆÄÆ¼¼Ç ÀÌ¸§ Ã¼Å©
+--+SECTOR 5; íŒŒí‹°ì…˜ ì´ë¦„ ì²´í¬
 --##############################
 --+SYSTEM is -silent -f dropPartition_ListPartTable_Varchar_Schema_List_Varchar.sql;
 
@@ -221,7 +221,7 @@ Alter success.
 
 
 --##############################
---+SECTOR 6; LOB ÄÃ·³ÀÌ ÀÖ´Â °æ¿ìÀÇ DROP PARTITION
+--+SECTOR 6; LOB ì»¬ëŸ¼ì´ ìžˆëŠ” ê²½ìš°ì˜ DROP PARTITION
 --##############################
 $P0> DROP TABLE T1;
 Drop success.

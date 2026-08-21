@@ -1,0 +1,502 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = 글로벌 인덱스 키 컬럼의 컬럼 DDL (디스크). O-2 · O-3 의 감시자.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다 (커버리지 조사 2026-08-21).
+$T0> #
+$T0> # ★ 왜 이 자리인가 -- P0 둘이 나온 곳에 감시자가 없었다
+$T0> #
+$T0> #   `DISK_GLOBAL_INDEX_ENABLE` 의 기본값을 1 로 올린 근거가
+$T0> #   `idpDescResource.cpp` 에 적혀 있다. 그 근거는 **디스크 컬럼 DDL 에서
+$T0> #   P0 가 둘 나왔다**는 것이다:
+$T0> #
+$T0> #     O-2  재생성 DDL 이 인덱스를 조용히 비운다
+$T0> #          -- 오류도 크래시도 없는 **오답**
+$T0> #     O-3  글로벌 키 컬럼 MODIFY COLUMN 이 IDE_ASSERT + 부팅 루프
+$T0> #
+$T0> #   둘 다 상시 그물 1429 검사가 전부 초록인 채로 숨어 있었고 표적 작업으로만
+$T0> #   찾혔다. 그런데 스위트를 세어 보니(2026-08-21) 이렇다:
+$T0> #
+$T0> #     ADD COLUMN     Memory 3  Disk 8   (이식분이 덮는다)
+$T0> #     DROP COLUMN    Memory 1  Disk 8   (이식분이 덮는다)
+$T0> #     RENAME COLUMN  Memory 1  Disk 2
+$T0> #     MODIFY COLUMN  Memory 1  Disk **0**   <- O-3 이 나온 자리
+$T0> #
+$T0> #   즉 **O-3 의 감시자가 메모리에만 있다.** 그리고 이식분의 ADD/DROP COLUMN
+$T0> #   은 글로벌 인덱스를 **키에 걸고** 하는 것이 아니라 일반 컬럼 DDL 이라
+$T0> #   O-2 의 표적(글로벌 트리가 비는가)을 겨누지 않는다.
+$T0> #
+$T0> # ★ 매체가 다르면 다른 것을 잰다
+$T0> #   메모리 판(`Memory/DDL/alterTableColumn.tc`)이 초록이어도 디스크가
+$T0> #   안전하다는 뜻이 아니다. 컬럼 DDL 의 재생성 경로가 매체마다 갈린다 --
+$T0> #   메모리는 인덱스를 **먼저** 만들고 나중에 moveRow 로 로우를 옮기며
+$T0> #   (BUG-44230), 그 뒤 `qdbAlter::recreateNativeGlobalIndexes` 가 논리
+$T0> #   테이블의 글로벌 트리를 다시 세운다. 디스크는 `recreateTableForDisk` 와
+$T0> #   `recreateIndexForDisk` 로 간다. 같은 문장, 다른 기계다.
+$T0> #
+$T0> # ★★ 무엇을 재는가
+$T0> #
+$T0> #   A  MODIFY COLUMN 이 **글로벌 키 컬럼**에 (O-3 의 표적)
+$T0> #      -- 문장이 성공하고, 서버가 살아 있고, 판별자 101 이 그대로고,
+$T0> #         인덱스 경유 결과 == 풀스캔 결과여야 한다.
+$T0> #   B  ADD COLUMN / DROP COLUMN 뒤에 **글로벌 트리가 비지 않았는가**
+$T0> #      (O-2 의 표적) -- 키 개수 == 로우 개수.
+$T0> #   C  컬럼 DDL 뒤에도 **파티션 간 유일성이 실제로 선다**
+$T0> #      -- 카탈로그가 아니라 동작으로 확인한다. 트리가 조용히 비었다면
+$T0> #         중복이 들어가 버린다.
+$T0> #
+$T0> #   ★ B·C 가 O-2 를 잡는 방식이 이 케이스의 요점이다. O-2 는 오류를 내지
+$T0> #     않으므로 "문장이 성공했다" 로는 못 잡는다. **성공한 뒤의 트리를
+$T0> #     세어야** 잡힌다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 전제를 세우고 전사에 남긴다 (F07 규약).
+$T0> #
+
+$T0> #
+$T0> # 판별자를 전사에 남긴다. 101 이면 네이티브 글로벌이다.
+$T0> #
+
+$T0> #
+$T0> # 인덱스 경유 결과와 풀스캔 결과가 같은가. 어느 쪽에만 있는 행도 없어야 한다.
+$T0> #
+
+$T0> #
+$T0> # ★ O-2 의 저울. 인덱스가 세는 키 개수와 테이블의 로우 개수를 나란히 둔다.
+$T0> #   트리가 조용히 비면 앞의 값만 줄어든다.
+$T0> #
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_ACG;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+
+$T0> create table ngd_acg( i1 integer, i2 varchar(20), i3 integer, i4 integer )
+    partition by range(i1)
+    (
+      partition p1 values less than (100),
+      partition p2 values less than (200),
+      partition p3 values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # i1 을 포함하지 않는 키 -> 글로벌이어야만 설 수 있다
+$T0> create index ngd_acg_g on ngd_acg(i2) tablespace sys_tbs_disk_data;
+Create success.
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACG_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+
+$T0> insert into ngd_acg values (  10, 'aaa', 1, 1 );
+1 row inserted.
+$T0> insert into ngd_acg values ( 150, 'bbb', 2, 2 );
+1 row inserted.
+$T0> insert into ngd_acg values ( 250, 'ccc', 3, 3 );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> select * from
+    (
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          I2                    
+-------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          I2                    
+-------------------------------------
+No rows selected.
+$T0> select /*+ index(ngd_acg, ngd_acg_g) */ count(i2) as via_index
+      from ngd_acg where i2 is not null;
+VIA_INDEX            
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_acg) */ count(i2) as via_full
+      from ngd_acg where i2 is not null;
+VIA_FULL             
+-----------------------
+3                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- ★ MODIFY COLUMN 이 글로벌 키 컬럼에 (O-3 의 표적)
+$T0> ##################################
+$T0> # O-3 은 여기서 IDE_ASSERT 로 죽고 부팅 루프에 들어갔다. 지금은 문장이
+$T0> # 성공해야 하고, 성공한 뒤의 트리가 온전해야 한다.
+$T0> alter table ngd_acg modify column ( i2 varchar(100) );
+Alter success.
+
+$T0> desc ngd_acg;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       VARCHAR(100)                
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+NGD_ACG_G                                BTREE                  I2 ASC
+NGD_ACG has no primary key
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACG_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          
+--------------
+I2                                                                                                    
+--------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          
+--------------
+I2                                                                                                    
+--------------------------------------------------------------------------------------------------------
+No rows selected.
+$T0> select /*+ index(ngd_acg, ngd_acg_g) */ count(i2) as via_index
+      from ngd_acg where i2 is not null;
+VIA_INDEX            
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_acg) */ count(i2) as via_full
+      from ngd_acg where i2 is not null;
+VIA_FULL             
+-----------------------
+3                    
+1 row selected.
+
+$T0> # 서버가 살아 있다는 것을 전사에 남긴다
+$T0> select count(*) as alive from dual;
+ALIVE                
+-----------------------
+1                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- ADD / DROP COLUMN 뒤에 트리가 비지 않았는가 (O-2 의 표적)
+$T0> ##################################
+$T0> alter table ngd_acg add column ( i5 integer default 7 );
+Alter success.
+
+$T0> desc ngd_acg;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       VARCHAR(100)                
+I3                                       INTEGER                     
+I4                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+NGD_ACG_G                                BTREE                  I2 ASC
+NGD_ACG has no primary key
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACG_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+$T0> select /*+ index(ngd_acg, ngd_acg_g) */ count(i2) as via_index
+      from ngd_acg where i2 is not null;
+VIA_INDEX            
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_acg) */ count(i2) as via_full
+      from ngd_acg where i2 is not null;
+VIA_FULL             
+-----------------------
+3                    
+1 row selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          
+--------------
+I2                                                                                                    
+--------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          
+--------------
+I2                                                                                                    
+--------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> # 키가 아닌 컬럼을 지운다
+$T0> alter table ngd_acg drop column ( i4 );
+Alter success.
+
+$T0> desc ngd_acg;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       VARCHAR(100)                
+I3                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+NGD_ACG_G                                BTREE                  I2 ASC
+NGD_ACG has no primary key
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACG_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+$T0> select /*+ index(ngd_acg, ngd_acg_g) */ count(i2) as via_index
+      from ngd_acg where i2 is not null;
+VIA_INDEX            
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_acg) */ count(i2) as via_full
+      from ngd_acg where i2 is not null;
+VIA_FULL             
+-----------------------
+3                    
+1 row selected.
+$T0> select * from
+    (
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          
+--------------
+I2                                                                                                    
+--------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> select * from
+    (
+      select /*+ FULL SCAN(ngd_acg) */ i1, i2 from ngd_acg where i2 is not null
+      minus
+      select /*+ index(ngd_acg, ngd_acg_g) */ i1, i2 from ngd_acg where i2 is not null
+    ) order by 1;
+I1          
+--------------
+I2                                                                                                    
+--------------------------------------------------------------------------------------------------------
+No rows selected.
+
+$T0> # 이름만 바꾼다 -- 인덱스는 영향받지 않아야 한다
+$T0> alter table ngd_acg rename column i3 to k3;
+Alter success.
+
+$T0> desc ngd_acg;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       VARCHAR(100)                
+K3                                       INTEGER                     
+I5                                       INTEGER                     
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+NGD_ACG_G                                BTREE                  I2 ASC
+NGD_ACG has no primary key
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACG_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+$T0> select /*+ index(ngd_acg, ngd_acg_g) */ count(i2) as via_index
+      from ngd_acg where i2 is not null;
+VIA_INDEX            
+-----------------------
+3                    
+1 row selected.
+$T0> select /*+ FULL SCAN(ngd_acg) */ count(i2) as via_full
+      from ngd_acg where i2 is not null;
+VIA_FULL             
+-----------------------
+3                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- 컬럼 DDL 뒤에도 파티션 간 유일성이 실제로 서는가
+$T0> ##################################
+$T0> # 카탈로그가 아니라 동작으로 확인한다. 트리가 조용히 비었다면 아래 중복이
+$T0> # 들어가 버린다.
+
+$T0> create table ngd_acgu( i1 integer, i2 varchar(20) )
+    partition by range(i1)
+    ( partition p1 values less than (100), partition pd values default )
+    tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create unique index ngd_acgu_g on ngd_acgu(i2) tablespace sys_tbs_disk_data;
+Create success.
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACGU_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+
+$T0> insert into ngd_acgu values (  10, 'dup' );
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> # 전제 -- 컬럼 DDL 전에는 파티션을 가로질러 막힌다
+$T0> insert into ngd_acgu values ( 500, 'dup' );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> alter table ngd_acgu modify column ( i2 varchar(60) );
+Alter success.
+
+$T0> desc ngd_acgu;
+[ TABLESPACE : SYS_TBS_DISK_DATA ]
+[ ATTRIBUTE ]                                                         
+------------------------------------------------------------------------------
+NAME                                     TYPE                        IS NULL 
+------------------------------------------------------------------------------
+I1                                       INTEGER                     
+I2                                       VARCHAR(60)                 
+[ INDEX ]                                                       
+------------------------------------------------------------------------------
+NAME                                     TYPE     IS UNIQUE     COLUMN
+------------------------------------------------------------------------------
+NGD_ACGU_G                               BTREE    UNIQUE        I2 ASC
+NGD_ACGU has no primary key
+$T0> select decode( p.partition_type, 101, 'NATIVE', 'OTHER' ) as impl,
+           decode( i.index_table_id, 0, 'NO-GIT', 'GIT' ) as hidden
+      from system_.sys_part_indices_ p, system_.sys_indices_ i
+     where p.index_id = i.index_id
+       and i.index_name = 'NGD_ACGU_G';
+IMPL    HIDDEN  
+-------------------
+NATIVE  NO-GIT  
+1 row selected.
+
+$T0> # ★ 판정 -- 컬럼 DDL 뒤에도 같은 거절이어야 한다.
+$T0> #   여기서 "1 row inserted." 가 나오면 트리가 비었다는 뜻이다(O-2).
+$T0> insert into ngd_acgu values ( 500, 'dup' );
+[ERR-11058 : The row already exists in a unique index.]
+
+$T0> select count(*) as rows_after from ngd_acgu;
+ROWS_AFTER           
+-----------------------
+1                    
+1 row selected.
+$T0> commit;
+Commit success.
+
+$T0> ##################################
+$T0> SECTOR 5; FINALIZATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> DROP TABLE NGD_ACGU;
+Drop success.
+$T0> DROP TABLE NGD_ACG;
+Drop success.
+

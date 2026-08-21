@@ -60,7 +60,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; ���� üũ
+--+SECTOR; 문법 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 INTEGER )
@@ -79,7 +79,7 @@ TRUNCATE PARTITION P1_1 TABLESPACE PDT_TBS2;
 DROP TABLE TEST;
 
 --##############################
---+SECTOR; ��Ƽ�ǵ� ���̺����� üũ
+--+SECTOR; 파티션드 테이블인지 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 DATE, I2 INTEGER );
@@ -92,7 +92,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; ��Ƽ�� �̸� üũ
+--+SECTOR; 파티션 이름 체크
 --##############################
 --+SYSTEM is -silent -f truncatePartition_ListPartTable_Date_Schema_List_Date.sql;
 
@@ -119,7 +119,7 @@ TRUNCATE PARTITION P1;
 
 
 --##############################
---+SECTOR; LOB �÷��� �ִ� ����� TRUNCATE PARTITION
+--+SECTOR; LOB 컬럼이 있는 경우의 TRUNCATE PARTITION
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 DATE, I2 BLOB, I3 CLOB )
@@ -157,7 +157,7 @@ SELECT COUNT(*) FROM T1;
 
 
 --##################################################################
---+SECTOR; �ε��� �˻�
+--+SECTOR; 인덱스 검사
 --##################################################################
 --+SYSTEM is -silent -f truncatePartition_ListPartTable_Date_Schema_List_Date.sql;
 

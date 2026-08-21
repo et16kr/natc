@@ -51,7 +51,7 @@ DISK_GLOBAL_INDEX_ENABLE
 1 row selected.
 
 --###################################################################
---# ÀÎµ¦½º ÆÄÆ¼¼ÇÀ» Á÷Á¢ ÁöÁ¤ÇÏ´Â °æ¿ì
+--# ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì„ ì§ì ‘ ì§€ì •í•˜ëŠ” ê²½ìš°
 --###################################################################
 
 --###################################################################
@@ -117,7 +117,7 @@ CREATE INDEX IDX4 ON T2(I1) LOCAL;>>> [addPartition_index_partition_Schema_Index
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
 --###################################################################
---+SECTOR 2; ¹®¹ý Ã¼Å©
+--+SECTOR 2; ë¬¸ë²• ì²´í¬
 --###################################################################
 -- should be fail
 $P0> ALTER TABLE T1 
@@ -151,7 +151,7 @@ line 6: missing or invalid syntax
 
 
 --##############################
---+SECTOR 3; ÆÄÆ¼¼Çµå Å×ÀÌºíÀÎÁö Ã¼Å©
+--+SECTOR 3; íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì¸ì§€ ì²´í¬
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -174,7 +174,7 @@ Drop success.
 
 
 --##############################
---+SECTOR 4; ÁöÁ¤ÇÑ ÀÎµ¦½º°¡ ÀÖ´ÂÁö Ã¼Å©
+--+SECTOR 4; ì§€ì •í•œ ì¸ë±ìŠ¤ê°€ ìžˆëŠ”ì§€ ì²´í¬
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
@@ -226,11 +226,11 @@ $P0> ALTER TABLE T2
 
 
 --##############################
---+SECTOR 5; ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§ Áßº¹ Ã¼Å©
+--+SECTOR 5; ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„ ì¤‘ë³µ ì²´í¬
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
--- ÆÄÆ¼¼Çµå ÀÎµ¦½º ÀÌ¸§ Áßº¹
+-- íŒŒí‹°ì…˜ë“œ ì¸ë±ìŠ¤ ì´ë¦„ ì¤‘ë³µ
 -- should be fail
 $P0> ALTER TABLE T2 
      ADD
@@ -243,7 +243,7 @@ $P0> ALTER TABLE T2
                            ^   ^
 ]
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§ Áßº¹
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„ ì¤‘ë³µ
 -- should be fail
 $P0> ALTER TABLE T2 
      ADD
@@ -256,7 +256,7 @@ $P0> ALTER TABLE T2
                            ^   ^
 ]
 
--- ÀÌ¹Ì ÀÖ´Â ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§
+-- ì´ë¯¸ ìžˆëŠ” ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„
 -- should be fail
 $P0> ALTER TABLE T2 
      ADD
@@ -269,7 +269,7 @@ $P0> ALTER TABLE T2
                            ^   ^
 ]
 
--- ÀÌ¹Ì ÀÖ´Â ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§
+-- ì´ë¯¸ ìžˆëŠ” ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„
 -- should be fail
 $P0> ALTER TABLE T2 
      ADD
@@ -282,7 +282,7 @@ $P0> ALTER TABLE T2
                            ^   ^
 ]
 
--- ÀÌ¹Ì ÀÖ´Â ÀÎµ¦½º ÆÄÆ¼¼Ç ÀÌ¸§
+-- ì´ë¯¸ ìžˆëŠ” ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì´ë¦„
 -- should be fail
 $P0> ALTER TABLE T2 
      ADD
@@ -298,7 +298,7 @@ $P0> ALTER TABLE T2
 
 
 --##################################################################
---+SECTOR 6; ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+--+SECTOR 6; ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 --##################################################################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
@@ -372,11 +372,11 @@ PDT_TBS
 
 
 --##############################
---+SECTOR 7; LOB COLUMNÀÌ ¾ø´Â °æ¿ì(ÀÎµ¦½º ÆÄÆ¼¼Ç¿¡ TBSÁöÁ¤ÇÒ °æ¿ì)
+--+SECTOR 7; LOB COLUMNì´ ì—†ëŠ” ê²½ìš°(ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì— TBSì§€ì •í•  ê²½ìš°)
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -405,7 +405,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -434,7 +434,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -465,7 +465,7 @@ No rows selected.
 
 
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -493,7 +493,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -521,7 +521,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -550,7 +550,7 @@ NAME
 No rows selected.
 
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -574,7 +574,7 @@ NAME
 PDT_TBS3                                  
 1 row selected.
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -598,7 +598,7 @@ NAME
 PDT_TBS3                                  
 1 row selected.
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -624,11 +624,11 @@ PDT_TBS
 
 
 --##############################
---+SECTOR 8; LOB COLUMNÀÌ ¾ø´Â °æ¿ì(ÀÎµ¦½º ÆÄÆ¼¼Ç¿¡ TBSÁöÁ¤ÇÏÁö ¾ÊÀ» °æ¿ì)
+--+SECTOR 8; LOB COLUMNì´ ì—†ëŠ” ê²½ìš°(ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì— TBSì§€ì •í•˜ì§€ ì•Šì„ ê²½ìš°)
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -657,7 +657,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -686,7 +686,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -717,7 +717,7 @@ No rows selected.
 
 
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition.sql;
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -745,7 +745,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -773,7 +773,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -802,7 +802,7 @@ NAME
 No rows selected.
 
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T2 
      ADD
@@ -828,11 +828,11 @@ PDT_TBS
 
 
 --##############################
---+SECTOR 9; LOB COLUMNÀÌ ÀÖ´Â °æ¿ì(ÀÎµ¦½º ÆÄÆ¼¼Ç¿¡ TBSÁöÁ¤ÇÒ °æ¿ì)
+--+SECTOR 9; LOB COLUMNì´ ìžˆëŠ” ê²½ìš°(ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ì— TBSì§€ì •í•  ê²½ìš°)
 --##############################
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition_Lob.sql;
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -861,7 +861,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -890,7 +890,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ¸ðµç ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ëª¨ë“  ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -921,7 +921,7 @@ No rows selected.
 
 
 --+SYSTEM is -silent -f addPartition_index_partition_Schema_Index_Partition_Lob.sql;
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -949,7 +949,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -977,7 +977,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ºÎºÐ ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤
+-- ë¶€ë¶„ ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -1006,7 +1006,7 @@ NAME
 No rows selected.
 
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -1029,7 +1029,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T3 
      ADD
@@ -1052,7 +1052,7 @@ NAME
 --------------------------------------------
 No rows selected.
 
--- ÀÎµ¦½º ÆÄÆ¼¼Ç ÁöÁ¤ÇÏÁö ¾ÊÀ½
+-- ì¸ë±ìŠ¤ íŒŒí‹°ì…˜ ì§€ì •í•˜ì§€ ì•ŠìŒ
 -- should be success
 $P0> ALTER TABLE T3 
      ADD

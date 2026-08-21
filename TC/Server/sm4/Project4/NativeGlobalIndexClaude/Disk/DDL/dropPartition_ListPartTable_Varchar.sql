@@ -60,7 +60,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; ���� üũ
+--+SECTOR; 문법 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 VARCHAR(10), I2 INTEGER )
@@ -79,7 +79,7 @@ DROP PARTITION P1_1 TABLESPACE PDT_TBS2;
 DROP TABLE TEST;
 
 --##############################
---+SECTOR; ��Ƽ�ǵ� ���̺����� üũ
+--+SECTOR; 파티션드 테이블인지 체크
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 VARCHAR(1000), I2 INTEGER );
@@ -92,7 +92,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; ��Ƽ�� �̸� üũ
+--+SECTOR; 파티션 이름 체크
 --##############################
 --+SYSTEM is -silent -f dropPartition_ListPartTable_Varchar_Schema_List_Varchar.sql;
 
@@ -119,7 +119,7 @@ DROP PARTITION P1;
 
 
 --##############################
---+SECTOR; LOB �÷��� �ִ� ����� DROP PARTITION
+--+SECTOR; LOB 컬럼이 있는 경우의 DROP PARTITION
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 VARCHAR(10), I2 BLOB, I3 CLOB )

@@ -134,7 +134,7 @@ CREATE INDEX IDX4 ON T2(I1) LOCAL
 --+SECTOR 2; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR 3; πÆπ˝ √º≈©
+--+SECTOR 3; Î¨∏Î≤ï Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -166,7 +166,7 @@ $P0> DROP TABLE TEST;
 Drop success.
 
 --##############################
---+SECTOR 4; ∆ƒ∆ºº«µÂ ≈◊¿Ã∫Ì¿Œ¡ˆ √º≈©
+--+SECTOR 4; ÌååÌã∞ÏÖòÎìú ÌÖåÏù¥Î∏îÏù∏ÏßÄ Ï≤¥ÌÅ¨
 --##############################
 $P0> DROP TABLE TEST;
 [ERR-31031 : Table or view was not found : 
@@ -186,7 +186,7 @@ Drop success.
 
 
 --##############################
---+SECTOR 5; ∆ƒ∆ºº« ¿Ã∏ß √º≈©
+--+SECTOR 5; ÌååÌã∞ÏÖò Ïù¥Î¶Ñ Ï≤¥ÌÅ¨
 --##############################
 --+SYSTEM is -silent -f truncatePartition_ListPartTable_Date_Schema_List_Date.sql;
 
@@ -221,7 +221,7 @@ Alter success.
 
 
 --##############################
---+SECTOR 6; LOB ƒ√∑≥¿Ã ¿÷¥¬ ∞ÊøÏ¿« TRUNCATE PARTITION
+--+SECTOR 6; LOB Ïª¨ÎüºÏù¥ ÏûàÎäî Í≤ΩÏö∞Ïùò TRUNCATE PARTITION
 --##############################
 $P0> DROP TABLE T1;
 Drop success.
@@ -280,7 +280,7 @@ COUNT
 
 
 --##################################################################
---+SECTOR 7; ¿Œµ¶Ω∫ ∞ÀªÁ
+--+SECTOR 7; Ïù∏Îç±Ïä§ Í≤ÄÏÇ¨
 --##################################################################
 --+SYSTEM is -silent -f truncatePartition_ListPartTable_Date_Schema_List_Date.sql;
 

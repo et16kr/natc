@@ -60,7 +60,7 @@ DROP TABLE T3;
 --+ SECTOR; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR; ¹®¹ı Ã¼Å©
+--+SECTOR; ë¬¸ë²• ì²´í¬
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 VARCHAR(1000), I2 INTEGER )
@@ -83,7 +83,7 @@ COALESCE PARTITION P5;
 DROP TABLE TEST;
 
 --##############################
---+SECTOR; ÆÄÆ¼¼Çµå Å×ÀÌºíÀÎÁö Ã¼Å©
+--+SECTOR; íŒŒí‹°ì…˜ë“œ í…Œì´ë¸”ì¸ì§€ ì²´í¬
 --##############################
 DROP TABLE TEST;
 CREATE TABLE TEST( I1 VARCHAR(10), I2 INTEGER );
@@ -96,7 +96,7 @@ DROP TABLE TEST;
 
 
 --##############################
---+SECTOR; ³²Àº ÆÄÆ¼¼Ç °³¼ö Ã¼Å©
+--+SECTOR; ë‚¨ì€ íŒŒí‹°ì…˜ ê°œìˆ˜ ì²´í¬
 --##############################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Varchar_Schema_Hash_Varchar.sql;
 
@@ -148,7 +148,7 @@ SELECT COUNT(*) FROM T2;
 
 
 --##############################
---+SECTOR; DstPartÀÇ TBS Ã¼Å©
+--+SECTOR; DstPartì˜ TBS ì²´í¬
 --##############################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Varchar_Schema_Hash_Varchar.sql;
 
@@ -177,7 +177,7 @@ ORDER BY A.PARTITION_NAME;
 
 
 --##############################
---+SECTOR; LOB ÄÃ·³ÀÌ ÀÖ´Â °æ¿ìÀÇ COALESCE
+--+SECTOR; LOB ì»¬ëŸ¼ì´ ìˆëŠ” ê²½ìš°ì˜ COALESCE
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 VARCHAR(1000), I2 BLOB, I3 CLOB )
@@ -222,7 +222,7 @@ SELECT COUNT(*) FROM T2;
 
 
 --##################################################################
---+SECTOR; DATA ºñ±³
+--+SECTOR; DATA ë¹„êµ
 --# ( create 4 partition VS. create 5 partition + coalesce partition )
 --##################################################################
 --+SYSTEM is -silent -f coalescePartition_HashPartTable_Varchar_Schema_Hash_Varchar.sql;

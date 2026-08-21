@@ -130,7 +130,7 @@ CREATE INDEX IDX4 ON T2(I1) LOCAL
 --+SECTOR 2; BASIC TEST
 --###################################################################
 --##############################
---+SECTOR 3; ¹®¹ı Ã¼Å©
+--+SECTOR 3; ë¬¸ë²• ì²´í¬
 --##############################
 $P0> DROP TABLE TEST;
 Drop success.
@@ -182,10 +182,10 @@ Create success.
 
 
 --##############################
---+SECTOR 4; ÆÄÆ¼¼ÇÀÇ °³¼ö
+--+SECTOR 4; íŒŒí‹°ì…˜ì˜ ê°œìˆ˜
 --##############################
 --#############
---# 4°³
+--# 4ê°œ
 --#############
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Integer_Schema_List_Integer.sql;
 
@@ -255,7 +255,7 @@ COUNT
 1 row selected.
 
 --#############
---# 1°³
+--# 1ê°œ
 --#############
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Integer_Schema_List_Integer.sql;
 
@@ -314,7 +314,7 @@ COUNT
 
 
 --##############################
---+SECTOR 5; LOB ÄÃ·³ÀÌ ÀÖ´Â °æ¿ì
+--+SECTOR 5; LOB ì»¬ëŸ¼ì´ ìˆëŠ” ê²½ìš°
 --##############################
 $P0> DROP TABLE T1;
 Drop success.
@@ -393,10 +393,10 @@ COUNT
 
 
 --##################################################################
---+SECTOR 6; UPDATE Á¶°Ç¿¡ µû¸¥ °Ë»ç
+--+SECTOR 6; UPDATE ì¡°ê±´ì— ë”°ë¥¸ ê²€ì‚¬
 --##################################################################
 --##############################
---+SECTOR 7; ¿©·¯ ÆÄÆ¼¼ÇÀ¸·Î ºĞ»ê
+--+SECTOR 7; ì—¬ëŸ¬ íŒŒí‹°ì…˜ìœ¼ë¡œ ë¶„ì‚°
 --##############################
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Integer_Schema_List_Integer.sql;
 
@@ -467,7 +467,7 @@ COUNT
 
 
 --##############################
---+SECTOR 8; ¸ğµÎ °°Àº ÆÄÆ¼¼ÇÀ¸·Î ÀÌµ¿
+--+SECTOR 8; ëª¨ë‘ ê°™ì€ íŒŒí‹°ì…˜ìœ¼ë¡œ ì´ë™
 --##############################
 --+SYSTEM is -silent -f rowMovement_ListPartTable_Integer_Schema_List_Integer.sql;
 

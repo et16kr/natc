@@ -60,11 +60,11 @@ ALTER SESSION SET DEFAULT_DATE_FORMAT='DD-MON-RRRR';
 
 
 --###################################################################
---+ SECTOR; �Ľ� �˻�
+--+ SECTOR; 파싱 검사
 --###################################################################
 
 --##############################
---+SECTOR; �⺻ ��Ƽ�� ���� üũ
+--+SECTOR; 기본 파티션 개수 체크
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -143,7 +143,7 @@ PARTITION BY RANGE (I1)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; MAXROWS ��� ���� üũ
+--+SECTOR; MAXROWS 사용 유무 체크
 --##############################
 DROP TABLE T1;
 -- should be fail
@@ -188,7 +188,7 @@ PARTITION BY RANGE (I1)
 
 
 --##################################################################
---+SECTOR; ��Ƽ�� Ű �÷��� ���� �˻�
+--+SECTOR; 파티션 키 컬럼에 대한 검사
 --##################################################################
 DROP TABLE T1;
 -- should be success
@@ -219,7 +219,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P3);
 SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 --##############################
---+SECTOR; ��Ƽ�� Ű �÷��� �ߺ� üũ
+--+SECTOR; 파티션 키 컬럼의 중복 체크
 --##############################
 DROP TABLE T1;
 --should be fail
@@ -232,7 +232,7 @@ PARTITION BY RANGE (I3, I1, I3)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű �÷��� ���̺��� �����ϴ� �÷����� üũ
+--+SECTOR; 파티션 키 컬럼이 테이블에 존재하는 컬럼인지 체크
 --##############################
 DROP TABLE T1;
 --should be fail
@@ -245,7 +245,7 @@ PARTITION BY RANGE (I3, I1, I4, I2 )
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű �÷��� ������ Ÿ���� ��� �� ������ Ÿ������ üũ
+--+SECTOR; 파티션 키 컬럼의 데이터 타입이 대소 비교 가능한 타입인지 체크
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -408,7 +408,7 @@ PARTITION BY RANGE (I2, I1)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű �÷� ���� üũ
+--+SECTOR; 파티션 키 컬럼 개수 체크
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -569,10 +569,10 @@ PARTITION BY RANGE
 
 
 --##################################################################
---+SECTOR; �� ��Ƽ�ǿ� ���� �˻�
+--+SECTOR; 각 파티션에 대한 검사
 --##################################################################
 --##############################
---+SECTOR; ��Ƽ�� �̸� �ߺ� �˻�
+--+SECTOR; 파티션 이름 중복 검사
 --##############################
 DROP TABLE T1;
 -- should be fail
@@ -585,7 +585,7 @@ PARTITION BY RANGE (I1, I2)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ���� TBS �˻�
+--+SECTOR; 파티션의 TBS 검사
 --##############################
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 INTEGER, I2 INTEGER )
@@ -710,10 +710,10 @@ PARTITION BY RANGE (I1, I2)
 
 
 --##############################
---+SECTOR; ��Ƽ���� LOB �÷��� TBS �˻�
+--+SECTOR; 파티션의 LOB 컬럼의 TBS 검사
 --##############################
 --###############
---# LOB STORE ( ... ) STORE AS ( ... ) �� ���
+--# LOB STORE ( ... ) STORE AS ( ... ) 의 경우
 --###############
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
@@ -790,7 +790,7 @@ PARTITION BY RANGE (I1)
 ) TABLESPACE PDT_TBS4 LOB(I3) STORE AS ( TABLESPACE PDT_TBS5 ); 
 
 --###############
---# LOB STORE STORE AS ( ... ) �� ���
+--# LOB STORE STORE AS ( ... ) 의 경우
 --###############
 DROP TABLE T1;
 CREATE TABLE T1 ( I1 INTEGER, I2 BLOB, I3 CLOB )
@@ -869,10 +869,10 @@ PARTITION BY RANGE (I1)
 
 
 --##################################################################
---+SECTOR; ��Ƽ�� Ű ���� ���� ���� �˻�
+--+SECTOR; 파티션 키 조건 값에 대한 검사
 --##################################################################
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� ���� ���� üũ
+--+SECTOR; 파티션 키 조건 값의 개수 체크
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -914,7 +914,7 @@ PARTITION BY RANGE (I1, I2)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� ���� ���� üũ
+--+SECTOR; 파티션 키 조건 값의 길이 체크
 --##############################
 DROP TABLE T1;
 -- should be fail
@@ -969,7 +969,7 @@ PARTITION BY RANGE (I1)
 
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(���)
+--+SECTOR; 파티션 키 조건 값 검사(상수)
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -1339,7 +1339,7 @@ SELECT COUNT(*) FROM T1 PARTITION (P4);
 
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(���� �Լ�)
+--+SECTOR; 파티션 키 조건 값 검사(내장 함수)
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -1368,7 +1368,7 @@ PARTITION BY RANGE ( I1 )
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(ȣ��Ʈ ����)
+--+SECTOR; 파티션 키 조건 값 검사(호스트 변수)
 --##############################
 DROP TABLE T1;
 
@@ -1383,7 +1383,7 @@ PARTITION BY RANGE (I1)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(��������)
+--+SECTOR; 파티션 키 조건 값 검사(서브쿼리)
 --##############################
 DROP TABLE T1;
 -- should be fail
@@ -1394,7 +1394,7 @@ PARTITION BY RANGE (I1)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(�Ѱ谪 �˻�)
+--+SECTOR; 파티션 키 조건 값 검사(한계값 검사)
 --##############################
 
 DROP TABLE T1;
@@ -1437,7 +1437,7 @@ SELECT COUNT(*) FROM T1 PARTITION( P3 );
 SELECT COUNT(*) FROM T1 PARTITION( P4 );
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(NULL ��)
+--+SECTOR; 파티션 키 조건 값 검사(NULL 값)
 --##############################
 DROP TABLE T1;
 -- should be fail
@@ -1458,7 +1458,7 @@ PARTITION BY RANGE (I1, I2)
 ) TABLESPACE PDT_TBS;
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� �� �˻�(��¥ ���� ���� �˻�)
+--+SECTOR; 파티션 키 조건 값 검사(날짜 포맷 변경 검사)
 --##############################
 DROP TABLE T1;
 -- should be success
@@ -1522,7 +1522,7 @@ PARTITION BY RANGE (I1)
 ALTER SESSION SET DEFAULT_DATE_FORMAT='DD-MON-RRRR';
 
 --##############################
---+SECTOR; ��Ƽ�� Ű ���� ���� �ߺ� �˻�
+--+SECTOR; 파티션 키 조건 값의 중복 검사
 --##############################
 DROP TABLE T1;
 -- should be fail
@@ -1615,10 +1615,10 @@ PARTITION BY RANGE (I1, I2, I3)
 
 
 --#########################################
---+SECTOR; ���� ���� üũ(����ũ Ű üũ)
+--+SECTOR; 제약 사항 체크(유니크 키 체크)
 --#########################################
 --------------------------------
--- �����Ƚ��� �ε��� ���� üũ
+-- 프리픽스드 인덱스 여부 체크
 --------------------------------
 DROP TABLE T1;
 -- should be fail
@@ -1676,7 +1676,7 @@ SELECT COUNT(*) FROM T1 PARTITION( P3 );
 SELECT COUNT(*) FROM T1 PARTITION( P4 );
 
 --------------------------------
--- �����Ƚ��� �ε��� ���� üũ
+-- 프리픽스드 인덱스 여부 체크
 --------------------------------
 DROP TABLE T1;
 -- should be fail
@@ -1740,9 +1740,9 @@ SELECT COUNT(*) FROM T1 PARTITION( P4 );
 
 
 --#########################################
---+SECTOR; ���� ���� üũ(�ܷ�Ű üũ)
+--+SECTOR; 제약 사항 체크(외래키 체크)
 --#########################################
--- ���� �÷� ��Ƽ�Ŵ�
+-- 단일 컬럼 파티셔닝
 DROP TABLE T3 CASCADE;
 DROP TABLE T2 CASCADE;
 DROP TABLE T1 CASCADE;
