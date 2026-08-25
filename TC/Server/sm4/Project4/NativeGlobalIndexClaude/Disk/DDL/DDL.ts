@@ -96,4 +96,5 @@ copySchemaGate.tc                       # 스키마 복사의 게이트 둘 — 
 alterColumnGlobalKey.tc                 # 글로벌 키 컬럼의 컬럼 DDL — O-2 · O-3 감시자 (신규)
 allIndexEnableDisk.tc                   # ALL INDEX ENABLE/DISABLE — 거부가 걷힌 뒤 (신규)
 foreignKeyGlobalParentDisk.tc           # FK 부모가 네이티브 글로벌 (신규)
+dropPartitionPurgeKeys.tc               # DROP PARTITION 의 purge 가 키를 지우는가 — O-11 감시자 (신규)
 -------------------------------------------------------------------------------

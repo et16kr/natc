@@ -1,0 +1,391 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = DROP PARTITION 의 purge 가 그 파티션의 키를 실제로
+$T0> #                        지우는가 (디스크). 결함 등록부 O-11 의 감시자.
+$T0> # Project ID           = Native Global Index
+$T0> #
+$T0> # 출처                 = 없음. **새로 쓴 것**이다. 오늘 이 계약을 재는 것은
+$T0> #                        삭제될 하네스(`envelope-check.sh` F 절)뿐이었다.
+$T0> #
+$T0> # ★★ 무엇을 주장하는가 -- 항등식 하나
+$T0> #
+$T0> #   `DROP PARTITION` 은 그 파티션의 로우를 없앤다. 글로벌 인덱스의 트리는
+$T0> #   하나이므로, 그 로우들이 남긴 **키**는 트리 안에 그대로 있다. 그것을
+$T0> #   걷어 내는 것이 purge 이고, 걷고 나면 다음이 성립해야 한다:
+$T0> #
+$T0> #       purge 가 지운 키 + purge 가 버린 키 == 그 파티션이 갖고 있던 키
+$T0> #
+$T0> #   이 케이스는 그 항등식을 **판정으로 찍는다**. 원시 값이 아니라 `OK`/`NG`
+$T0> #   를 찍는 이유는 오라클이 다시 녹화될 것이기 때문이다 -- 원시 값만 찍으면
+$T0> #   재녹화가 잘못된 구현의 값을 그대로 축복한다.
+$T0> #
+$T0> # ★★ 오늘 이 케이스는 `NG` 를 찍는다 -- 그것이 **O-11** 이다
+$T0> #
+$T0> #   `sdnbBTree::purgeMember` 의 출발점은 `aIndex->mMinNode` 인데 그 값은
+$T0> #   **통계값**이고, 그것을 채우는 `adjustMinStat` 은 `needToUpdateStat()`
+$T0> #   -> `__DBMS_STAT_METHOD[_FOR_DRDB]` 아래에 있다. 그 프로퍼티의 **출하
+$T0> #   기본값이 0** 이다. 그러면 안쪽 루프가 한 번도 돌지 않고, 바깥의
+$T0> #   `sCurPID == SD_NULL_PID && sPassFreed == 0` 이 참이 되어 **"훑었고
+$T0> #   지울 것이 없었다" 와 같은 경로로 나간다.** 멤버는 `DROPPED` 로 적히고,
+$T0> #   `DROPPED` 는 재-purge 를 조기 반환으로 거르므로 그 키는
+$T0> #   `ALTER INDEX ... REBUILD` 전까지 **영원히 남는다.**
+$T0> #
+$T0> #   ★ **답은 무사하다.** 멤버 필터가 죽은 멤버의 키를 거른다. 잃는 것은
+$T0> #     공간과 매 스캔의 skip 비용이다. C 절이 그 사실을 함께 찍는다 --
+$T0> #     이 결함을 "답이 틀린다" 로 오해하지 않게.
+$T0> #
+$T0> #   실측 둘이 있다. `envelope-check.sh` F 절(파티션 8 · 12,000 행)이
+$T0> #   **지운 키 0 / 버린 키 1,500** 을 쟀고, 이 케이스를 쓰면서 **평범한 SQL
+$T0> #   로만** 같은 것을 다시 쟀다(파티션 3 · 1,000 행, 2026-08-25):
+$T0> #
+$T0> #       __DBMS_STAT_METHOD_FOR_DRDB = 0   PURGE_KEY_FREED 0   VISITED 0
+$T0> #       __DBMS_STAT_METHOD_FOR_DRDB = 1   PURGE_KEY_FREED 500 VISITED 6
+$T0> #
+$T0> #   지운 파티션이 갖고 있던 키가 500 이다. **하네스 없이 SQL 만으로 이
+$T0> #   결함이 보인다** -- 그것이 이 케이스가 존재할 수 있는 이유다.
+$T0> #
+$T0> # ★★ 그래서 이 케이스는 축을 둘 돈다
+$T0> #
+$T0> #   A/B  출하 기본값 -- 항등식이 깨진다(`NG`). 리프를 한 장도 안 훑는다.
+$T0> #   D/E  `__DBMS_STAT_METHOD_FOR_DRDB = 1` -- 항등식이 성립한다(`OK`).
+$T0> #
+$T0> #   축 둘을 나란히 두는 것이 이 케이스의 값이다. 뿌리가 purge 로직이
+$T0> #   아니라 **출발점을 주는 통계 스위치**임을 한 화면이 보인다.
+$T0> #
+$T0> # ★★ 고쳐지면 무엇이 바뀌나
+$T0> #
+$T0> #   A 절의 판정이 `NG` -> `OK` 로 바뀐다. 그때 이 `.lst` 를 다시 찍고, 이
+$T0> #   머리말의 "오늘 `NG` 를 찍는다" 를 지운다. **`OK` 로 바뀌는 것이 이
+$T0> #   케이스의 이빨이다.**
+$T0> #
+$T0> #   고치는 자리 제안은 `disk-open-defects.md` O-11 의 "고치는 자리" --
+$T0> #   ① `mMinNode` 가 `SD_NULL_PID` 면 루트에서 좌단으로 한 번 내려가
+$T0> #   출발점을 얻는다(`rebuildMinStat` 이 이미 그 하강을 갖고 있다),
+$T0> #   ② 출발점을 못 얻으면 `DROPPED` 대신 `DROPPING` 을 남겨 다음 기회에
+$T0> #   다시 걸리게 한다. **통계 스위치를 켜는 것은 답이 아니다** -- purge 와
+$T0> #   무관한 갱신 비용을 DML 전부에 얹는다.
+$T0> #
+$T0> # ★ 기대값에 담지 않는 것 -- 카운터의 절대값. `X$GLOBAL_INDEX_MAINTENANCE`
+$T0> #   는 인스턴스 단위 누적이라 앞 케이스가 남긴 값이 실려 있다. 그래서 이
+$T0> #   케이스는 **DROP 전후의 차분**만 보고, 그 차분을 스냅샷 테이블에 담아
+$T0> #   판정을 계산한다.
+$T0> ###########################################################################
+
+$T0> #
+$T0> # 인스턴스 누적 카운터를 한 줄로 뜬다. 절대값은 오라클에 담지 않는다.
+$T0> #
+
+$T0> #
+$T0> # ★ 이 케이스의 판정. 원시 값이 아니라 항등식의 성립 여부를 찍는다.
+$T0> #
+$T0> #   지운 키(delta key_freed) 가 그 파티션이 갖고 있던 키 수와 같은가.
+$T0> #
+
+$T0> #
+$T0> # 리프를 한 장이라도 훑었는가. O-11 의 직접 증상은 이것이 0 인 것이다.
+$T0> #
+
+$T0> #
+$T0> # 답이 무사한가 -- 트리로 센 값과 힙으로 센 값이 같은가.
+$T0> # O-11 이 살아 있어도 이것은 `OK` 여야 한다(멤버 필터가 죽은 키를 거른다).
+$T0> #
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+$T0> DROP TABLE NGD_O11;
+$T0> DROP TABLE NGD_O11_STAT;
+$T0> DROP TABLE NGD_O11_SNAP;
+$T0> DROP TABLE NGD_O11_WANT;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+$T0> alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+Alter success.
+$T0> select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DISK_GLOBAL_INDEX_ENABLE                                                                                                                                                                                                                                          
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> # 출하 기본값을 전사에 남긴다. 이 값이 0 인 것이 O-11 의 뿌리다.
+$T0> select name, memory_value1 from x$property
+     where name = '__DBMS_STAT_METHOD_FOR_DRDB';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEMORY_VALUE1                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+__DBMS_STAT_METHOD_FOR_DRDB                                                                                                                                                                                                                                       
+0                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> create table ngd_o11_snap( tag varchar(16), key_freed bigint, leaf_visited bigint );
+Create success.
+$T0> create table ngd_o11_want( expected_keys bigint );
+Create success.
+
+$T0> create table ngd_o11( p integer, k integer )
+    partition by range( p )
+    (
+      partition p1 values less than ( 1000 ),
+      partition p2 values less than ( 2000 ),
+      partition p3 values less than ( 3000 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> # 파티션 키(p)를 담지 않은 키 -> 글로벌이어야만 설 수 있다
+$T0> create index ngd_o11_g on ngd_o11( k ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> select decode( pi.partition_type, 101, 'NATIVE', 'OTHER' ) as impl
+      from system_.sys_part_indices_ pi, system_.sys_indices_ i
+     where pi.index_id = i.index_id and i.index_name = 'NGD_O11_G';
+IMPL    
+----------
+NATIVE  
+1 row selected.
+
+$T0> insert into ngd_o11 select level,        level        from dual connect by level <= 500;
+500 rows inserted.
+$T0> insert into ngd_o11 select level + 1000, level + 1000 from dual connect by level <= 500;
+500 rows inserted.
+$T0> insert into ngd_o11 select level + 2000, level + 2000 from dual connect by level <= 500;
+500 rows inserted.
+$T0> insert into ngd_o11 select level + 3000, level + 3000 from dual connect by level <= 500;
+500 rows inserted.
+$T0> commit;
+Commit success.
+
+$T0> # 지울 파티션이 갖고 있는 키 수를 먼저 못박는다. 이것이 항등식의 우변이다.
+$T0> insert into ngd_o11_want
+    select count(*) from ngd_o11 where p >= 1000 and p < 2000;
+1 row inserted.
+$T0> commit;
+Commit success.
+$T0> select expected_keys from ngd_o11_want;
+EXPECTED_KEYS        
+-----------------------
+500                  
+1 row selected.
+
+$T0> select state_name, count(*) as slots
+      from v$disk_btree_global_member
+     where index_name = 'NGD_O11_G'
+     group by state_name order by state_name;
+STATE_NAME        SLOTS                
+------------------------------------------
+ACTIVE            4                    
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 2; A -- 출하 기본값에서 purge 가 키를 지우는가 (★ 오늘 NG = O-11)
+$T0> ##################################
+$T0> insert into ngd_o11_snap( tag, key_freed, leaf_visited )
+    select 'a_before', m.purge_key_freed, m.purge_leaf_visited
+      from x$global_index_maintenance m, system_.sys_indices_ i
+     where m.index_id = i.index_id and i.index_name = 'NGD_O11_G';
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> alter table ngd_o11 drop partition p2;
+Alter success.
+
+$T0> insert into ngd_o11_snap( tag, key_freed, leaf_visited )
+    select 'a_after', m.purge_key_freed, m.purge_leaf_visited
+      from x$global_index_maintenance m, system_.sys_indices_ i
+     where m.index_id = i.index_id and i.index_name = 'NGD_O11_G';
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> select case
+             when ( a.key_freed - b.key_freed ) = ( select expected_keys from ngd_o11_want )
+             then 'OK' else 'NG'
+           end as purge_freed_all_keys
+      from ngd_o11_snap a, ngd_o11_snap b
+     where a.tag = 'a_after' and b.tag = 'a_before';
+PURGE_FREED_ALL_KEYS  
+------------------------
+NG  
+1 row selected.
+$T0> select case
+             when ( a.leaf_visited - b.leaf_visited ) > 0
+             then 'OK' else 'NG'
+           end as purge_visited_any_leaf
+      from ngd_o11_snap a, ngd_o11_snap b
+     where a.tag = 'a_after' and b.tag = 'a_before';
+PURGE_VISITED_ANY_LEAF  
+--------------------------
+NG  
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 3; B -- 멤버는 DROPPED 로 적힌다 (purge 가 아무것도 안 했는데도)
+$T0> ##################################
+$T0> select state_name, count(*) as slots
+      from v$disk_btree_global_member
+     where index_name = 'NGD_O11_G'
+     group by state_name order by state_name;
+STATE_NAME        SLOTS                
+------------------------------------------
+ACTIVE            3                    
+DROPPED           1                    
+2 rows selected.
+
+$T0> ##################################
+$T0> SECTOR 4; C -- ★ 답은 무사하다. 잃는 것은 공간이지 정합성이 아니다
+$T0> ##################################
+$T0> select case
+             when ( select /*+ FULL SCAN(NGD_O11) */ count(*) from NGD_O11 )
+                = ( select /*+ index(NGD_O11, NGD_O11_G) */ count(k)
+                      from NGD_O11 where k is not null )
+             then 'OK' else 'NG'
+           end as answer_tree_equals_heap
+      from dual;
+ANSWER_TREE_EQUALS_HEAP  
+---------------------------
+OK  
+1 row selected.
+
+$T0> select count(*) as rows_left from ngd_o11;
+ROWS_LEFT            
+-----------------------
+1500                 
+1 row selected.
+$T0> select case when count(*) = 0 then 'OK' else 'NG' end as dropped_rows_gone
+      from ngd_o11 where p >= 1000 and p < 2000;
+DROPPED_ROWS_GONE  
+---------------------
+OK  
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 5; D -- 통계 스위치를 열고 같은 것을 다시 잰다 (★ 여기서 OK 여야 한다)
+$T0> ##################################
+$T0> alter system set __DBMS_STAT_METHOD_FOR_DRDB = 1;
+Alter success.
+$T0> select name, memory_value1 from x$property
+     where name = '__DBMS_STAT_METHOD_FOR_DRDB';
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MEMORY_VALUE1                                                                                                                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+__DBMS_STAT_METHOD_FOR_DRDB                                                                                                                                                                                                                                       
+1                                                                                                                                                                                                                                                                 
+1 row selected.
+
+$T0> create table ngd_o11_stat( p integer, k integer )
+    partition by range( p )
+    (
+      partition q1 values less than ( 1000 ),
+      partition q2 values less than ( 2000 ),
+      partition qd values default
+    ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> create index ngd_o11_stat_g on ngd_o11_stat( k ) tablespace sys_tbs_disk_data;
+Create success.
+
+$T0> insert into ngd_o11_stat select level,        level        from dual connect by level <= 500;
+500 rows inserted.
+$T0> insert into ngd_o11_stat select level + 1000, level + 1000 from dual connect by level <= 500;
+500 rows inserted.
+$T0> insert into ngd_o11_stat select level + 2000, level + 2000 from dual connect by level <= 500;
+500 rows inserted.
+$T0> commit;
+Commit success.
+
+$T0> delete from ngd_o11_want;
+1 row deleted.
+$T0> insert into ngd_o11_want
+    select count(*) from ngd_o11_stat where p >= 1000 and p < 2000;
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> insert into ngd_o11_snap( tag, key_freed, leaf_visited )
+    select 'd_before', m.purge_key_freed, m.purge_leaf_visited
+      from x$global_index_maintenance m, system_.sys_indices_ i
+     where m.index_id = i.index_id and i.index_name = 'NGD_O11_STAT_G';
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> alter table ngd_o11_stat drop partition q2;
+Alter success.
+
+$T0> insert into ngd_o11_snap( tag, key_freed, leaf_visited )
+    select 'd_after', m.purge_key_freed, m.purge_leaf_visited
+      from x$global_index_maintenance m, system_.sys_indices_ i
+     where m.index_id = i.index_id and i.index_name = 'NGD_O11_STAT_G';
+1 row inserted.
+$T0> commit;
+Commit success.
+
+$T0> select case
+             when ( a.key_freed - b.key_freed ) = ( select expected_keys from ngd_o11_want )
+             then 'OK' else 'NG'
+           end as purge_freed_all_keys
+      from ngd_o11_snap a, ngd_o11_snap b
+     where a.tag = 'd_after' and b.tag = 'd_before';
+PURGE_FREED_ALL_KEYS  
+------------------------
+OK  
+1 row selected.
+$T0> select case
+             when ( a.leaf_visited - b.leaf_visited ) > 0
+             then 'OK' else 'NG'
+           end as purge_visited_any_leaf
+      from ngd_o11_snap a, ngd_o11_snap b
+     where a.tag = 'd_after' and b.tag = 'd_before';
+PURGE_VISITED_ANY_LEAF  
+--------------------------
+OK  
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 6; E -- 그 축에서도 답은 맞다
+$T0> ##################################
+$T0> select case
+             when ( select /*+ FULL SCAN(NGD_O11_STAT) */ count(*) from NGD_O11_STAT )
+                = ( select /*+ index(NGD_O11_STAT, NGD_O11_STAT_G) */ count(k)
+                      from NGD_O11_STAT where k is not null )
+             then 'OK' else 'NG'
+           end as answer_tree_equals_heap
+      from dual;
+ANSWER_TREE_EQUALS_HEAP  
+---------------------------
+OK  
+1 row selected.
+
+$T0> ##################################
+$T0> SECTOR 7; FINALIZE
+$T0> ##################################
+$T0> alter system set __DBMS_STAT_METHOD_FOR_DRDB = 0;
+Alter success.
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NGD_O11;
+$T0> DROP TABLE NGD_O11_STAT;
+$T0> DROP TABLE NGD_O11_SNAP;
+$T0> DROP TABLE NGD_O11_WANT;
+$T0> SKIP END;
+
