@@ -32,6 +32,7 @@ TestSuiteDescription  = Native Global Index (disk) - Recovery
 #
 restartRedoReplay.sql                   # 크래시 후 redo 재적용 — 커밋 키 생존 (신규)
 restartUndoRollback.sql                 # 언두 — ROLLBACK 과 크래시가 되돌리는가 (신규)
+restartConvergeMembers.sql               # 크래시 뒤 재기동이 멤버 집합을 스스로 되맞추는가 — A-3 의 뒤집힌 기준 (신규)
 restartCatalogSurvival.sql              # kill/clean/start 후 카탈로그 (PROJ-1624 원본 복원)
 #   ★ clean 을 쓰는 것은 이 하나뿐이라 **레인 안에서도 맨 뒤**다.
 -------------------------------------------------------------------------------

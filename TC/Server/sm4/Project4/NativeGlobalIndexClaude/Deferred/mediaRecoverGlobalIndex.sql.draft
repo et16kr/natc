@@ -1,0 +1,128 @@
+--###########################################################################
+--# ★★ 초안이다. **실행 확인하지 않았다.** 어느 `.ts` 도 이 파일을 가리키지
+--#    않는다(확장자가 `.sql` 이 아니라 `.sql.draft` 인 이유다).
+--#
+--# TestCase Description = 미디어 복구 — 글로벌 인덱스가 있는 DB 에서
+--#                        데이터파일을 잃고 되살린다 (커버리지 §0.2 의 Z1).
+--# Project ID           = Native Global Index
+--#
+--# ★★ 왜 초안으로 남기나 -- 막힌 자리가 정확히 하나다
+--#
+--#   미디어 복구는 ARCHIVELOG 모드를 요구하고, `ALTER DATABASE ... ARCHIVELOG`
+--#   는 **CONTROL 단계**에서만 받는다. NATC 트리 전체(`TC/`)에 기동 단계를
+--#   제어하는 directive 가 **하나도 없다** -- 있는 것은 `--+SYSTEM server
+--#   kill` / `server start` 둘뿐이고 그것은 SERVICE 까지 곧바로 올린다.
+--#
+--#   `--+SYSTEM` 이 임의 셸을 돌린다는 것은 확인했다(트리 안에 `rm -rf` ·
+--#   `mkdir` · `echo y | destroydb -n mydb` · `echo y | createdb -M 10` 이
+--#   실제로 있다). 그래서 **아래 형태로 될 가능성이 있다** -- 그러나 재보지
+--#   않았으므로 주장하지 않는다.
+--#
+--# ★★ 옮겨 온 절차 -- 삭제될 하네스가 갖고 있던 것
+--#
+--#   `scripts/global-index/media-recovery-check.sh`(1,046 줄, 8K **77/0**)가
+--#   이 절차를 갖고 있었다. 핵심은 여섯이다:
+--#
+--#     A. ARCHIVELOG 모드 확인 -- `SELECT DECODE( ARCHIVELOG_MODE,
+--#        'ARCHIVE', 1, 0 ) FROM V$LOG;`
+--#     B. `ALTER DATABASE BACKUP DATABASE` 로 온라인 백업
+--#     C. 백업 시점의 답을 못박는다 (글로벌 인덱스로 센 값)
+--#     D. 그 뒤로 DML 을 더 태운다 (아카이브 로그가 쌓인다)
+--#     E. 서버를 죽이고 **데이터파일 하나를 치운다**, 백업본을 되돌린다
+--#        ★ 하네스가 밟은 함정: 백업본을 그냥 두면 "Mismatch Datafile" 로
+--#          거부한다
+--#     F. `ALTER DATABASE RECOVER DATABASE` 후 SERVICE 로 연다
+--#        ★ 하네스가 잰 것: **복구가 백업 시점의 답이 아니라 마지막 커밋
+--#          시점의 답을 되살리는가** -- 그러지 못하면 "복구가 모든 것을
+--#          잃었다" 와 구별되지 않는다
+--#
+--# ★★ 글로벌 인덱스가 이 축에서 특별한 이유
+--#
+--#   트리는 하나인데 로우는 파티션마다 흩어져 있다. 파티션 하나의
+--#   데이터파일만 잃어도 **트리는 멀쩡하고 힙만 구멍이 난다.** 복구가
+--#   힙을 되살린 뒤 트리와 다시 맞는지가 이 축의 요점이고, 그것은
+--#   `트리 == 힙` 판정 하나로 잡힌다.
+--#
+--# ★★ 이것을 세우려면 무엇이 필요한가 (재구현 담당자에게)
+--#
+--#   ① 기동 단계 directive. 없으면 `--+SYSTEM` 으로 우회한다 --
+--#      `--+SYSTEM sh -c "echo 'STARTUP CONTROL' | isql -s localhost -u sys
+--#      -p manager -sysdba -silent"` 형태가 가능한지 먼저 재 본다.
+--#   ② 이 스위트의 인스턴스를 ARCHIVELOG 로 만드는 자리. 매 실행 켜고
+--#      끄면 뒤따르는 케이스가 그 상태를 물려받는다 -- FINALIZE 에서
+--#      반드시 되돌린다.
+--#   ③ 데이터파일 경로를 케이스가 알아야 한다 --
+--#      `SELECT NAME FROM V$DATAFILES` 로 얻고 `--+SYSTEM mv` 로 치운다.
+--#      절대 경로를 오라클에 담으면 안 되므로 경로는 찍지 않는다.
+--###########################################################################
+
+--+SECTOR; PREPARATION
+
+--+SKIP BEGIN;
+DROP TABLE NGD_MRC;
+--+SKIP END;
+
+ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+
+-- A. 이 축의 전제. ARCHIVE 가 아니면 아래는 성립하지 않는다.
+SELECT CASE WHEN ARCHIVELOG_MODE = 'ARCHIVE' THEN 'OK' ELSE 'NG' END AS ARCHIVELOG_ON
+  FROM V$LOG;
+
+CREATE TABLE NGD_MRC ( P INTEGER, K INTEGER, V VARCHAR(16) )
+PARTITION BY RANGE ( P )
+(
+    PARTITION P1 VALUES LESS THAN ( 100 ),
+    PARTITION P2 VALUES LESS THAN ( 200 ),
+    PARTITION PD VALUES DEFAULT
+) TABLESPACE SYS_TBS_DISK_DATA;
+
+CREATE UNIQUE INDEX NGD_MRC_G ON NGD_MRC ( K );
+
+INSERT INTO NGD_MRC SELECT LEVEL,       1000 + LEVEL, 'A' FROM DUAL CONNECT BY LEVEL <= 50;
+INSERT INTO NGD_MRC SELECT LEVEL + 100, 2000 + LEVEL, 'B' FROM DUAL CONNECT BY LEVEL <= 50;
+COMMIT;
+
+--+SECTOR; B -- 온라인 백업
+
+ALTER DATABASE BACKUP DATABASE;
+
+-- C. 백업 시점의 답을 못박는다.
+SELECT CASE WHEN COUNT(*) = 100 THEN 'OK' ELSE 'NG' END AS AT_BACKUP_ROWS FROM NGD_MRC;
+
+--+SECTOR; C -- 백업 뒤에 더 태운다 (아카이브 로그가 쌓인다)
+
+INSERT INTO NGD_MRC SELECT LEVEL + 200, 3000 + LEVEL, 'C' FROM DUAL CONNECT BY LEVEL <= 50;
+COMMIT;
+
+SELECT CASE WHEN COUNT(*) = 150 THEN 'OK' ELSE 'NG' END AS BEFORE_LOSS_ROWS FROM NGD_MRC;
+
+--+SECTOR; D -- ★ 여기부터가 막힌 자리다
+--#
+--#   서버를 죽이고 데이터파일을 치운 뒤 백업본을 되돌리고
+--#   RECOVER DATABASE 로 연다. 기동 단계 제어가 필요하다.
+--#
+--#   --+SYSTEM server kill;
+--#   --+SYSTEM <데이터파일을 치운다>
+--#   --+SYSTEM <백업본을 되돌린다>
+--#   --+SYSTEM <CONTROL 단계로 기동>
+--#   ALTER DATABASE RECOVER DATABASE;
+--#   --+SYSTEM <SERVICE 로 연다>
+
+--+SECTOR; E -- 복구가 **마지막 커밋 시점**을 되살렸는가 (백업 시점이 아니라)
+
+SELECT CASE WHEN COUNT(*) = 150 THEN 'OK' ELSE 'NG' END AS AFTER_RECOVER_ROWS FROM NGD_MRC;
+
+-- ★ 이 축의 요점 -- 힙만 잃었는데 트리는 멀쩡했다. 다시 맞는가.
+SELECT CASE
+         WHEN ( SELECT /*+ FULL SCAN( NGD_MRC ) */ COUNT(*) FROM NGD_MRC )
+            = ( SELECT /*+ INDEX( NGD_MRC, NGD_MRC_G ) */ COUNT(K)
+                  FROM NGD_MRC WHERE K IS NOT NULL )
+         THEN 'OK' ELSE 'NG'
+       END AS ANSWER_TREE_EQUALS_HEAP
+  FROM DUAL;
+
+--+SECTOR; FINALIZE
+
+--+SKIP BEGIN;
+DROP TABLE NGD_MRC;
+--+SKIP END;

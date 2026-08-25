@@ -1,0 +1,208 @@
+###########################################################################
+# TestCase Description = 플랜이 무엇으로 갈리든 **답은 같다** (디스크).
+#                        GLOBAL_INDEX_PLAN_ENABLE 게이트 축 + 강제 힌트 축.
+# Project ID           = Native Global Index
+#
+# 출처                 = 없음. **새로 쓴 것**이다. 오늘 이 축을 재는 것은
+#                        삭제될 하네스(`parallel-gate-probe.sh`,
+#                        `disk-suite-baseline` 의 게이트 OFF 재실행)뿐이었다.
+#
+# ★★ 왜 이 케이스가 재구현에 중요한가
+#
+#   글로벌 인덱스는 **선택 사항**이다 -- 옵티마이저가 그것을 고를 수도,
+#   파티션 코디네이터로 갈 수도 있고, 운용자가 `GLOBAL_INDEX_PLAN_ENABLE`
+#   로 통째로 닫을 수도 있다. 그 셋이 **같은 답**을 내야 한다. 답이 갈리면
+#   그것은 최적화가 아니라 **결함**이다.
+#
+#   이 계약은 플랜 모양보다 오래 산다. 재구현이 비용 모델을 새로 짜면
+#   플랜은 바뀌지만 이 계약은 그대로다. 그래서 이 케이스의 판정은
+#   **플랜이 아니라 답의 일치**로 쓴다.
+#
+# ★★ 무엇을 주장하는가 -- 축 셋이 같은 답을 낸다
+#
+#   ① 기본 플랜 (옵티마이저가 고른다)
+#   ② 글로벌 인덱스 강제 (`/*+ INDEX( t, g ) */`)
+#   ③ 힙 전체 훑기 (`/*+ FULL SCAN( t ) */`)
+#   ④ 게이트를 닫은 채(`GLOBAL_INDEX_PLAN_ENABLE = 0`) 의 기본 플랜
+#
+#   술어 넷(양쪽 묶인 범위 · 한쪽 묶인 범위 · 동등 · IN 목록)에 대해
+#   넷이 전부 같은 답을 내는가를 판정으로 찍는다.
+#
+# ★★ 플랜 자체는 **원시로 찍는다** -- 그리고 그 이유를 적는다
+#
+#   플랜 모양은 SQL 로 계산할 수 없으므로 판정으로 만들 수 없다. 그래서
+#   B 절이 플랜을 그대로 찍는다. 이 `.lst` 가 다시 녹화될 때 **플랜 줄이
+#   바뀌는 것은 정상일 수 있다**(비용 모델이 바뀌면 바뀐다). 그러나
+#   **A·C 절의 판정이 `OK` 에서 벗어나는 것은 결함이다.** 재녹화하는
+#   사람은 그 둘을 다르게 다뤄야 한다:
+#
+#       플랜 줄이 바뀌었다      -> 왜 바뀌었는지 적고 녹화한다
+#       판정이 NG 로 바뀌었다   -> 녹화하지 말고 결함으로 등록한다
+#
+#   ★ 실제 사례가 있다. J03(GR-11)이 프루닝된 질의의 글로벌 후보 비용을
+#     프루닝 **전** 행 수로 바꾸자 `scanAndLock` 의 두 자리가
+#     `GLOBAL-INDEX FULL SCAN` 에서 `PARTITION-COORDINATOR` 로 옮겨갔다.
+#     답은 한 번도 틀리지 않았고 새 플랜이 1.68 배 빨랐다 -- 오라클 쪽이
+#     낡은 것이었다. 플랜 변경을 결함으로 오해하면 그런 개선을 되돌리게
+#     된다.
+#
+# ★ 게이트를 되돌린다. FINALIZE 가 `GLOBAL_INDEX_PLAN_ENABLE = 1` 로
+#   복원하지 않으면 뒤따르는 모든 케이스가 게이트 닫힌 축에서 돈다.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF PIN_DISK_NATIVE()
+{
+    alter system set DISK_GLOBAL_INDEX_ENABLE = 1;
+    alter system set __DISK_GLOBAL_INDEX_LEGACY_CREATE = 0;
+    select name, value1 from v$property where name = 'DISK_GLOBAL_INDEX_ENABLE';
+    select name, value1 from v$property where name = 'GLOBAL_INDEX_PLAN_ENABLE';
+}
+
+#
+# ★ 이 케이스의 눈. 한 술어를 축 셋으로 돌려 답이 같은지 판정한다.
+#   원시 행 수가 아니라 일치 여부를 찍는다.
+#
+DEF PARITY( @aName, @aPred )
+{
+    select case
+             when ( select /*+ FULL SCAN(ngd_pg) */ count(*) from ngd_pg where @{aPred} )
+                = ( select /*+ index(ngd_pg, ngd_pg_g) */ count(*) from ngd_pg where @{aPred} )
+              and ( select count(*) from ngd_pg where @{aPred} )
+                = ( select /*+ FULL SCAN(ngd_pg) */ count(*) from ngd_pg where @{aPred} )
+             then 'OK' else 'NG'
+           end as @{aName}
+      from dual;
+}
+
+#
+# 합계도 같은가 -- 개수만 맞고 값이 다른 것을 거른다.
+#
+DEF PARITY_SUM( @aName, @aPred )
+{
+    select case
+             when ( select /*+ FULL SCAN(ngd_pg) */ nvl(sum(k),-1) from ngd_pg where @{aPred} )
+                = ( select /*+ index(ngd_pg, ngd_pg_g) */ nvl(sum(k),-1) from ngd_pg where @{aPred} )
+             then 'OK' else 'NG'
+           end as @{aName}
+      from dual;
+}
+
+DEF SHOW_PLAN( @aPred )
+{
+    alter session set explain plan = on;
+    select count(*) from ngd_pg where @{aPred};
+    alter session set explain plan = off;
+}
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    DROP TABLE NGD_PG;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    CALL PIN_DISK_NATIVE();
+
+    create table ngd_pg( p integer, k integer, v varchar(16) )
+    partition by range( p )
+    (
+      partition p1 values less than ( 100 ),
+      partition p2 values less than ( 200 ),
+      partition p3 values less than ( 300 ),
+      partition pd values default
+    ) tablespace sys_tbs_disk_data;
+
+    # 파티션 키(p)를 담지 않은 키 -> 글로벌이어야만 설 수 있다
+    create index ngd_pg_g on ngd_pg( k ) tablespace sys_tbs_disk_data;
+
+    select decode( pi.partition_type, 101, 'NATIVE', 'OTHER' ) as impl
+      from system_.sys_part_indices_ pi, system_.sys_indices_ i
+     where pi.index_id = i.index_id and i.index_name = 'NGD_PG_G';
+
+    insert into ngd_pg select level,       1000 + level, 'A' from dual connect by level <= 90;
+    insert into ngd_pg select level + 100, 2000 + level, 'B' from dual connect by level <= 90;
+    insert into ngd_pg select level + 200, 3000 + level, 'C' from dual connect by level <= 90;
+    insert into ngd_pg select level + 300, 4000 + level, 'D' from dual connect by level <= 90;
+    commit;
+
+    select count(*) as rows_loaded from ngd_pg;
+
+##################################
+SECTOR; A -- 게이트가 열린 축: 축 셋이 같은 답을 내는가
+##################################
+    CALL PARITY(     "BOTH_BOUND_RANGE",  "k between 2010 and 2050" );
+    CALL PARITY_SUM( "BOTH_BOUND_SUM",    "k between 2010 and 2050" );
+
+    CALL PARITY(     "ONE_BOUND_RANGE",   "k > 3050" );
+    CALL PARITY_SUM( "ONE_BOUND_SUM",     "k > 3050" );
+
+    CALL PARITY(     "EQUAL_PRED",        "k = 4042" );
+    CALL PARITY(     "IN_LIST_PRED",      "k in ( 1005, 2005, 3005, 4005 )" );
+
+    # 파티션 키만 건드리는 술어 -- 글로벌 인덱스에 키 범위가 없는 자리다.
+    # J03(GR-11)이 비용을 고친 뒤 플랜이 옮겨간 바로 그 모양이다.
+    CALL PARITY(     "PART_KEY_ONLY",     "p < 150" );
+
+##################################
+SECTOR; B -- 플랜을 찍는다 (판정이 아니라 기록이다 -- 머리말 참조)
+##################################
+    CALL SHOW_PLAN( "k between 2010 and 2050" );
+    CALL SHOW_PLAN( "p < 150" );
+
+##################################
+SECTOR; C -- ★ 게이트를 닫아도 답이 같은가
+##################################
+    alter system set GLOBAL_INDEX_PLAN_ENABLE = 0;
+    select name, value1 from v$property where name = 'GLOBAL_INDEX_PLAN_ENABLE';
+
+    # 게이트가 닫혔으므로 강제 힌트 축은 더 이상 글로벌을 타지 못한다.
+    # 그래도 **답은 같아야 한다** -- 그것이 게이트의 계약이다.
+    select case
+             when ( select count(*) from ngd_pg where k between 2010 and 2050 ) = 41
+             then 'OK' else 'NG'
+           end as gate_off_both_bound
+      from dual;
+
+    select case
+             when ( select count(*) from ngd_pg where k > 3050 ) = 130
+             then 'OK' else 'NG'
+           end as gate_off_one_bound
+      from dual;
+
+    select case
+             when ( select nvl(sum(k),-1) from ngd_pg where k = 4042 ) = 4042
+             then 'OK' else 'NG'
+           end as gate_off_equal
+      from dual;
+
+    select case
+             when ( select count(*) from ngd_pg ) = 360
+             then 'OK' else 'NG'
+           end as gate_off_full_count
+      from dual;
+
+##################################
+SECTOR; D -- 게이트를 닫은 축의 플랜 (기록)
+##################################
+    CALL SHOW_PLAN( "k between 2010 and 2050" );
+
+##################################
+SECTOR; FINALIZE
+##################################
+    # ★ 게이트를 반드시 되돌린다. 안 되돌리면 뒤따르는 케이스가 전부
+    #   게이트 닫힌 축에서 돈다.
+    alter system set GLOBAL_INDEX_PLAN_ENABLE = 1;
+    select name, value1 from v$property where name = 'GLOBAL_INDEX_PLAN_ENABLE';
+
+    SKIP BEGIN;
+    DROP TABLE NGD_PG;
+    SKIP END;
+}

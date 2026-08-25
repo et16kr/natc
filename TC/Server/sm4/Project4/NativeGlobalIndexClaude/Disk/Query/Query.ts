@@ -50,4 +50,5 @@ qc_keyrange.tc                          # qc/keyrange.tc
 #   그 id 가 전부 밀린다. 새 케이스는 이 줄 아래에 붙인다.
 #
 psmGlobalAccessDisk.tc                  # PSM 커서·DML·FOR UPDATE (신규)
+planGateAnswerParity.tc                 # 플랜이 갈려도 답은 같다 — 게이트 축 포함 (신규)
 -------------------------------------------------------------------------------
