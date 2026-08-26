@@ -39,10 +39,13 @@ $T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
 $T0> #
 $T0> # PORT EDIT: í•œê¸€ ë¦¬í„°ëŸ´ì€ EUC-KR ë°”ì´íŠ¸ë‹¤ (2026-08-21 ë³µì›)
 $T0> #
-$T0> #   ì´ í•˜ë„¤ìŠ¤ëŠ” .tc ì˜ ë°”ì´íŠ¸ë¥¼ **EUC-KR ë¡œ ì½ì–´** DB ë¬¸ìžì…‹(UTF8)ìœ¼ë¡œ
-$T0> #   ë³€í™˜í•œë‹¤. ê·¸ëž˜ì„œ ì›ë³¸ê³¼ ì´ í¬íŠ¸ì˜ ëª¸í†µì€ EUC-KR ì´ì–´ì•¼ ë§žê³ , ìœ„
-$T0> #   PORT EDIT ê°€ ëª»ë°•ì€ 8/4/5/3 ë„ ê·¸ ì „ì œì—ì„œ ë‚˜ì˜¨ ê°’ì´ë‹¤
-$T0> #   (ì»¬ëŸ¼Â·ì¡°ì¸ì´ 4 ë°”ì´íŠ¸ -> 6 ë°”ì´íŠ¸ê°€ ë˜ì–´ VARCHAR(5) ì— ì•ˆ ë“¤ì–´ê°„ë‹¤).
+$T0> #   ì´ í•˜ë„¤ìŠ¤ëŠ” .tc ì˜ ë°”ì´íŠ¸ë¥¼ **EUC-KR ë¡œ ì½ì–´** DB ë¬¸ìžì…‹ìœ¼ë¡œ ë³€í™˜í•œë‹¤
+$T0> #   -- natc/conf/server.conf ì˜ [DEFAULT] ê°€ ALTIBASE_NLS_USE=KO16KSC5601 ì„
+$T0> #   ëª»ë°•ê³ , ats2 ê°€ ê·¸ê²ƒì„ ìžê¸°ê°€ ë„ìš°ëŠ” ëª¨ë“  isql ì— -nls_use ë¡œ ë„˜ê¸´ë‹¤
+$T0> #   (í™˜ê²½ë³€ìˆ˜ëŠ” ì´ê¸°ì§€ ëª»í•œë‹¤). í‘œì¤€ ì¸ìŠ¤í„´ìŠ¤ì˜ DB ë¬¸ìžì…‹ë„ KO16KSC5601
+$T0> #   ì´ë¯€ë¡œ(natc/bin/createdb) ë³€í™˜ì´ ì‹¤ì§ˆì ìœ¼ë¡œ ì—†ê³ , ë‘ ê¸€ìž í•œê¸€ì€
+$T0> #   4 ë°”ì´íŠ¸ ê·¸ëŒ€ë¡œ VARCHAR(5) ì— ë“¤ì–´ê°„ë‹¤. ì•„ëž˜ PORT EDIT ì˜ 10/5/5/3 ì´
+$T0> #   ê·¸ ì „ì œì—ì„œ ë‚˜ì˜¨ ê°’ì´ë‹¤.
 $T0> #
 $T0> #   df87aaa ê°€ ì´ íŒŒì¼ì„ UTF-8 ë¡œ ì˜®ê¸°ë©´ì„œ í•œê¸€ 21 ê³³ì„ **íŒŒê´´ì ìœ¼ë¡œ**
 $T0> #   ë³€í™˜í–ˆë‹¤(ì»¬ëŸ¼ -> U+FFFD Ã· U+FFFD, T/í‹° -> T/Æ¼ ì²˜ëŸ¼ ëŒ€ì²´ë¬¸ìž ì—†ì´
@@ -168,7 +171,10 @@ $T0> INSERT INTO J1 VALUES (    1,   'AAA', '27-OCT-2006', NULL, NULL );
 INSERT ( TABLE: SYS.J1 )
 ------------------------------------------------------------
 $T0> INSERT INTO J1 VALUES ( NULL,  'ÄÃ·³',          NULL, 'A1',    0 );
-[ERR-21069 : Invalid data type length : I2.]
+1 row inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.J1 )
+------------------------------------------------------------
 $T0> INSERT INTO J1 VALUES (  100,   'AAA', '27-OCT-2006', 'A2',   -1 );
 1 row inserted.
 ------------------------------------------------------------
@@ -180,7 +186,10 @@ $T0> INSERT INTO J1 VALUES (   -2,   '123', '30-JUN-2003', 'A3',  2.5 );
 INSERT ( TABLE: SYS.J1 )
 ------------------------------------------------------------
 $T0> INSERT INTO J1 VALUES ( 3E+6,  'Á¶ÀÎ',          NULL, 'A2', NULL );
-[ERR-21069 : Invalid data type length : I2.]
+1 row inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.J1 )
+------------------------------------------------------------
 $T0> INSERT INTO J1 VALUES (    2,    NULL, '15-MAR-2000', 'A4', -1.2 );
 1 row inserted.
 ------------------------------------------------------------
@@ -218,7 +227,10 @@ $T0> INSERT INTO J2 VALUES ( NULL,   NULL,          NULL, NULL, NULL );
 INSERT ( TABLE: SYS.J2 )
 ------------------------------------------------------------
 $T0> INSERT INTO J2 VALUES (    1, 'ÄÃ·³', '30-JUN-2003', 'A1', -1.2 );
-[ERR-21069 : Invalid data type length : I2.]
+1 row inserted.
+------------------------------------------------------------
+INSERT ( TABLE: SYS.J2 )
+------------------------------------------------------------
 $T0> INSERT INTO J2 VALUES (    9,  '123', '15-MAR-2000', 'A9',    9 );
 1 row inserted.
 ------------------------------------------------------------
@@ -274,39 +286,40 @@ INSERT ( TABLE: SYS.J4 )
 $T0> ##########################################################################
 $T0> # PORT EDIT: pin the row set this case actually measures
 $T0> #
-$T0> # Three of the fixture INSERTs above do not land here, and they did land
-$T0> # when the original expectation was recorded:
+$T0> # The four counts below are the row set every SELECT in this case is
+$T0> # measured against. They are pinned here so that a change in the encoding
+$T0> # situation -- a different database character set, a wider or narrower I2,
+$T0> # a different client charset -- moves them and turns the case RED at this
+$T0> # line, instead of letting it quietly measure a different table than the
+$T0> # one its expectation was recorded on.
+$T0> #
+$T0> # It has already done that job once, and this is the entry it earned.
+$T0> # Until 2026-08-21 the counts stood at 8 / 4 / 5 / 3, because three of the
+$T0> # fixture INSERTs
 $T0> #
 $T0> #   INSERT INTO J1 VALUES ( NULL, '<2 hangul>', NULL, 'A1',    0 );
 $T0> #   INSERT INTO J1 VALUES ( 3E+6, '<2 hangul>', NULL, 'A2', NULL );
 $T0> #   INSERT INTO J2 VALUES (    1, '<2 hangul>', '30-JUN-2003', 'A1', -1.2 );
 $T0> #
-$T0> # each -> [ERR-21069 : Invalid data type length : I2.]
+$T0> # were failing with [ERR-21069 : Invalid data type length : I2.]. I2 is
+$T0> # VARCHAR(5) and the literals are two Hangul characters -- four bytes in
+$T0> # the EUC-KR body of this file, six once a client conversion to UTF8 gets
+$T0> # in the way. That expectation had been recorded on the isolated instance
+$T0> # scripts/global-index/testdb.sh built with `server create UTF8 UTF8`,
+$T0> # which is not the instance the runner uses. On the standard one -- client
+$T0> # NLS_USE and database character set both KO16KSC5601 -- there is no
+$T0> # conversion, the three rows land, and the counts are the fixture's own
+$T0> # 10 / 5 / 5 / 3. That is also what the original qp4 oracle records
+$T0> # (JoinTest_A4_64.lst: 50 rows selected, no ERR-21069 anywhere). The pin
+$T0> # is back on the original's value.
 $T0> #
-$T0> # This has nothing to do with global indexes. I2 is VARCHAR(5); the literals
-$T0> # are two Hangul characters, four bytes in the EUC-KR body of this file and
-$T0> # six after the client converts them to the database character set. The
-$T0> # original suite was recorded against a KO16KSC5601 database, where they
-$T0> # stayed four bytes and fit. This project's isolated instance is UTF8
-$T0> # (scripts/global-index/testdb.sh creates it that way, and every other
-$T0> # baseline in the workflow is recorded on it), so they no longer fit.
-$T0> #
-$T0> # The port does not paper over that. It states it: the four counts below
-$T0> # are the row set every SELECT in this case is measured against. If the
-$T0> # encoding situation ever changes -- a KO16KSC5601 instance, a wider I2, a
-$T0> # different client charset -- the three rows come back, these counts move,
-$T0> # and the case goes RED at this line instead of quietly measuring a
-$T0> # different table than the one its expectation was recorded on. That is the
-$T0> # opposite of freezing an error: the error above is held in place by its
-$T0> # consequence, not by its message.
-$T0> #
-$T0> # The fixture inserts 10 / 5 / 5 / 3 rows; this port measures 8 / 4 / 5 / 3.
+$T0> # The fixture inserts 10 / 5 / 5 / 3 rows; this port measures the same.
 $T0> ##########################################################################
 
 $T0> SELECT COUNT(*) J1_ROWS FROM J1;
 J1_ROWS              
 -----------------------
-8                    
+10                   
 1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
@@ -315,7 +328,7 @@ PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
 $T0> SELECT COUNT(*) J2_ROWS FROM J2;
 J2_ROWS              
 -----------------------
-4                    
+5                    
 1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 8, COST: BLOCKED )
@@ -356,43 +369,61 @@ $T0> SELECT * FROM J1, J2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -555        T/Æ¼   20-APR-2001          A3  10.5        -2          AAA    01-JAN-1998          A4              
+-555        T/Æ¼   20-APR-2001          A3  10.5        1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 -555        T/Æ¼   20-APR-2001          A3  10.5        9           123    15-MAR-2000          A9  9           
 -555        T/Æ¼   20-APR-2001          A3  10.5        350         S/ÇÏ                            9999        
 -555        T/Æ¼   20-APR-2001          A3  10.5                                                                
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 -2          123    30-JUN-2003          A3  2.5         9           123    15-MAR-2000          A9  9           
 -2          123    30-JUN-2003          A3  2.5         350         S/ÇÏ                            9999        
 -2          123    30-JUN-2003          A3  2.5                                                                 
 1           AAA    27-OCT-2006                          -2          AAA    01-JAN-1998          A4              
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 1           AAA    27-OCT-2006                          9           123    15-MAR-2000          A9  9           
 1           AAA    27-OCT-2006                          350         S/ÇÏ                            9999        
 1           AAA    27-OCT-2006                                                                                  
 2                  15-MAR-2000          A4  -1.2        -2          AAA    01-JAN-1998          A4              
+2                  15-MAR-2000          A4  -1.2        1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 2                  15-MAR-2000          A4  -1.2        9           123    15-MAR-2000          A9  9           
 2                  15-MAR-2000          A4  -1.2        350         S/ÇÏ                            9999        
 2                  15-MAR-2000          A4  -1.2                                                                
 9                  15-MAR-2000          A1  1           -2          AAA    01-JAN-1998          A4              
+9                  15-MAR-2000          A1  1           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           
 9                  15-MAR-2000          A1  1           350         S/ÇÏ                            9999        
 9                  15-MAR-2000          A1  1                                                                   
 100         AAA    27-OCT-2006          A2  -1          -2          AAA    01-JAN-1998          A4              
+100         AAA    27-OCT-2006          A2  -1          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 100         AAA    27-OCT-2006          A2  -1          9           123    15-MAR-2000          A9  9           
 100         AAA    27-OCT-2006          A2  -1          350         S/ÇÏ                            9999        
 100         AAA    27-OCT-2006          A2  -1                                                                  
 3333        %^&__  01-JAN-1998              42          -2          AAA    01-JAN-1998          A4              
+3333        %^&__  01-JAN-1998              42          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 3333        %^&__  01-JAN-1998              42          9           123    15-MAR-2000          A9  9           
 3333        %^&__  01-JAN-1998              42          350         S/ÇÏ                            9999        
 3333        %^&__  01-JAN-1998              42                                                                  
+3000000     Á¶ÀÎ                        A2              -2          AAA    01-JAN-1998          A4              
+3000000     Á¶ÀÎ                        A2              1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+3000000     Á¶ÀÎ                        A2              9           123    15-MAR-2000          A9  9           
+3000000     Á¶ÀÎ                        A2              350         S/ÇÏ                            9999        
+3000000     Á¶ÀÎ                        A2                                                                      
             °¡_A   01-JAN-1998          A4  100         -2          AAA    01-JAN-1998          A4              
+            °¡_A   01-JAN-1998          A4  100         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
             °¡_A   01-JAN-1998          A4  100         9           123    15-MAR-2000          A9  9           
             °¡_A   01-JAN-1998          A4  100         350         S/ÇÏ                            9999        
             °¡_A   01-JAN-1998          A4  100                                                                 
-32 rows selected.
+            ÄÃ·³                        A1  0           -2          AAA    01-JAN-1998          A4              
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+            ÄÃ·³                        A1  0           9           123    15-MAR-2000          A9  9           
+            ÄÃ·³                        A1  0           350         S/ÇÏ                            9999        
+            ÄÃ·³                        A1  0                                                                   
+50 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Non-Join Predicate
@@ -409,12 +440,14 @@ PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 IS NULL AND J2.I1 IN ( 1, 2, -3 );
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+            °¡_A   01-JAN-1998          A4  100         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -426,14 +459,15 @@ $T0> SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           
-2 rows selected.
+3 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 
                      = (SELECT I2 FROM J2 WHERE J2.I1='123');
@@ -443,12 +477,12 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    ::SUB-QUERY BEGIN
    PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 23, COST: BLOCKED )
-    STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 0, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
-     VIEW ( ACCESS: 4, COST: BLOCKED )
+    STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 0, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
+     VIEW ( ACCESS: 5, COST: BLOCKED )
       PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 23, COST: BLOCKED )
        SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    ::SUB-QUERY END
@@ -461,12 +495,12 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    ::SUB-QUERY BEGIN
    PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 23, COST: BLOCKED )
-    STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 0, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
-     VIEW ( ACCESS: 4, COST: BLOCKED )
+    STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 0, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
+     VIEW ( ACCESS: 5, COST: BLOCKED )
       PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 23, COST: BLOCKED )
        SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    ::SUB-QUERY END
@@ -479,13 +513,14 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 -2          123    30-JUN-2003          A3  2.5         9           123    15-MAR-2000          A9  9           
 1           AAA    27-OCT-2006                          -2          AAA    01-JAN-1998          A4              
 100         AAA    27-OCT-2006          A2  -1          -2          AAA    01-JAN-1998          A4              
-3 rows selected.
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 LIKE J2.I2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -493,27 +528,29 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 -2          123    30-JUN-2003          A3  2.5         9           123    15-MAR-2000          A9  9           
 1           AAA    27-OCT-2006                          -2          AAA    01-JAN-1998          A4              
 100         AAA    27-OCT-2006          A2  -1          -2          AAA    01-JAN-1998          A4              
-3 rows selected.
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 2                  15-MAR-2000          A4  -1.2        9           123    15-MAR-2000          A9  9           
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           
 3333        %^&__  01-JAN-1998              42          -2          AAA    01-JAN-1998          A4              
             °¡_A   01-JAN-1998          A4  100         -2          AAA    01-JAN-1998          A4              
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 9, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Join Column Predicate_First Indexed Column)
@@ -527,37 +564,39 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I1 IS NOT NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           
-2 rows selected.
+3 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 7, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 7, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 
                        AND EXISTS (SELECT I1 FROM J2 WHERE I1=J1.I1);
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           
-2 rows selected.
+3 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
    SEMI-JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2 $$1_$$VIEW1_$J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2 $$1_$$VIEW1_$J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 NOT LIKE (J2.I1) AND J1.I1 = 1;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -569,31 +608,33 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 LIKE J2.I1 
                        AND J2.I1 BETWEEN 1 AND 2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Join Column Predicate_Non-First Indexed Column)
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 <= J2.I2 AND J1.I2 =ANY ( 'A', 'ÄÃ·³' );
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3 > J2.I3 AND J2.I3 IS NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -602,8 +643,8 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 = J2.I2 
                        AND UNIQUE (SELECT I2 FROM J2 WHERE I2='AAA');
@@ -612,17 +653,18 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 -2          123    30-JUN-2003          A3  2.5         9           123    15-MAR-2000          A9  9           
 1           AAA    27-OCT-2006                          -2          AAA    01-JAN-1998          A4              
 100         AAA    27-OCT-2006          A2  -1          -2          AAA    01-JAN-1998          A4              
-3 rows selected.
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    ::SUB-QUERY BEGIN
    PROJECT ( COLUMN_COUNT: 1, TUPLE_SIZE: 3, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    ::SUB-QUERY END
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Non-Join Column Predicate_First Indexed Column)
@@ -633,7 +675,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 0, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -661,32 +703,34 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3  LIKE (J2.I3)
                        AND J1.I1 NOT BETWEEN 1 AND 3333;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Non-Join Column Predicate_Non-First Indexed Column)
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I2 NOT IN ('1','2','3','123');
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 7, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 NOT IN (J2.I1) AND J1.I3 = NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -695,7 +739,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I2 LIKE 'T/Æ¼';
@@ -705,21 +749,22 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1 = J2.I1 AND J1.I3 >= '30-JUN-2003';
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              
-1 row selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 != J2.I2 AND J2.I3 != NULL;
@@ -729,8 +774,8 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 BETWEEN J2.I2 AND J2.I2 AND J2.I3 IS NOT NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -738,23 +783,25 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 -2          123    30-JUN-2003          A3  2.5         9           123    15-MAR-2000          A9  9           
 1           AAA    27-OCT-2006                          -2          AAA    01-JAN-1998          A4              
 100         AAA    27-OCT-2006          A2  -1          -2          AAA    01-JAN-1998          A4              
-3 rows selected.
+            ÄÃ·³                        A1  0           1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> SELECT * FROM J1, J2 WHERE J1.I3 IN (J2.I3) AND J2.I2 IN ( 'A', 'ÄÃ·³' );
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 32, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3 AND J1.I2 IS NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -765,9 +812,9 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Join Column Predicates on Both Tables_First Indexed Column)
@@ -796,12 +843,16 @@ PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
 $T0> SELECT * FROM J1, J2 WHERE J1.I1>=J2.I1 AND J1.I1>300000 AND J2.I1<100000;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+3000000     Á¶ÀÎ                        A2              -2          AAA    01-JAN-1998          A4              
+3000000     Á¶ÀÎ                        A2              1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+3000000     Á¶ÀÎ                        A2              9           123    15-MAR-2000          A9  9           
+3000000     Á¶ÀÎ                        A2              350         S/ÇÏ                            9999        
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1!=ANY(J2.I1) 
                             AND J1.I1=ALL(1) AND J2.I1>=ALL(100);
@@ -833,15 +884,21 @@ $T0> SELECT * FROM J1, J2 WHERE J1.I2 > J2.I2
                        AND J1.I2>'T/Æ¼' AND J2.I2 IS NOT NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
+3000000     Á¶ÀÎ                        A2              -2          AAA    01-JAN-1998          A4              
+3000000     Á¶ÀÎ                        A2              9           123    15-MAR-2000          A9  9           
+3000000     Á¶ÀÎ                        A2              350         S/ÇÏ                            9999        
             °¡_A   01-JAN-1998          A4  100         -2          AAA    01-JAN-1998          A4              
             °¡_A   01-JAN-1998          A4  100         9           123    15-MAR-2000          A9  9           
             °¡_A   01-JAN-1998          A4  100         350         S/ÇÏ                            9999        
-3 rows selected.
+            ÄÃ·³                        A1  0           -2          AAA    01-JAN-1998          A4              
+            ÄÃ·³                        A1  0           9           123    15-MAR-2000          A9  9           
+            ÄÃ·³                        A1  0           350         S/ÇÏ                            9999        
+9 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 NOT LIKE J2.I2
           AND J1.I2 LIKE 'A%' AND J2.I2 !=ALL (NULL, '123', '%^&__');
@@ -851,8 +908,8 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 
@@ -865,9 +922,9 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3 BETWEEN J1.I3 AND J2.I3 
                        AND J1.I3 <=ANY ('01-JAN-1998', NULL)
@@ -875,15 +932,17 @@ $T0> SELECT * FROM J1, J2 WHERE J1.I3 BETWEEN J1.I3 AND J2.I3
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 3333        %^&__  01-JAN-1998              42          -2          AAA    01-JAN-1998          A4              
+3333        %^&__  01-JAN-1998              42          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 3333        %^&__  01-JAN-1998              42          9           123    15-MAR-2000          A9  9           
             °¡_A   01-JAN-1998          A4  100         -2          AAA    01-JAN-1998          A4              
+            °¡_A   01-JAN-1998          A4  100         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
             °¡_A   01-JAN-1998          A4  100         9           123    15-MAR-2000          A9  9           
-4 rows selected.
+6 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Non-Join Column Predicate on Both Tables_First Indexed Column)
@@ -896,9 +955,9 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 6, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 6, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 LIKE J2.I2 AND J1.I1=1 AND J2.I1!=1;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -915,12 +974,14 @@ $T0> SELECT * FROM J1, J2 WHERE J1.I3 >=ANY (J2.I3)
           AND J1.I1 !=ALL (-1,-2,0,1000) AND J2.I1 BETWEEN 1 AND 2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+100         AAA    27-OCT-2006          A2  -1          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Non-Join Column Predicate on Both Tables_Non-First Indexed Column)
@@ -931,7 +992,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: 0, ITEM_COUNT: 0, BUCKET_COUNT: 3072, ACCESS: 0, COST: BLOCKED )
    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -940,26 +1001,28 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ---------------------------------------------------------------------------------------------------------------------------------
 1           AAA    27-OCT-2006                          -2          AAA    01-JAN-1998          A4              
 100         AAA    27-OCT-2006          A2  -1          -2          AAA    01-JAN-1998          A4              
+100         AAA    27-OCT-2006          A2  -1          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 100         AAA    27-OCT-2006          A2  -1          9           123    15-MAR-2000          A9  9           
-3 rows selected.
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1
                        AND J1.I3 IS NOT NULL AND J2.I3!='01-JAN-1998';
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           
-1 row selected.
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> SELECT * FROM J1, J2 WHERE J1.I2 >=ALL (J2.I2)
@@ -972,8 +1035,8 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3
@@ -981,14 +1044,15 @@ $T0> SELECT * FROM J1, J2 WHERE J1.I3 = J2.I3
                        AND J2.I2 <ANY ('AAA', 'ÇÏÇÏÇÏ');
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        
 3333        %^&__  01-JAN-1998              42          -2          AAA    01-JAN-1998          A4              
-1 row selected.
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -1003,19 +1067,20 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2<=J2.I2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              
-1 row selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=ANY(J2.I2);
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -1024,9 +1089,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1>=J2.I1 AND J1.I2=J2.I2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -1037,7 +1102,7 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1048,9 +1113,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I1=J2.I1;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -1060,9 +1125,9 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate
@@ -1074,7 +1139,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1088,7 +1153,7 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1100,7 +1165,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1112,7 +1177,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1129,7 +1194,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 
@@ -1140,7 +1205,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1153,7 +1218,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I4=J2.I4 
@@ -1164,7 +1229,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1177,9 +1242,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 AND J1.I4=J2.I4;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -1188,7 +1253,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I3=J2.I3 
@@ -1199,7 +1264,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2 
@@ -1210,7 +1275,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1223,9 +1288,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I1=J2.I1 AND J1.I4=J2.I4;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       
@@ -1234,7 +1299,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3=J2.I3 AND J1.I1=J2.I1
@@ -1245,7 +1310,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1258,7 +1323,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2>J2.I2
@@ -1269,7 +1334,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2
@@ -1280,7 +1345,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I1=J2.I1 AND J1.I2=J2.I2
@@ -1291,7 +1356,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1304,7 +1369,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2>J2.I2 AND J1.I4=J2.I4 
@@ -1315,7 +1380,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I3>J2.I3 AND J1.I2=J2.I2
@@ -1326,7 +1391,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I4>J2.I4 AND J1.I3=J2.I3 
@@ -1337,7 +1402,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1349,9 +1414,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I3=J2.I3
                        AND J1.I4=J2.I4 AND J1.I5=J2.I5;
@@ -1361,9 +1426,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Non-Fully Predicate(No Use First Indexed Column_Non-index order)
@@ -1374,9 +1439,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I5=J2.I5 AND J1.I3=J2.I3 
                        AND J1.I2=J2.I2 AND J1.I4=J2.I4;
@@ -1386,9 +1451,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2 WHERE J1.I2=J2.I2 AND J1.I3>=J2.I3
                        AND J1.I4=ALL(J2.I4) AND J1.I5>=ANY(J2.I5);
@@ -1398,9 +1463,9 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Full Predicate(Use First Indexed Column)
@@ -1413,7 +1478,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1427,7 +1492,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1441,7 +1506,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1455,7 +1520,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1469,7 +1534,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1483,7 +1548,7 @@ No rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
@@ -1513,14 +1578,15 @@ $T0> SELECT * FROM J1, J2, J3 WHERE J1.I1!=1 AND J2.I1 IN ( 1,2,3 )
                            AND J3.I1 BETWEEN -2 AND 0 AND J1.I4='A4';
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+2                  15-MAR-2000          A4  -1.2        1           ÄÃ·³   30-JUN-2003          A1  -1.2        -2          AAA    01-JAN-1998          A4              
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Non-Join Predicate_Non-First Indexed Column
@@ -1538,21 +1604,23 @@ PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I4 LIKE 'A4' AND J2.I3>ALL('15-MAR-2000')
                            AND J3.I5 = 1 AND J1.I2 IS NULL;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+2                  15-MAR-2000          A4  -1.2        1           ÄÃ·³   30-JUN-2003          A1  -1.2        9                  15-MAR-2000          A1  1           
+2                  15-MAR-2000          A4  -1.2        1           ÄÃ·³   30-JUN-2003          A1  -1.2                    LIKE   01-NOV-2002          A3  1           
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 16, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -1570,25 +1638,27 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I1 =ALL (J2.I1) AND J2.I1 >=ALL (J3.I1)
                            AND J1.I2='AAA';
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        -555        T/Æ¼   20-APR-2001          A3  10.5        
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        -2          AAA    01-JAN-1998          A4              
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: STORE_NL, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  STORE ( ITEM_SIZE: 0, ITEM_COUNT: 0, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Linked-Column Join Predicate(Sequence Order_Non-First Indexed Column)
@@ -1604,11 +1674,11 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I3>ALL(J2.I3) AND J2.I3 LIKE J3.I3
                            AND J1.I2='123' AND J2.I5 IS NULL;
@@ -1621,8 +1691,8 @@ PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 25, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Linked-Column Join Predicate(Non-Sequence Order_First Indexed Column)
@@ -1636,26 +1706,28 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J2.I1<J3.I1 AND J2.I1 IN (J1.I1);
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              9                  15-MAR-2000          A1  1           
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              100         AAA    27-OCT-2006          A2  -1          
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        9                  15-MAR-2000          A1  1           
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        100         AAA    27-OCT-2006          A2  -1          
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           100         AAA    27-OCT-2006          A2  -1          
-3 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Linked-Column Join Predicate(Non-Sequence Order_Non-First Indexed Column)
@@ -1672,9 +1744,9 @@ PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 2, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J3.I4 LIKE J1.I4 AND J1.I4 NOT LIKE J2.I4
                            AND J2.I2='123' AND J3.I5=10.5;
@@ -1687,9 +1759,9 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Non Linked-Column Join Predicate(Sequence Order_First Indexed Column)
@@ -1703,25 +1775,26 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I1>=J2.I1 AND J2.I4 LIKE J3.I4 
                            AND J1.I1=J2.I1;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 -2          123    30-JUN-2003          A3  2.5         -2          AAA    01-JAN-1998          A4              -2          AAA    01-JAN-1998          A4              
-1 row selected.
+1           AAA    27-OCT-2006                          1           ÄÃ·³   30-JUN-2003          A1  -1.2        9                  15-MAR-2000          A1  1           
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Non Linked-Column Join Predicate(Sequence Order_Non-First Indexed Column)
@@ -1736,25 +1809,26 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I5=J2.I5 AND J2.I3<J3.I3;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+2                  15-MAR-2000          A4  -1.2        1           ÄÃ·³   30-JUN-2003          A1  -1.2        100         AAA    27-OCT-2006          A2  -1          
+1 row selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: SORT, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SORT ( ITEM_SIZE: 0, ITEM_COUNT: 0, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Non Linked-Column Join Predicate(Non-Sequence Order_First Indexed Column)
@@ -1768,25 +1842,27 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I1>=J3.I1 AND J1.I3=J2.I3
                            AND J1.I1=-2;
 J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J3.I1       J3.I2  J3.I3                J3.I4  J3.I5       
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-No rows selected.
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        -555        T/Æ¼   20-APR-2001          A3  10.5        
+-2          123    30-JUN-2003          A3  2.5         1           ÄÃ·³   30-JUN-2003          A1  -1.2        -2          AAA    01-JAN-1998          A4              
+2 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 1, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
     SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 2, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Non Linked-Column Join Predicate(Non-Sequence Order_Non-First Indexed Column)
@@ -1796,16 +1872,17 @@ J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       J2.I1       J2.I2  J2
 2                  15-MAR-2000          A4  -1.2        -2          AAA    01-JAN-1998          A4              -2          AAA    01-JAN-1998          A4              
 9                  15-MAR-2000          A1  1           9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
             °¡_A   01-JAN-1998          A4  100         -2          AAA    01-JAN-1998          A4              -2          AAA    01-JAN-1998          A4              
-3 rows selected.
+            ÄÃ·³                        A1  0           9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
+4 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 8, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 10, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I2<=ANY(J3.I2) AND J2.I4>=J1.I4
                            AND J2.I5 IS NULL AND J1.I2='T/Æ¼';
@@ -1818,8 +1895,8 @@ PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: NL, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   JOIN ( METHOD: NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 40, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 20, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 50, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 25, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -1838,7 +1915,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1853,7 +1930,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1870,7 +1947,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1885,7 +1962,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1902,11 +1979,11 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I1=J2.I1 AND J2.I1=J3.I1
                            AND J1.I2=J2.I2 AND J2.I2=J3.I2
@@ -1919,7 +1996,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1936,11 +2013,11 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J1, J2, J3 WHERE J1.I2=J2.I2 AND J2.I4=J3.I4
                            AND J1.I3=J2.I3 AND J2.I3=J3.I3
@@ -1953,7 +2030,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 1, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1970,7 +2047,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -1985,7 +2062,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2002,7 +2079,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2017,7 +2094,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2033,9 +2110,9 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 9, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2050,7 +2127,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: 0, ITEM_COUNT: 0, BUCKET_COUNT: 30720, ACCESS: 0, COST: BLOCKED )
@@ -2068,9 +2145,9 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 4, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 9, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2085,9 +2162,9 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: HASH, COST: BLOCKED )
   JOIN ( METHOD: HASH, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   HASH ( ITEM_SIZE: 0, ITEM_COUNT: 0, BUCKET_COUNT: 30720, ACCESS: 0, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2106,7 +2183,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2125,7 +2202,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2144,7 +2221,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2163,7 +2240,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2182,7 +2259,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2201,7 +2278,7 @@ No rows selected.
 PROJECT ( COLUMN_COUNT: 15, TUPLE_SIZE: 143, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
@@ -2294,10 +2371,10 @@ PROJECT ( COLUMN_COUNT: 20, TUPLE_SIZE: 191, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
     HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
      SCAN ( TABLE: SYS.J4, INDEX: SYS.J4_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 2, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### Use First Indexed Column(Partially Use Composite Index_Missing by Predicate)
@@ -2384,10 +2461,10 @@ PROJECT ( COLUMN_COUNT: 20, TUPLE_SIZE: 191, COST: BLOCKED )
     SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
     HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 3, DISK_PAGE_COUNT: BLOCKED, ACCESS: 3, COST: BLOCKED )
      SCAN ( TABLE: SYS.J4, INDEX: SYS.J4_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 3, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 4, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 5, DISK_PAGE_COUNT: BLOCKED, ACCESS: 1, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 0, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -2412,10 +2489,10 @@ PROJECT ( COLUMN_COUNT: 20, TUPLE_SIZE: 191, COST: BLOCKED )
  JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
   JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
    JOIN ( METHOD: INDEX_NL, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-    SCAN ( TABLE: SYS.J4, INDEX: SYS.J4_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+    SCAN ( TABLE: SYS.J3, INDEX: SYS.J3_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J4, INDEX: SYS.J4_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 0, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> #######################################################################
@@ -2431,30 +2508,32 @@ $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1=1 AND J1.I2='AAA' AND J2.I1=1;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1=3333 AND J2.I1>350 
                                    AND J1.I2 IS NULL AND J2.I2>'AAA' ;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Non-Join Predicate_Non-First Indexed Column
@@ -2462,30 +2541,32 @@ $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I2='AAA' AND J2.I5=-1;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 36, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 55, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1!=3000000 AND J2.I1 IN (1,2,3)
                                    AND J1.I2='123' AND J2.I2='123';
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, RANGE SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -2497,30 +2578,32 @@ $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1=J2.I1;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4              -2          123    30-JUN-2003          A3  2.5         
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 5, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 7, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J1.I1 IN (J2.I1);
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4              -2          123    30-JUN-2003          A3  2.5         
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-4 rows selected.
+5 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 34, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 52, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### only Join Predicate_Non-First Indexed Column
@@ -2529,37 +2612,45 @@ J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4              -555        T/Æ¼   20-APR-2001          A3  10.5        
 -2          AAA    01-JAN-1998          A4                          °¡_A   01-JAN-1998          A4  100         
+-2          AAA    01-JAN-1998          A4              3000000     Á¶ÀÎ                        A2              
+-2          AAA    01-JAN-1998          A4                          ÄÃ·³                        A1  0           
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9           100         AAA    27-OCT-2006          A2  -1          
 9           123    15-MAR-2000          A9  9           1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9           -555        T/Æ¼   20-APR-2001          A3  10.5        
 9           123    15-MAR-2000          A9  9                       °¡_A   01-JAN-1998          A4  100         
+9           123    15-MAR-2000          A9  9           3000000     Á¶ÀÎ                        A2              
+9           123    15-MAR-2000          A9  9                       ÄÃ·³                        A1  0           
 350         S/ÇÏ                            9999        -555        T/Æ¼   20-APR-2001          A3  10.5        
 350         S/ÇÏ                            9999                    °¡_A   01-JAN-1998          A4  100         
+350         S/ÇÏ                            9999        3000000     Á¶ÀÎ                        A2              
+350         S/ÇÏ                            9999                    ÄÃ·³                        A1  0           
                                                                                                                 
-9 rows selected.
+16 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: SORT, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 9, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 16, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 LEFT OUTER JOIN J1 ON J2.I3=J1.I3;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                          °¡_A   01-JAN-1998          A4  100         
 -2          AAA    01-JAN-1998          A4              3333        %^&__  01-JAN-1998              42          
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        -2          123    30-JUN-2003          A3  2.5         
 9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
 9           123    15-MAR-2000          A9  9           2                  15-MAR-2000          A4  -1.2        
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
-6 rows selected.
+7 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  LEFT-OUTER-JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 4, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 6, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 5, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 11, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Join Column Predicate_First Indexed Column)
@@ -3151,30 +3242,33 @@ $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1=1 AND J1.I2='AAA' AND J2.I1=1;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
                                                         -555        T/Æ¼   20-APR-2001          A3  10.5        
                                                         -2          123    30-JUN-2003          A3  2.5         
-                                                        1           AAA    27-OCT-2006                          
                                                         2                  15-MAR-2000          A4  -1.2        
                                                         9                  15-MAR-2000          A1  1           
                                                         100         AAA    27-OCT-2006          A2  -1          
                                                         3333        %^&__  01-JAN-1998              42          
+                                                        3000000     Á¶ÀÎ                        A2              
                                                                     °¡_A   01-JAN-1998          A4  100         
-12 rows selected.
+                                                                    ÄÃ·³                        A1  0           
+14 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: STORE_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 44, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 14, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 63, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 14, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1=3333 AND J2.I1>350 
                                    AND J1.I2 IS NULL AND J2.I2>'AAA' ;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
@@ -3185,14 +3279,16 @@ J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1
                                                         9                  15-MAR-2000          A1  1           
                                                         100         AAA    27-OCT-2006          A2  -1          
                                                         3333        %^&__  01-JAN-1998              42          
+                                                        3000000     Á¶ÀÎ                        A2              
                                                                     °¡_A   01-JAN-1998          A4  100         
-12 rows selected.
+                                                                    ÄÃ·³                        A1  0           
+15 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: STORE_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 44, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 65, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Non-Join Predicate_Non-First Indexed Column
@@ -3200,6 +3296,7 @@ $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I2='AAA' AND J2.I5=-1;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
@@ -3210,20 +3307,23 @@ J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1
                                                         9                  15-MAR-2000          A1  1           
                                                         100         AAA    27-OCT-2006          A2  -1          
                                                         3333        %^&__  01-JAN-1998              42          
+                                                        3000000     Á¶ÀÎ                        A2              
                                                                     °¡_A   01-JAN-1998          A4  100         
-12 rows selected.
+                                                                    ÄÃ·³                        A1  0           
+15 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: STORE_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 44, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 65, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1!=3000000 AND J2.I1 IN (1,2,3)
                                    AND J1.I2='123' AND J2.I2='123';
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                                                                      
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9                                                                   
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
@@ -3234,14 +3334,16 @@ J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1
                                                         9                  15-MAR-2000          A1  1           
                                                         100         AAA    27-OCT-2006          A2  -1          
                                                         3333        %^&__  01-JAN-1998              42          
+                                                        3000000     Á¶ÀÎ                        A2              
                                                                     °¡_A   01-JAN-1998          A4  100         
-12 rows selected.
+                                                                    ÄÃ·³                        A1  0           
+15 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: STORE_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 44, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 65, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 15, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ###################################
@@ -3253,43 +3355,47 @@ $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1=J2.I1;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4              -2          123    30-JUN-2003          A3  2.5         
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
                                                         -555        T/Æ¼   20-APR-2001          A3  10.5        
-                                                        1           AAA    27-OCT-2006                          
                                                         2                  15-MAR-2000          A4  -1.2        
                                                         100         AAA    27-OCT-2006          A2  -1          
                                                         3333        %^&__  01-JAN-1998              42          
+                                                        3000000     Á¶ÀÎ                        A2              
                                                                     °¡_A   01-JAN-1998          A4  100         
-10 rows selected.
+                                                                    ÄÃ·³                        A1  0           
+12 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 11, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 14, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J1.I1 IN (J2.I1);
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4              -2          123    30-JUN-2003          A3  2.5         
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
                                                         -555        T/Æ¼   20-APR-2001          A3  10.5        
-                                                        1           AAA    27-OCT-2006                          
                                                         2                  15-MAR-2000          A4  -1.2        
                                                         100         AAA    27-OCT-2006          A2  -1          
                                                         3333        %^&__  01-JAN-1998              42          
+                                                        3000000     Á¶ÀÎ                        A2              
                                                                     °¡_A   01-JAN-1998          A4  100         
-10 rows selected.
+                                                                    ÄÃ·³                        A1  0           
+12 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: STORE_NL, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 40, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  STORE ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 59, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### only Join Predicate_Non-First Indexed Column
@@ -3298,45 +3404,54 @@ J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4              -555        T/Æ¼   20-APR-2001          A3  10.5        
 -2          AAA    01-JAN-1998          A4                          °¡_A   01-JAN-1998          A4  100         
+-2          AAA    01-JAN-1998          A4              3000000     Á¶ÀÎ                        A2              
+-2          AAA    01-JAN-1998          A4                          ÄÃ·³                        A1  0           
+1           ÄÃ·³   30-JUN-2003          A1  -1.2                                                                
 9           123    15-MAR-2000          A9  9           100         AAA    27-OCT-2006          A2  -1          
 9           123    15-MAR-2000          A9  9           1           AAA    27-OCT-2006                          
 9           123    15-MAR-2000          A9  9           -555        T/Æ¼   20-APR-2001          A3  10.5        
 9           123    15-MAR-2000          A9  9                       °¡_A   01-JAN-1998          A4  100         
+9           123    15-MAR-2000          A9  9           3000000     Á¶ÀÎ                        A2              
+9           123    15-MAR-2000          A9  9                       ÄÃ·³                        A1  0           
 350         S/ÇÏ                            9999        -555        T/Æ¼   20-APR-2001          A3  10.5        
 350         S/ÇÏ                            9999                    °¡_A   01-JAN-1998          A4  100         
+350         S/ÇÏ                            9999        3000000     Á¶ÀÎ                        A2              
+350         S/ÇÏ                            9999                    ÄÃ·³                        A1  0           
                                                                                                                 
                                                         3333        %^&__  01-JAN-1998              42          
                                                         -2          123    30-JUN-2003          A3  2.5         
-                                                        9                  15-MAR-2000          A1  1           
                                                         2                  15-MAR-2000          A4  -1.2        
-13 rows selected.
+                                                        9                  15-MAR-2000          A1  1           
+20 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: SORT, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 13, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 9, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SORT ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 20, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 $T0> SELECT * FROM J2 FULL OUTER JOIN J1 ON J2.I3=J1.I3;
 J2.I1       J2.I2  J2.I3                J2.I4  J2.I5       J1.I1       J1.I2  J1.I3                J1.I4  J1.I5       
 ---------------------------------------------------------------------------------------------------------------------------------
 -2          AAA    01-JAN-1998          A4                          °¡_A   01-JAN-1998          A4  100         
 -2          AAA    01-JAN-1998          A4              3333        %^&__  01-JAN-1998              42          
+1           ÄÃ·³   30-JUN-2003          A1  -1.2        -2          123    30-JUN-2003          A3  2.5         
 9           123    15-MAR-2000          A9  9           9                  15-MAR-2000          A1  1           
 9           123    15-MAR-2000          A9  9           2                  15-MAR-2000          A4  -1.2        
 350         S/ÇÏ                            9999                                                                
                                                                                                                 
                                                         -555        T/Æ¼   20-APR-2001          A3  10.5        
-                                                        -2          123    30-JUN-2003          A3  2.5         
                                                         1           AAA    27-OCT-2006                          
                                                         100         AAA    27-OCT-2006          A2  -1          
-10 rows selected.
+                                                        3000000     Á¶ÀÎ                        A2              
+                                                                    ÄÃ·³                        A1  0           
+12 rows selected.
 ------------------------------------------------------------
 PROJECT ( COLUMN_COUNT: 10, TUPLE_SIZE: 95, COST: BLOCKED )
  FULL-OUTER-JOIN ( METHOD: HASH, COST: BLOCKED )
-  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 8, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
-  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 8, DISK_PAGE_COUNT: BLOCKED, ACCESS: 10, COST: BLOCKED )
-   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  SCAN ( TABLE: SYS.J2, INDEX: SYS.J2_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 10, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
+  HASH ( ITEM_SIZE: BLOCKED, ITEM_COUNT: 10, DISK_PAGE_COUNT: BLOCKED, ACCESS: 16, COST: BLOCKED )
+   SCAN ( TABLE: SYS.J1, INDEX: SYS.J1_I12345, GLOBAL-INDEX, FULL SCAN, ACCESS: 12, DISK_PAGE_COUNT: BLOCKED, COST: BLOCKED )
 ------------------------------------------------------------
 
 $T0> ### with Other Predicate(Join Column Predicate_First Indexed Column)

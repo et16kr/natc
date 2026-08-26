@@ -40,10 +40,13 @@ DEF PIN_DISK_NATIVE()
 #
 # PORT EDIT: 한글 리터럴은 EUC-KR 바이트다 (2026-08-21 복원)
 #
-#   이 하네스는 .tc 의 바이트를 **EUC-KR 로 읽어** DB 문자셋(UTF8)으로
-#   변환한다. 그래서 원본과 이 포트의 몸통은 EUC-KR 이어야 맞고, 위
-#   PORT EDIT 가 못박은 8/4/5/3 도 그 전제에서 나온 값이다
-#   (컬럼·조인이 4 바이트 -> 6 바이트가 되어 VARCHAR(5) 에 안 들어간다).
+#   이 하네스는 .tc 의 바이트를 **EUC-KR 로 읽어** DB 문자셋으로 변환한다
+#   -- natc/conf/server.conf 의 [DEFAULT] 가 ALTIBASE_NLS_USE=KO16KSC5601 을
+#   못박고, ats2 가 그것을 자기가 띄우는 모든 isql 에 -nls_use 로 넘긴다
+#   (환경변수는 이기지 못한다). 표준 인스턴스의 DB 문자셋도 KO16KSC5601
+#   이므로(natc/bin/createdb) 변환이 실질적으로 없고, 두 글자 한글은
+#   4 바이트 그대로 VARCHAR(5) 에 들어간다. 아래 PORT EDIT 의 10/5/5/3 이
+#   그 전제에서 나온 값이다.
 #
 #   df87aaa 가 이 파일을 UTF-8 로 옮기면서 한글 21 곳을 **파괴적으로**
 #   변환했다(컬럼 -> U+FFFD ÷ U+FFFD, T/티 -> T/Ƽ 처럼 대체문자 없이
@@ -160,33 +163,34 @@ INSERT INTO J4 VALUES (    9,    NULL, '15-MAR-2000', 'A1',    1 );
 ##########################################################################
 # PORT EDIT: pin the row set this case actually measures
 #
-# Three of the fixture INSERTs above do not land here, and they did land
-# when the original expectation was recorded:
+# The four counts below are the row set every SELECT in this case is
+# measured against. They are pinned here so that a change in the encoding
+# situation -- a different database character set, a wider or narrower I2,
+# a different client charset -- moves them and turns the case RED at this
+# line, instead of letting it quietly measure a different table than the
+# one its expectation was recorded on.
+#
+# It has already done that job once, and this is the entry it earned.
+# Until 2026-08-21 the counts stood at 8 / 4 / 5 / 3, because three of the
+# fixture INSERTs
 #
 #   INSERT INTO J1 VALUES ( NULL, '<2 hangul>', NULL, 'A1',    0 );
 #   INSERT INTO J1 VALUES ( 3E+6, '<2 hangul>', NULL, 'A2', NULL );
 #   INSERT INTO J2 VALUES (    1, '<2 hangul>', '30-JUN-2003', 'A1', -1.2 );
 #
-# each -> [ERR-21069 : Invalid data type length : I2.]
+# were failing with [ERR-21069 : Invalid data type length : I2.]. I2 is
+# VARCHAR(5) and the literals are two Hangul characters -- four bytes in
+# the EUC-KR body of this file, six once a client conversion to UTF8 gets
+# in the way. That expectation had been recorded on the isolated instance
+# scripts/global-index/testdb.sh built with `server create UTF8 UTF8`,
+# which is not the instance the runner uses. On the standard one -- client
+# NLS_USE and database character set both KO16KSC5601 -- there is no
+# conversion, the three rows land, and the counts are the fixture's own
+# 10 / 5 / 5 / 3. That is also what the original qp4 oracle records
+# (JoinTest_A4_64.lst: 50 rows selected, no ERR-21069 anywhere). The pin
+# is back on the original's value.
 #
-# This has nothing to do with global indexes. I2 is VARCHAR(5); the literals
-# are two Hangul characters, four bytes in the EUC-KR body of this file and
-# six after the client converts them to the database character set. The
-# original suite was recorded against a KO16KSC5601 database, where they
-# stayed four bytes and fit. This project's isolated instance is UTF8
-# (scripts/global-index/testdb.sh creates it that way, and every other
-# baseline in the workflow is recorded on it), so they no longer fit.
-#
-# The port does not paper over that. It states it: the four counts below
-# are the row set every SELECT in this case is measured against. If the
-# encoding situation ever changes -- a KO16KSC5601 instance, a wider I2, a
-# different client charset -- the three rows come back, these counts move,
-# and the case goes RED at this line instead of quietly measuring a
-# different table than the one its expectation was recorded on. That is the
-# opposite of freezing an error: the error above is held in place by its
-# consequence, not by its message.
-#
-# The fixture inserts 10 / 5 / 5 / 3 rows; this port measures 8 / 4 / 5 / 3.
+# The fixture inserts 10 / 5 / 5 / 3 rows; this port measures the same.
 ##########################################################################
 
 SELECT COUNT(*) J1_ROWS FROM J1;

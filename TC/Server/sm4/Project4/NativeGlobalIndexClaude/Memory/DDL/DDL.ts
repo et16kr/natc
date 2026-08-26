@@ -10,5 +10,4 @@ addTruncatePartition.tc                 # ADD / TRUNCATE PARTITION
 dropPartition.tc                        # DROP PARTITION
 splitMergeReplace.tc                    # SPLIT / MERGE / REPLACE PARTITION
 coalesceAndBoundary.tc                  # COALESCE 와 파티션 경계값
-replicationReject.tc                    # 복제 DDL 게이트 (단일 인스턴스)
 -------------------------------------------------------------------------------

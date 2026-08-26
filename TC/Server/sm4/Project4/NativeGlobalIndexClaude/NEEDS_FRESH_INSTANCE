@@ -35,10 +35,26 @@ instance has ever created, not of what the case did:
   pdt/Design/DELETE/RangePartTable.sql               which FK is reported first
 
 They came that way from the original suite, which never noticed because ATAF's
-auto-init recreates the database on every run. natc-check.sh keeps auto-init
-OFF on purpose (it would destroy the isolated instance), so it reads this file
-instead and recreates the instance itself. The other 110 wired cases are
+auto-init recreates the database on every run. The other 110 wired cases are
 byte-identical back to back on a database that already has history.
+
+HOW TO MEET IT (2026-08-21)
+
+The shell net that used to meet this precondition is gone -- natc-check.sh
+read this file and rebuilt an isolated instance before every run. Meet it with
+natc's own tools instead, from $ATC_HOME:
+
+    server kill
+    clean                 # destroydb -n mydb + createdb -M 4 (KO16KSC5601)
+    server start
+    atsclnt <suite>.ts
+
+Measured, not assumed. On a database carrying one previous run of this suite
+those four cases print __SYS_PART_IDX_ID_1250 against an expectation of 254 and
+go red; after the clean above they are green again, and the 1250 was stable
+across two consecutive runs, so it is the history that moves them and nothing
+else. Passing --auto-init=ON to atsclnt does NOT substitute for the clean --
+tried, and the four stayed red.
 
 There is a second, narrower version of the same hazard: a case that lists
 catalog rows can also see what its NEIGHBOURS in this run left behind, and a

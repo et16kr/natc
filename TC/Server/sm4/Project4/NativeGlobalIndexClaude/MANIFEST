@@ -117,7 +117,7 @@ PROJ-1624-QC/repl/initialize.tc                                 	-              
 PROJ-1624-QC/repl/createIndex.tc                                	-                                                       	held
 PROJ-1624-QC/repl/NoIndexCreate.tc                              	-                                                       	held
 PROJ-1624-QC/repl/finalize.tc                                   	-                                                       	held
-PROJ-1624-QC/PDT/Design/INITIALIZE.sql                          	Disk/DDL/pdtDesign_INITIALIZE.sql	ported
+PROJ-1624-QC/PDT/Design/INITIALIZE.sql                          	Disk/pdtDesign_INITIALIZE.sql	ported
 PROJ-1624-QC/PDT/Design/CREATE_TABLE/RangePartTable.sql         	Disk/Create/createTable_RangePartTable.sql	ported
 PROJ-1624-QC/PDT/Design/CREATE_TABLE/HashPartTable.sql          	Disk/Create/createTable_HashPartTable.sql	ported
 PROJ-1624-QC/PDT/Design/CREATE_TABLE/ListPartTable.sql          	Disk/Create/createTable_ListPartTable.sql	ported
@@ -223,7 +223,7 @@ PROJ-1624-QC/PDT/Design/LOCK_TABLE/IS_NOWAIT.sql                	Disk/Transactio
 PROJ-1624-QC/PDT/Design/LOCK_TABLE/IX_NOWAIT.sql                	Disk/Transaction/lockTable_IX_NOWAIT.sql	ported
 PROJ-1624-QC/PDT/Design/LOCK_TABLE/X_NOWAIT.sql                 	Disk/Transaction/lockTable_X_NOWAIT.sql	ported
 PROJ-1624-QC/PDT/Design/LOCK_TABLE/SIX_NOWAIT.sql               	Disk/Transaction/lockTable_SIX_NOWAIT.sql	ported
-PROJ-1624-QC/PDT/Design/FINALIZE.sql                            	Disk/DDL/pdtDesign_FINALIZE.sql	ported
+PROJ-1624-QC/PDT/Design/FINALIZE.sql                            	Disk/pdtDesign_FINALIZE.sql	ported
 PROJ-1624-QC/PDT/Bugs/INITIALIZE.sql                            	Disk/Bugs/pdtBug_INITIALIZE.sql	ported
 PROJ-1624-QC/PDT/Bugs/BUG-9/BUG-9.sql                           	Disk/Bugs/pdtBug_BUG-9.sql	ported
 PROJ-1624-QC/PDT/Bugs/BUG-14/BUG-14.sql                         	Disk/Bugs/pdtBug_BUG-14.sql	ported

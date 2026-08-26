@@ -19,10 +19,21 @@ Disk/Disk.ts                            # 디스크 — 로깅 있음, 로그로
 Memory/Memory.ts                        # 메모리 — 로깅 없음, 재기동 시 리빌드
 Tool/Tool.ts                            # 유틸리티 접점 (제안 — §계획 3.1 의 Tool 결정 대기)
 #
-# ★ Replication/Replication.ts 는 여기 없다 -- 의도인지 누락인지 적혀 있지
-#   않다. 그 레인은 두 서버를 띄우고 죽이므로 기본 실행에서 빼는 판단이
-#   정당할 수 있으나, **어디에도 그 사실과 실행 방법이 적혀 있지 않다.**
-#   배선하든 빼든 여기에 한 줄로 남길 것 -- 그러지 않으면 4 케이스가
-#   전체 실행에서 조용히 빠진다 (§계획 9.4 결함 ①). 레인 소유 세션이
-#   결정한다.
+# ★ Replication/Replication.ts 는 여기 없다 -- **의도다** (2026-08-21 결정).
+#   그 레인은 db1/db2 두 인스턴스를 짓고 띄우고 내리므로, 기본 실행에
+#   넣으면 매 실행마다 그 비용과 실패 가능성을 진다. 그래서 빼 두고,
+#   대신 그 사실과 실행 방법을 여기 적는다 -- 그러지 않으면 케이스들이
+#   전체 실행에서 조용히 빠진다 (§계획 9.4 결함 ①).
+#
+#   이 레인은 따로 돌린다:
+#
+#       cd $ATC_HOME/TC/Server/sm4/Project4/NativeGlobalIndexClaude
+#       atsclnt Replication/Replication.ts
+#
+#   지금 5 케이스다 -- initialize / globalPkRowMovement /
+#   ddlSyncPropertyMismatch / replicationReject / finalize. 넷째는
+#   2026-08-21 에 Memory/DDL 에서 이관했다: 복제 매니저가 살아 있는
+#   인스턴스를 요구하는데 [DEFAULT] 블록에는 복제 포트가 없고, 그것은
+#   [NGI_SERVER1] 처럼 복제 전용 서버 블록에만 있기 때문이다. 근거는
+#   그 파일 머리에 있다.
 -------------------------------------------------------------------------------
