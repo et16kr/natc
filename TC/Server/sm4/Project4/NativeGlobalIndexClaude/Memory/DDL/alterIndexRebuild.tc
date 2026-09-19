@@ -440,10 +440,14 @@ create index gidx1 on t1(i2);
 CALL FILL_RANGE_DATA();
 CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
 
+# Creation OFF must not disable maintenance of this existing native index.
+# Manual: product docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 0;
 alter index gidx1 rebuild;
 
 CALL SELECT_INDEX_META( "t1" );
 CALL CHECK_GLOBAL_INDEX( "t1", "gidx1", "i1, i2", "i2" );
+ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 1;
 
 ##################################
 # SECTOR; DML AFTER REBUILD

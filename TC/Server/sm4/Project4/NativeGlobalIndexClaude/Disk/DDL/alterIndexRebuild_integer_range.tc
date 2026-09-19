@@ -33,7 +33,7 @@ DEF PIN_DISK_NATIVE()
 ###########################################################################
 # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_range.tc
 #
-# Body below is byte-identical to the original. What this port adds is the
+# Body below also checks REBUILD with the native creation gate OFF. The
 # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
 # the value into the transcript, so the case states what it measures
 # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
@@ -102,6 +102,9 @@ FROM PDT_RANGE PARTITION( P3 );
 SELECT /*+ INDEX ASC ( PDT_RANGE, IDX1 ) */ COUNT(*)
 FROM PDT_RANGE PARTITION( P4 );
 
+# Creation OFF must not disable maintenance of this existing native index.
+# Manual: product docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
 ALTER INDEX IDX1 REBUILD;
 
 ## should be 2
@@ -116,6 +119,8 @@ FROM PDT_RANGE PARTITION( P3 );
 ## should be 2
 SELECT /*+ INDEX ASC ( PDT_RANGE, IDX1 ) */ COUNT(*)
 FROM PDT_RANGE PARTITION( P4 );
+
+ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
 
 ############################
 ## 2.2 Non-Unique Index

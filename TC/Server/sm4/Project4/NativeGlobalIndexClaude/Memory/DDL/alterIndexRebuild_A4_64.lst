@@ -374,6 +374,10 @@ P2  30
 P3  30                   
 3 rows selected.
 
+$T0> # Creation OFF must not disable maintenance of this existing native index.
+$T0> # Manual: product docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
 $T0> alter index gidx1 rebuild;
 Alter success.
 
@@ -511,6 +515,9 @@ P1  30
 P2  30                   
 P3  30                   
 3 rows selected.
+
+$T0> ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
 
 $T0> ##################################
 $T0> # SECTOR; DML AFTER REBUILD

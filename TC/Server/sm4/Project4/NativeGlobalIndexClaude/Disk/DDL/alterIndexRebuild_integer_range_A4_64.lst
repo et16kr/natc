@@ -32,7 +32,7 @@ $T0> #
 $T0> ###########################################################################
 $T0> # TestCase Description = ported from qp4/Project3/PROJ-1624-GlobalIndex/PROJ-1624-QC/PDT/Design/ALTER_INDEX/REBUILD/integer_range.tc
 $T0> #
-$T0> # Body below is byte-identical to the original. What this port adds is the
+$T0> # Body below also checks REBUILD with the native creation gate OFF. The
 $T0> # premise: PIN_DISK_NATIVE() pins DISK_GLOBAL_INDEX_ENABLE = 1 and writes
 $T0> # the value into the transcript, so the case states what it measures
 $T0> # instead of inheriting it (F07 -- see include/globalIndexEnv.i).
@@ -133,6 +133,10 @@ COUNT
 2                    
 1 row selected.
 
+$T0> # Creation OFF must not disable maintenance of this existing native index.
+$T0> # Manual: product docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
 $T0> ALTER INDEX IDX1 REBUILD;
 Alter success.
 
@@ -164,6 +168,9 @@ COUNT
 -----------------------
 2                    
 1 row selected.
+
+$T0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
 
 $T0> ############################
 $T0> ## 2.2 Non-Unique Index
