@@ -1,0 +1,137 @@
+###########################################################################
+# TestCase Description = Preserve rows before a savepoint when a PSM CLR
+#                        skips into an older log file with a larger offset.
+# Project ID           = NativeGlobalIndexCodex (shared SM G01 prerequisite)
+# Test ID              = NGI-TRX-005
+# Manual: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# Manual: ALTIBASE/Documents/Manuals/Altibase_7.3/eng/Stored Procedures Manual.md
+# Manual: ALTIBASE/Documents/Manuals/Altibase_7.3/eng/SQL Reference.md
+# Bounded ordinary SQL creates a log boundary; no server/property changes.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+##################################
+SECTOR; INITIALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP PROCEDURE NGM_LSN_FAIL;
+    DROP PROCEDURE NGM_LSN_PAD;
+    DROP TABLE NGM_LSN_KEEP;
+    DROP TABLE NGM_LSN_FILL;
+    SKIP END;
+
+##################################
+SECTOR; PREPARATION
+##################################
+    NODISPLAY ON;
+    CREATE TABLE NGM_LSN_KEEP (ID INTEGER, LF BIGINT, OFFS BIGINT)
+        TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE TABLE NGM_LSN_FILL (PAD VARCHAR(2000))
+        TABLESPACE SYS_TBS_MEM_DATA;
+
+    CREATE OR REPLACE PROCEDURE NGM_LSN_PAD(A_MODE INTEGER) AS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    F0 BIGINT;
+    F1 BIGINT;
+    O1 BIGINT;
+    LSIZE BIGINT;
+    DONE INTEGER := 0;
+    PAYLOAD VARCHAR(2000);
+    BEGIN
+        PAYLOAD :=
+            'wDu9EBw34p4HIrAVaz4Fqzil4ZOJyTKVyduDEN6ZCXSrAl8RoXKF6lshkJW3QJu5gjoPAlavUz6RY7SBgxwR6joj09OfOXedAdod' ||
+            '69OdEZqZ292nmjMdgtyxa9Ch0nOF6ZQ98pyRifsL4TYHi7CjwVyvufuPqVo9a1SxA1kvU7KHuJKf43iFYFCPsritWBwtAlAhI3up' ||
+            'aNIhQ7y3wZIpONcr25UvKhoN4jUXOJKdu9IHWver03SBsrmF0lcVeXkDM7O1k3iTQpUNEtO1E5C3uHoXGFQDQLaFEhYB0jGx0lwv' ||
+            'YBUH6vGfAT4h4fojaL8RcPeHuDWHepw9aloxM7IxI7ABQHkhYXYFIv4ZQfkZAtW9ytI1Knc5ODulmb8LixCv4r41apExKTCDIvwV' ||
+            'I7IR2JObEh2PaDAlElE5EtcBWHkjid27YTCrQJSZejo7OvMbKn8dMLuLclI38bS1AD6lEZy9u1abIhmDelGn8vsRaPq3cjU5cRsP' ||
+            '6PWZqHwtql8duzq9odE76LQJEfAb6FGX4JKpw3mXGP63KPwZsjMTSbqXQPGtmBOtw1Yr4Bwzi7QjOtQ1ob6ZaFuz8TmhuRIZsfYv' ||
+            '61IXoB8D4nijqjahcpe3chipUXeViVE54VEB6BkHKZyFSh85W5IRMTqHqf6rqtcbi5UHKzaJwdkvevoZQN0XSHcxOhUroxeZE1Wh' ||
+            'UTM7UBefcHGLar2puFslancDYFQ1GN89e5CtW1IZApqzQ9CNSHmXqjmx6vuVyPGPuBIPmb8Dqh8PmJuxqPArijOtOJYNahYJI5ij' ||
+            'y3OPMVW9SBk1M98dOnGvmZEZ2JSZ0Z6tCfU107kxiBC9wLsZ2Hgn2X63ifArE1odiTytux4f83QNyLszqjuPqtsVSvUP4HCpQHQb' ||
+            'U1yJsTmxYfmf8vodcdcJ8NEFSJOBqPwXYfsP8BsJOrQt6pQLg5eRiDCbSPgjAXypC7ODE9mvyvY7MlyruTK98tirSDMxMtCTSvcz' ||
+            '672TCJc9ktkT6tyv6Zqd4ZCrU1mv4fq7krwrCpm1GhCPmPKhktebAJexE1kdyhQpENINqLSdaT2rOJQ1uPcBOvEzklYJQvevgds7' ||
+            'Y9iHWTUR6fIxcryPkhmvUfArC3EVUpoxkZSFSrwXQpI1mbsBMT2N0LuJQLAv0raTOz0Bm9cp89CRKtWP4j0ZSfUBoL8dwbiJOrAd' ||
+            'ylYDYDuLOlYVenQZqLMVy5qtiJazYX2z8JUNIRSHybs9ibwVkL8fAVoPARav0F2XyxU3CVSTEbeJGDslMhUZYj8dwXyxO3EXUDQ3' ||
+            'm9CTwLSlOPEPGZSnmraLMLkjqJwrSlqrAv6zc52HmJ6zwPEfyBuZIHGv4byDUvktaniVgNid4zEJCvWrwVsBeByn252RYt4lcVUt' ||
+            '6XU5WrkXOfitkHQD6VKX07QVOfcZOpSJInkh2ru3AFYxgbUnAF8bsP2NOlY1ibCNM9GBCN4b81oPINcnCbgDo5gJSBOZizULs7av' ||
+            '4NkJi5O9iNGDWDKNKvulKDM3mZWbQxMp2BYvC5gbMBO9Ip8REX0pGvYjkLkRshsn6v6peTWlUFonYLMRm7G7MNsB8n2NCz4fiR4H' ||
+            'QTGNQpE5ebYxsVIPwB4rWlArcjmLA1WV0RizMhafKPWpsfGfmBGh01MnS10j8lYVQlGr0TW9stMT8TCj4VWbK3MvKvubmfOP89sR' ||
+            'aDwhY7w3oRSjolsdOVi3QfqjK9G3eR8hKfGvsH8Rs1kLw5SZShorCl2BUB07krgLIfGXKnkRqvatqTu3UJqtgfKtI1I94vaf0fc1' ||
+            'qZWHIb6xA5KLYVmdI5En6XcjWZchMXgpGNCtWb2lkrO1axkVslQtgXe3WByti3o1oNSfMzwvqrSN0hcbIfqDoHQfMngZYjk52daN' ||
+            '2xqVyXYFYTSTcrev0NEZS7oNwtydI5SRQ5SVMn65IdShq32DGREBaTUJCjA9gNcDgtEZ4B6f6Z8HEPGhczaHqtyreDyXcpslGTMP';
+        SELECT TO_NUMBER(VALUE1) INTO LSIZE FROM V$PROPERTY
+            WHERE NAME = 'LOG_FILE_SIZE';
+        SELECT CUR_WRITE_LF_NO INTO F0 FROM V$LFG;
+        FOR I IN 1 .. 200000 LOOP
+            IF MOD(I, 16) = 1 THEN
+                SELECT CUR_WRITE_LF_NO, CUR_WRITE_LF_OFFSET INTO F1, O1 FROM V$LFG;
+                IF ((A_MODE = 0) AND (O1 >= LSIZE / 2) AND (O1 < LSIZE * 3 / 4))
+                    OR ((A_MODE = 1) AND (F1 > F0)) THEN
+                    DONE := 1;
+                    EXIT;
+                END IF;
+            END IF;
+            INSERT INTO NGM_LSN_FILL VALUES (PAYLOAD);
+        END LOOP;
+        COMMIT;
+        IF DONE = 0 THEN
+            RAISE_APPLICATION_ERROR(990001, 'SAVEPOINT_BOUNDARY_NOT_REACHED');
+        END IF;
+    END;
+    /
+
+    CREATE OR REPLACE PROCEDURE NGM_LSN_FAIL AS
+    BEGIN
+        ROLLBACK TO SAVEPOINT LSN_S0;
+        RAISE_APPLICATION_ERROR(990000, 'EXPECTED_SAVEPOINT_FAILURE');
+    END;
+    /
+    NODISPLAY OFF;
+
+##################################
+SECTOR; TEST
+##################################
+    EXEC NGM_LSN_PAD(0);
+    AUTOCOMMIT OFF;
+    INSERT INTO NGM_LSN_KEEP
+        SELECT 1, CUR_WRITE_LF_NO, CUR_WRITE_LF_OFFSET FROM V$LFG;
+    SAVEPOINT LSN_S0;
+    EXEC NGM_LSN_PAD(1);
+    INSERT INTO NGM_LSN_KEEP
+        SELECT 2, CUR_WRITE_LF_NO, CUR_WRITE_LF_OFFSET FROM V$LFG;
+
+    SELECT CASE WHEN A.LF < B.LF AND A.OFFS > B.OFFS
+                THEN 'LSN_ORDER_OK' ELSE 'LSN_ORDER_BAD' END AS BOUNDARY
+      FROM NGM_LSN_KEEP A, NGM_LSN_KEEP B
+     WHERE A.ID = 1 AND B.ID = 2;
+
+    EXEC NGM_LSN_FAIL;
+    SELECT ID FROM NGM_LSN_KEEP ORDER BY ID;
+    INSERT INTO NGM_LSN_KEEP VALUES (3, 0, 0);
+    SAVEPOINT LSN_S1;
+    INSERT INTO NGM_LSN_KEEP VALUES (4, 0, 0);
+    ROLLBACK TO SAVEPOINT LSN_S1;
+    SELECT ID FROM NGM_LSN_KEEP ORDER BY ID;
+    ROLLBACK;
+    SELECT COUNT(*) AS ROWS_AFTER_ABORT FROM NGM_LSN_KEEP;
+    INSERT INTO NGM_LSN_KEEP VALUES (5, 0, 0);
+    COMMIT;
+    SELECT ID FROM NGM_LSN_KEEP ORDER BY ID;
+    AUTOCOMMIT ON;
+
+##################################
+SECTOR; FINALIZATION
+##################################
+    SKIP BEGIN;
+    ROLLBACK;
+    AUTOCOMMIT ON;
+    DROP PROCEDURE NGM_LSN_FAIL;
+    DROP PROCEDURE NGM_LSN_PAD;
+    DROP TABLE NGM_LSN_KEEP;
+    DROP TABLE NGM_LSN_FILL;
+    SKIP END;
+}

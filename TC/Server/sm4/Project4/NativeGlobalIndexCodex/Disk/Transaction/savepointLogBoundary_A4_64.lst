@@ -1,0 +1,115 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Preserve rows before a savepoint when a PSM CLR
+$T0> #                        skips into an older log file with a larger offset.
+$T0> # Project ID           = NativeGlobalIndexCodex (shared SM G01 prerequisite)
+$T0> # Test ID              = NGI-TRX-005
+$T0> # Manual: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # Manual: ALTIBASE/Documents/Manuals/Altibase_7.3/eng/Stored Procedures Manual.md
+$T0> # Manual: ALTIBASE/Documents/Manuals/Altibase_7.3/eng/SQL Reference.md
+$T0> # Bounded ordinary SQL creates a log boundary; no server/property changes.
+$T0> ###########################################################################
+
+$T0> ##################################
+$T0> SECTOR 0; INITIALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> DROP PROCEDURE NGD_LSN_FAIL;
+$T0> DROP PROCEDURE NGD_LSN_PAD;
+$T0> DROP TABLE NGD_LSN_KEEP;
+$T0> DROP TABLE NGD_LSN_FILL;
+$T0> SKIP END;
+
+$T0> ##################################
+$T0> SECTOR 1; PREPARATION
+$T0> ##################################
+
+$T0> ##################################
+$T0> SECTOR 2; TEST
+$T0> ##################################
+$T0> EXEC NGD_LSN_PAD(0);
+Execute success.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> INSERT INTO NGD_LSN_KEEP
+        SELECT 1, CUR_WRITE_LF_NO, CUR_WRITE_LF_OFFSET FROM V$LFG;
+1 row inserted.
+$T0> SAVEPOINT LSN_S0;
+Savepoint success.
+$T0> EXEC NGD_LSN_PAD(1);
+Execute success.
+$T0> INSERT INTO NGD_LSN_KEEP
+        SELECT 2, CUR_WRITE_LF_NO, CUR_WRITE_LF_OFFSET FROM V$LFG;
+1 row inserted.
+
+$T0> SELECT CASE WHEN A.LF < B.LF AND A.OFFS > B.OFFS
+                THEN 'LSN_ORDER_OK' ELSE 'LSN_ORDER_BAD' END AS BOUNDARY
+      FROM NGD_LSN_KEEP A, NGD_LSN_KEEP B
+     WHERE A.ID = 1 AND B.ID = 2;
+BOUNDARY       
+-----------------
+LSN_ORDER_OK   
+1 row selected.
+
+$T0> EXEC NGD_LSN_FAIL;
+[ERR-F1B30 : EXPECTED_SAVEPOINT_FAILURE 
+at "SYS.NGD_LSN_FAIL", line 4]
+$T0> SELECT ID FROM NGD_LSN_KEEP ORDER BY ID;
+ID          
+--------------
+1           
+1 row selected.
+$T0> INSERT INTO NGD_LSN_KEEP VALUES (3, 0, 0);
+1 row inserted.
+$T0> SAVEPOINT LSN_S1;
+Savepoint success.
+$T0> INSERT INTO NGD_LSN_KEEP VALUES (4, 0, 0);
+1 row inserted.
+$T0> ROLLBACK TO SAVEPOINT LSN_S1;
+Rollback success.
+$T0> SELECT ID FROM NGD_LSN_KEEP ORDER BY ID;
+ID          
+--------------
+1           
+3           
+2 rows selected.
+$T0> ROLLBACK;
+Rollback success.
+$T0> SELECT COUNT(*) AS ROWS_AFTER_ABORT FROM NGD_LSN_KEEP;
+ROWS_AFTER_ABORT     
+-----------------------
+0                    
+1 row selected.
+$T0> INSERT INTO NGD_LSN_KEEP VALUES (5, 0, 0);
+1 row inserted.
+$T0> COMMIT;
+Commit success.
+$T0> SELECT ID FROM NGD_LSN_KEEP ORDER BY ID;
+ID          
+--------------
+5           
+1 row selected.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+
+$T0> ##################################
+$T0> SECTOR 3; FINALIZATION
+$T0> ##################################
+$T0> SKIP BEGIN;
+$T0> ROLLBACK;
+$T0> AUTOCOMMIT ON;
+$T0> DROP PROCEDURE NGD_LSN_FAIL;
+$T0> DROP PROCEDURE NGD_LSN_PAD;
+$T0> DROP TABLE NGD_LSN_KEEP;
+$T0> DROP TABLE NGD_LSN_FILL;
+$T0> SKIP END;
+
