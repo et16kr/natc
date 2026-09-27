@@ -10,3 +10,4 @@ Boundary/Boundary.ts                    # 예산 · 다중 테이블스페이스
 Unsupported/Unsupported.ts              # 거부되어야 하는 것
 Regress/Regress.ts                      # 회귀 게이트
 -------------------------------------------------------------------------------
+Recovery/Recovery.ts                    # isolated abort/restart regression

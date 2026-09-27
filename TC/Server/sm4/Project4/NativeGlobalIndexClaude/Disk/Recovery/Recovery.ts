@@ -35,3 +35,4 @@ restartUndoRollback.sql                 # 언두 — ROLLBACK 과 크래시가 �
 restartCatalogSurvival.sql              # kill/clean/start 후 카탈로그 (PROJ-1624 원본 복원)
 #   ★ clean 을 쓰는 것은 이 하나뿐이라 **레인 안에서도 맨 뒤**다.
 -------------------------------------------------------------------------------
+replaceLocalIndexRecovery.tc            # R12/R13/R14 loser recovery with index DDL

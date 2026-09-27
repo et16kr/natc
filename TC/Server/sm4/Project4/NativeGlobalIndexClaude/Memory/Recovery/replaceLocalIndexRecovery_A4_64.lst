@@ -1,0 +1,387 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Recover uncommitted REPLACE and LOCAL index CREATE/DROP.
+$T0> # Project ID = Native Global Index
+$T0> # SQL/iSQL: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # Hints: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> # Requires an exclusive test database: abort/restart interrupts every session.
+$T0> # Lifecycle contract: stdFunc.i stdServerKill/stdServerStart use the runner's
+$T0> # ALTIBASE_HOME and SYSDBA instance; RESTART_CLIENT reconnects C1/C2.
+$T0> # SHUTDOWN ABORT exits without transaction cleanup (mmtCmsAdmin).
+$T0> # R12/R13/R14: restore rows, old indexes and DML undo; discard the new index.
+$T0> ###########################################################################
+$T0> DECLARE SERVER DEFAULT DB1;
+$T0> DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+$T0> DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> SECTOR 1; PREPARATION
+$T0> CREATE-before-DROP and DROP-before-CREATE
+
+$T0> SECTOR 2; TEST
+$T0> INDEX DDL ORDER = 0
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> INDEX DDL ORDER = 1
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> SECTOR 3; FINALIZATION
+$T0> RESTART_CLIENT;
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> SKIP BEGIN;
+$T1> DROP TABLE NGM_RCV_T;
+$T1> DROP TABLE NGM_RCV_S;
+$T1> SKIP END;
+$T1> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T1> CREATE TABLE NGM_RCV_T(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T1> INSERT INTO NGM_RCV_T VALUES(1,101,1101);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_T VALUES(2,102,1102);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_T VALUES(11,111,1111);
+1 row inserted.
+$T1> CREATE INDEX NGM_RCV_T_L ON NGM_RCV_T(K DESC,P) LOCAL;
+Create success.
+$T1> CREATE INDEX NGM_RCV_T_V ON NGM_RCV_T(V) LOCAL;
+Create success.
+$T1> CREATE TABLE NGM_RCV_S(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T1> INSERT INTO NGM_RCV_S VALUES(1,901,1901);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_S VALUES(2,902,1902);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_S VALUES(11,911,1911);
+1 row inserted.
+$T1> CREATE INDEX NGM_RCV_S_L ON NGM_RCV_S(K DESC,P) LOCAL;
+Create success.
+$T1> CREATE INDEX NGM_RCV_S_V ON NGM_RCV_S(V) LOCAL;
+Create success.
+$T1> ALTER SYSTEM CHECKPOINT;
+Alter success.
+$T1> ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+Alter success.
+$T1> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T1> ALTER TABLE NGM_RCV_T REPLACE NGM_RCV_S PARTITION P1;
+Alter success.
+$T1> CREATE INDEX NGM_RCV_EXTRA ON NGM_RCV_T(P,V) LOCAL;
+Create success.
+$T1> DROP INDEX NGM_RCV_T_V;
+Drop success.
+$T1> RESTART_CLIENT;
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_T) */ P,K,V FROM NGM_RCV_T ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_L) */ P,K,V FROM NGM_RCV_T WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_V) */ P,K,V FROM NGM_RCV_T WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_S) */ P,K,V FROM NGM_RCV_S ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_L) */ P,K,V FROM NGM_RCV_S WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_V) */ P,K,V FROM NGM_RCV_S WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT COUNT(*) AS EXTRA_INDEX_COUNT FROM SYSTEM_.SYS_INDICES_
+                WHERE INDEX_NAME='NGM_RCV_EXTRA';
+EXTRA_INDEX_COUNT    
+-----------------------
+0                    
+1 row selected.
+$T1> SELECT INDEX_NAME FROM SYSTEM_.SYS_INDICES_
+                WHERE INDEX_NAME IN ('NGM_RCV_T_L','NGM_RCV_T_V','NGM_RCV_S_L','NGM_RCV_S_V')
+                ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+NGM_RCV_S_L                                                                                                                       
+NGM_RCV_S_V                                                                                                                       
+NGM_RCV_T_L                                                                                                                       
+NGM_RCV_T_V                                                                                                                       
+4 rows selected.
+$T1> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T1> UPDATE NGM_RCV_T SET K=K+100,V=V+1 WHERE P=1;
+1 row updated.
+$T1> ROLLBACK;
+Rollback success.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_T) */ P,K,V FROM NGM_RCV_T ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_L) */ P,K,V FROM NGM_RCV_T WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_V) */ P,K,V FROM NGM_RCV_T WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_S) */ P,K,V FROM NGM_RCV_S ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_L) */ P,K,V FROM NGM_RCV_S WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_V) */ P,K,V FROM NGM_RCV_S WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> DROP TABLE NGM_RCV_T;
+Drop success.
+$T1> DROP TABLE NGM_RCV_S;
+Drop success.
+$T1> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T1> CREATE TABLE NGM_RCV_T(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T1> INSERT INTO NGM_RCV_T VALUES(1,101,1101);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_T VALUES(2,102,1102);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_T VALUES(11,111,1111);
+1 row inserted.
+$T1> CREATE INDEX NGM_RCV_T_L ON NGM_RCV_T(K DESC,P) LOCAL;
+Create success.
+$T1> CREATE INDEX NGM_RCV_T_V ON NGM_RCV_T(V) LOCAL;
+Create success.
+$T1> CREATE TABLE NGM_RCV_S(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T1> INSERT INTO NGM_RCV_S VALUES(1,901,1901);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_S VALUES(2,902,1902);
+1 row inserted.
+$T1> INSERT INTO NGM_RCV_S VALUES(11,911,1911);
+1 row inserted.
+$T1> CREATE INDEX NGM_RCV_S_L ON NGM_RCV_S(K DESC,P) LOCAL;
+Create success.
+$T1> CREATE INDEX NGM_RCV_S_V ON NGM_RCV_S(V) LOCAL;
+Create success.
+$T1> ALTER SYSTEM CHECKPOINT;
+Alter success.
+$T1> ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+Alter success.
+$T1> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T1> ALTER TABLE NGM_RCV_T REPLACE NGM_RCV_S PARTITION P1;
+Alter success.
+$T1> DROP INDEX NGM_RCV_T_V;
+Drop success.
+$T1> CREATE INDEX NGM_RCV_EXTRA ON NGM_RCV_T(P,V) LOCAL;
+Create success.
+$T1> RESTART_CLIENT;
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_T) */ P,K,V FROM NGM_RCV_T ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_L) */ P,K,V FROM NGM_RCV_T WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_V) */ P,K,V FROM NGM_RCV_T WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_S) */ P,K,V FROM NGM_RCV_S ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_L) */ P,K,V FROM NGM_RCV_S WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_V) */ P,K,V FROM NGM_RCV_S WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT COUNT(*) AS EXTRA_INDEX_COUNT FROM SYSTEM_.SYS_INDICES_
+                WHERE INDEX_NAME='NGM_RCV_EXTRA';
+EXTRA_INDEX_COUNT    
+-----------------------
+0                    
+1 row selected.
+$T1> SELECT INDEX_NAME FROM SYSTEM_.SYS_INDICES_
+                WHERE INDEX_NAME IN ('NGM_RCV_T_L','NGM_RCV_T_V','NGM_RCV_S_L','NGM_RCV_S_V')
+                ORDER BY INDEX_NAME;
+INDEX_NAME                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------
+NGM_RCV_S_L                                                                                                                       
+NGM_RCV_S_V                                                                                                                       
+NGM_RCV_T_L                                                                                                                       
+NGM_RCV_T_V                                                                                                                       
+4 rows selected.
+$T1> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T1> UPDATE NGM_RCV_T SET K=K+100,V=V+1 WHERE P=1;
+1 row updated.
+$T1> ROLLBACK;
+Rollback success.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_T) */ P,K,V FROM NGM_RCV_T ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_L) */ P,K,V FROM NGM_RCV_T WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_V) */ P,K,V FROM NGM_RCV_T WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGM_RCV_S) */ P,K,V FROM NGM_RCV_S ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_L) */ P,K,V FROM NGM_RCV_S WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_V) */ P,K,V FROM NGM_RCV_S WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> DROP TABLE NGM_RCV_T;
+Drop success.
+$T1> DROP TABLE NGM_RCV_S;
+Drop success.
+$T2> ALTER SYSTEM CHECKPOINT;
+Alter success.
+$T2> RESTART_CLIENT;
+$T2> ALTER SYSTEM CHECKPOINT;
+Alter success.
+$T2> RESTART_CLIENT;
+

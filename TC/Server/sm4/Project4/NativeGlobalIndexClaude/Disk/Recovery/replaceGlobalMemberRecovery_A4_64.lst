@@ -1,0 +1,163 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Restore GLOBAL members after an uncommitted REPLACE and restart.
+$T0> # Project ID = Native Global Index
+$T0> # SQL/iSQL: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # Hints: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> # Requires an exclusive test database and stdFunc.i abort/start lifecycle.
+$T0> # R5 is currently unresolved. The oracle requires the original rows through
+$T0> # every access path; ERR-11110 must remain a FAIL, never a passing oracle.
+$T0> # Registered separately in KnownFailures.ts; no automatic index rebuild.
+$T0> ###########################################################################
+$T0> DECLARE SERVER DEFAULT DB1;
+$T0> DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+$T0> DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> SECTOR 1; PREPARATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> SECTOR 2; TEST
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> SECTOR 3; FINALIZATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> RESTART_CLIENT;
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> SKIP BEGIN;
+$T1> DROP TABLE NGD_GRCV_T;
+$T1> DROP TABLE NGD_GRCV_S;
+$T1> SKIP END;
+$T1> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T1> ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+Alter success.
+$T1> CREATE TABLE NGD_GRCV_T(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T1> INSERT INTO NGD_GRCV_T VALUES(1,101,1101);
+1 row inserted.
+$T1> INSERT INTO NGD_GRCV_T VALUES(2,102,1102);
+1 row inserted.
+$T1> INSERT INTO NGD_GRCV_T VALUES(11,111,1111);
+1 row inserted.
+$T1> CREATE INDEX NGD_GRCV_T_L ON NGD_GRCV_T(K DESC,P) LOCAL;
+Create success.
+$T1> CREATE INDEX NGD_GRCV_T_V ON NGD_GRCV_T(V) LOCAL;
+Create success.
+$T1> CREATE UNIQUE INDEX NGD_GRCV_T_G ON NGD_GRCV_T(K);
+Create success.
+$T1> CREATE TABLE NGD_GRCV_S(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T1> INSERT INTO NGD_GRCV_S VALUES(1,901,1901);
+1 row inserted.
+$T1> INSERT INTO NGD_GRCV_S VALUES(2,902,1902);
+1 row inserted.
+$T1> INSERT INTO NGD_GRCV_S VALUES(11,911,1911);
+1 row inserted.
+$T1> CREATE INDEX NGD_GRCV_S_L ON NGD_GRCV_S(K DESC,P) LOCAL;
+Create success.
+$T1> CREATE INDEX NGD_GRCV_S_V ON NGD_GRCV_S(V) LOCAL;
+Create success.
+$T1> CREATE UNIQUE INDEX NGD_GRCV_S_G ON NGD_GRCV_S(K);
+Create success.
+$T1> ALTER SYSTEM CHECKPOINT;
+Alter success.
+$T1> ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+Alter success.
+$T1> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T1> ALTER TABLE NGD_GRCV_T REPLACE NGD_GRCV_S PARTITION P1;
+Alter success.
+$T1> RESTART_CLIENT;
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T1> SELECT /*+ FULL SCAN(NGD_GRCV_T) */ P,K,V FROM NGD_GRCV_T ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGD_GRCV_T,NGD_GRCV_T_L) */ P,K,V FROM NGD_GRCV_T WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGD_GRCV_T,NGD_GRCV_T_V) */ P,K,V FROM NGD_GRCV_T WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGD_GRCV_T,NGD_GRCV_T_G) */ P,K,V FROM NGD_GRCV_T WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           101         1101        
+2           102         1102        
+11          111         1111        
+3 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGD_GRCV_S) */ P,K,V FROM NGD_GRCV_S ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGD_GRCV_S,NGD_GRCV_S_L) */ P,K,V FROM NGD_GRCV_S WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGD_GRCV_S,NGD_GRCV_S_V) */ P,K,V FROM NGD_GRCV_S WHERE V>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> SELECT /*+ INDEX(NGD_GRCV_S,NGD_GRCV_S_G) */ P,K,V FROM NGD_GRCV_S WHERE K>=0 ORDER BY P;
+P           K           V           
+----------------------------------------
+1           901         1901        
+2           902         1902        
+11          911         1911        
+3 rows selected.
+$T1> DROP TABLE NGD_GRCV_T;
+Drop success.
+$T1> DROP TABLE NGD_GRCV_S;
+Drop success.
+$T2> ALTER SYSTEM CHECKPOINT;
+Alter success.
+$T2> RESTART_CLIENT;
+

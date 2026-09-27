@@ -1,0 +1,122 @@
+###########################################################################
+# TestCase Description = Recover uncommitted REPLACE and LOCAL index CREATE/DROP.
+# Project ID = Native Global Index
+# SQL/iSQL: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# Hints: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+# Requires an exclusive test database: abort/restart interrupts every session.
+# Lifecycle contract: stdFunc.i stdServerKill/stdServerStart use the runner's
+# ALTIBASE_HOME and SYSDBA instance; RESTART_CLIENT reconnects C1/C2.
+# SHUTDOWN ABORT exits without transaction cleanup (mmtCmsAdmin).
+# R12/R13/R14: restore rows, old indexes and DML undo; discard the new index.
+###########################################################################
+INCLUDE stdFunc.i;
+DECLARE SERVER DEFAULT DB1;
+DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    THREAD T1 C1
+    {
+        AUTOCOMMIT ON;
+        SKIP BEGIN;
+        DROP TABLE NGM_RCV_T;
+        DROP TABLE NGM_RCV_S;
+        SKIP END;
+    }
+    JOIN;
+
+SECTOR; PREPARATION
+    PRINT "CREATE-before-DROP and DROP-before-CREATE";
+
+SECTOR; TEST
+    FOR $sOrder IN 0 1
+    {
+        PRINT "INDEX DDL ORDER = ${sOrder}";
+        THREAD T1 C1
+        {
+            ALTER SESSION SET EXPLAIN PLAN = OFF;
+            CREATE TABLE NGM_RCV_T(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_MEM_DATA;
+            INSERT INTO NGM_RCV_T VALUES(1,101,1101);
+            INSERT INTO NGM_RCV_T VALUES(2,102,1102);
+            INSERT INTO NGM_RCV_T VALUES(11,111,1111);
+            CREATE INDEX NGM_RCV_T_L ON NGM_RCV_T(K DESC,P) LOCAL;
+            CREATE INDEX NGM_RCV_T_V ON NGM_RCV_T(V) LOCAL;
+            CREATE TABLE NGM_RCV_S(P INTEGER,K INTEGER,V INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_MEM_DATA;
+            INSERT INTO NGM_RCV_S VALUES(1,901,1901);
+            INSERT INTO NGM_RCV_S VALUES(2,902,1902);
+            INSERT INTO NGM_RCV_S VALUES(11,911,1911);
+            CREATE INDEX NGM_RCV_S_L ON NGM_RCV_S(K DESC,P) LOCAL;
+            CREATE INDEX NGM_RCV_S_V ON NGM_RCV_S(V) LOCAL;
+            ALTER SYSTEM CHECKPOINT;
+            ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+            AUTOCOMMIT OFF;
+            ALTER TABLE NGM_RCV_T REPLACE NGM_RCV_S PARTITION P1;
+            IF ( $sOrder == 0 )
+            {
+                CREATE INDEX NGM_RCV_EXTRA ON NGM_RCV_T(P,V) LOCAL;
+                DROP INDEX NGM_RCV_T_V;
+            }
+            ELSE
+            {
+                DROP INDEX NGM_RCV_T_V;
+                CREATE INDEX NGM_RCV_EXTRA ON NGM_RCV_T(P,V) LOCAL;
+            }
+        }
+        JOIN;
+        THREAD T2 C2
+        {
+            ALTER SYSTEM CHECKPOINT;
+        }
+        JOIN;
+        NODISPLAY ON;
+        CALL stdServerKill();
+        CALL stdServerStart();
+        NODISPLAY OFF;
+        THREAD T2 C2
+        {
+            RESTART_CLIENT;
+        }
+        JOIN;
+        THREAD T1 C1
+        {
+            RESTART_CLIENT;
+            AUTOCOMMIT ON;
+            ALTER SESSION SET EXPLAIN PLAN = OFF;
+            SELECT /*+ FULL SCAN(NGM_RCV_T) */ P,K,V FROM NGM_RCV_T ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_L) */ P,K,V FROM NGM_RCV_T WHERE K>=0 ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_V) */ P,K,V FROM NGM_RCV_T WHERE V>=0 ORDER BY P;
+            SELECT /*+ FULL SCAN(NGM_RCV_S) */ P,K,V FROM NGM_RCV_S ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_L) */ P,K,V FROM NGM_RCV_S WHERE K>=0 ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_V) */ P,K,V FROM NGM_RCV_S WHERE V>=0 ORDER BY P;
+            SELECT COUNT(*) AS EXTRA_INDEX_COUNT FROM SYSTEM_.SYS_INDICES_
+                WHERE INDEX_NAME='NGM_RCV_EXTRA';
+            SELECT INDEX_NAME FROM SYSTEM_.SYS_INDICES_
+                WHERE INDEX_NAME IN ('NGM_RCV_T_L','NGM_RCV_T_V','NGM_RCV_S_L','NGM_RCV_S_V')
+                ORDER BY INDEX_NAME;
+            AUTOCOMMIT OFF;
+            UPDATE NGM_RCV_T SET K=K+100,V=V+1 WHERE P=1;
+            ROLLBACK;
+            SELECT /*+ FULL SCAN(NGM_RCV_T) */ P,K,V FROM NGM_RCV_T ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_L) */ P,K,V FROM NGM_RCV_T WHERE K>=0 ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_T,NGM_RCV_T_V) */ P,K,V FROM NGM_RCV_T WHERE V>=0 ORDER BY P;
+            SELECT /*+ FULL SCAN(NGM_RCV_S) */ P,K,V FROM NGM_RCV_S ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_L) */ P,K,V FROM NGM_RCV_S WHERE K>=0 ORDER BY P;
+            SELECT /*+ INDEX(NGM_RCV_S,NGM_RCV_S_V) */ P,K,V FROM NGM_RCV_S WHERE V>=0 ORDER BY P;
+            AUTOCOMMIT ON;
+            DROP TABLE NGM_RCV_T;
+            DROP TABLE NGM_RCV_S;
+        }
+        JOIN;
+    }
+
+SECTOR; FINALIZATION
+    RESTART_CLIENT;
+}
