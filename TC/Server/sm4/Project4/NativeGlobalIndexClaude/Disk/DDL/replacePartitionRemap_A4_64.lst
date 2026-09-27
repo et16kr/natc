@@ -67,8 +67,8 @@ $T0> #   멤버 디렉터리와 memberNo 는 **디스크만 영속한다**. 메�
 $T0> #   없다(§계획 3.2). LEAVING 표시도, V$DISK_BTREE_HEADER 의 멤버 칸도
 $T0> #   디스크의 것이다.
 $T0> #
-$T0> # ★ .lst 미기록 -- 빌드가 서면 두 번 돌려 바이트 동일을 확인한 뒤 찍을 것.
-$T0> #   기대값을 손으로 지어내면 결함을 동결한다 (§Coverage-Gaps 5).
+$T0> # SQL/iSQL reference: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # Hint reference: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
 $T0> ###########################################################################
 
 $T0> ##################################
@@ -510,7 +510,143 @@ AFTER_DELETE
 1 row selected.
 
 $T0> ##################################
-$T0> SECTOR 5; FINALIZATION
+$T0> SECTOR 5; D -- failed statement and savepoint rollback keep all index rows
+$T0> ##################################
+$T0> DROP TABLE NGD_XRM_T;
+Drop success.
+$T0> DROP TABLE NGD_XRM_S;
+Drop success.
+$T0> CREATE TABLE NGD_XRM_T (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN(10), PARTITION P2 VALUES LESS THAN(20), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE TABLE NGD_XRM_S (P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN(10), PARTITION P2 VALUES LESS THAN(20), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> INSERT INTO NGD_XRM_T VALUES(1,101);
+1 row inserted.
+$T0> INSERT INTO NGD_XRM_T VALUES(11,111);
+1 row inserted.
+$T0> INSERT INTO NGD_XRM_T VALUES(21,121);
+1 row inserted.
+$T0> INSERT INTO NGD_XRM_S VALUES(1,111);
+1 row inserted.
+$T0> INSERT INTO NGD_XRM_S VALUES(11,911);
+1 row inserted.
+$T0> CREATE UNIQUE INDEX NGD_XRM_T_G ON NGD_XRM_T(K);
+Create success.
+$T0> ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+Alter success.
+$T0> ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+Alter success.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+
+$T0> # Unique conflict must restore the outgoing member before the next statement.
+$T0> ALTER TABLE NGD_XRM_T REPLACE NGD_XRM_S PARTITION P1;
+[ERR-11058 : The row already exists in a unique index.]
+$T0> SELECT /*+ INDEX(NGD_XRM_T,NGD_XRM_T_G) */ P,K FROM NGD_XRM_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+21          121         
+3 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGD_XRM_T) */ 'FAILED_DDL_HEAP',P,K FROM NGD_XRM_T ORDER BY K;
+'FAILED_DDL_HEAP'  P           K           
+-----------------------------------------------
+FAILED_DDL_HEAP  1           101         
+FAILED_DDL_HEAP  11          111         
+FAILED_DDL_HEAP  21          121         
+3 rows selected.
+$T0> ROLLBACK;
+Rollback success.
+$T0> UPDATE NGD_XRM_S SET K=901 WHERE P=1;
+1 row updated.
+$T0> COMMIT;
+Commit success.
+
+$T0> SAVEPOINT S0;
+Savepoint success.
+$T0> ALTER TABLE NGD_XRM_T REPLACE NGD_XRM_S PARTITION P1;
+Alter success.
+$T0> SAVEPOINT S1;
+Savepoint success.
+$T0> ALTER TABLE NGD_XRM_T REPLACE NGD_XRM_S PARTITION P2;
+Alter success.
+$T0> SELECT /*+ INDEX(NGD_XRM_T,NGD_XRM_T_G) */ P,K FROM NGD_XRM_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+21          121         
+1           901         
+11          911         
+3 rows selected.
+$T0> ROLLBACK TO SAVEPOINT S1;
+Rollback success.
+$T0> SELECT /*+ INDEX(NGD_XRM_T,NGD_XRM_T_G) */ P,K FROM NGD_XRM_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+11          111         
+21          121         
+1           901         
+3 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGD_XRM_T) */ 'S1_HEAP',P,K FROM NGD_XRM_T ORDER BY K;
+'S1_HEAP'  P           K           
+---------------------------------------
+S1_HEAP  11          111         
+S1_HEAP  21          121         
+S1_HEAP  1           901         
+3 rows selected.
+
+$T0> # G1 rejects re-entry of P1's retained member without changing the first DDL.
+$T0> ALTER TABLE NGD_XRM_T REPLACE NGD_XRM_S PARTITION P1;
+[ERR-1109B : replacing a retained global index member before transaction completion is not supported yet.]
+$T0> SELECT /*+ INDEX(NGD_XRM_T,NGD_XRM_T_G) */ P,K FROM NGD_XRM_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+11          111         
+21          121         
+1           901         
+3 rows selected.
+$T0> ROLLBACK TO SAVEPOINT S0;
+Rollback success.
+$T0> SELECT /*+ INDEX(NGD_XRM_T,NGD_XRM_T_G) */ P,K FROM NGD_XRM_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+21          121         
+3 rows selected.
+$T0> SELECT /*+ FULL SCAN(NGD_XRM_T) */ 'S0_HEAP',P,K FROM NGD_XRM_T ORDER BY K;
+'S0_HEAP'  P           K           
+---------------------------------------
+S0_HEAP  1           101         
+S0_HEAP  11          111         
+S0_HEAP  21          121         
+3 rows selected.
+$T0> UPDATE NGD_XRM_T SET K=102 WHERE K=101;
+1 row updated.
+$T0> DELETE FROM NGD_XRM_T WHERE K=111;
+1 row deleted.
+$T0> ROLLBACK;
+Rollback success.
+$T0> SELECT /*+ INDEX(NGD_XRM_T,NGD_XRM_T_G) */ P,K FROM NGD_XRM_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+21          121         
+3 rows selected.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+$T0> ALTER SESSION SET TRANSACTIONAL_DDL = 0;
+Alter success.
+
+$T0> ##################################
+$T0> SECTOR 6; FINALIZATION
 $T0> ##################################
 $T0> # 프로퍼티를 기본값으로 되돌린다 -- 다음 케이스에 새지 않게 한다.
 $T0> alter system set GLOBAL_INDEX_EXCHANGE_REMAP = 10;
