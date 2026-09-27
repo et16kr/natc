@@ -1,0 +1,78 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Reject memory global R-tree before runtime allocation.
+$T0> # Project ID = Native Global Index
+$T0> # Manuals: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> #          docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> # Spatial syntax (trunk fallback):
+$T0> # https://github.com/ALTIBASE/Documents/blob/master/Manuals/Altibase_trunk/eng/Spatial%20SQL%20Reference.md
+$T0> # Both implicit and explicit R-tree types must fail on empty and populated
+$T0> # partitioned tables. A local R-tree and a native global B-tree remain usable.
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$T0> SECTOR 1; UNSUPPORTED TYPE
+$T0> CREATE TABLE NG_M_RT(P INTEGER, G GEOMETRY)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_MEM_DATA;
+Create success.
+$T0> CREATE INDEX NG_M_RT_I ON NG_M_RT(G);
+[ERR-1109B : a memory global index whose type is not B-tree is not supported yet.]
+$T0> CREATE INDEX NG_M_RT_I ON NG_M_RT(G) INDEXTYPE IS RTREE;
+[ERR-1109B : a memory global index whose type is not B-tree is not supported yet.]
+$T0> INSERT INTO NG_M_RT VALUES(1, GEOMETRY'POINT(1 2)');
+1 row inserted.
+$T0> INSERT INTO NG_M_RT VALUES(11, GEOMETRY'POINT(3 4)');
+1 row inserted.
+$T0> CREATE INDEX NG_M_RT_I ON NG_M_RT(G);
+[ERR-1109B : a memory global index whose type is not B-tree is not supported yet.]
+$T0> CREATE INDEX NG_M_RT_I ON NG_M_RT(G) INDEXTYPE IS RTREE;
+[ERR-1109B : a memory global index whose type is not B-tree is not supported yet.]
+
+$T0> SECTOR 2; LOCAL RTREE AND GLOBAL BTREE
+$T0> CREATE INDEX NG_M_RT_I ON NG_M_RT(G) LOCAL;
+Create success.
+$T0> SELECT /*+ INDEX(NG_M_RT,NG_M_RT_I) */ P FROM NG_M_RT
+    WHERE WITHIN(G, GEOMETRY'POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))') ORDER BY P;
+P           
+--------------
+1           
+11          
+2 rows selected.
+$T0> INSERT INTO NG_M_RT VALUES(2, GEOMETRY'POINT(2 3)');
+1 row inserted.
+$T0> SELECT /*+ INDEX(NG_M_RT,NG_M_RT_I) */ P FROM NG_M_RT
+    WHERE WITHIN(G, GEOMETRY'POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))') ORDER BY P;
+P           
+--------------
+1           
+2           
+11          
+3 rows selected.
+$T0> CREATE INDEX NG_M_RT_P ON NG_M_RT(P);
+Create success.
+$T0> SELECT /*+ INDEX(NG_M_RT,NG_M_RT_P) */ P FROM NG_M_RT WHERE P>0 ORDER BY P;
+P           
+--------------
+1           
+2           
+11          
+3 rows selected.
+
+$T0> SECTOR 3; FINALIZATION
+$T0> DROP TABLE NG_M_RT;
+Drop success.
+$T0> ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+

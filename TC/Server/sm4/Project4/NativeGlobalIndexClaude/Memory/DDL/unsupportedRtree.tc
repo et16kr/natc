@@ -1,0 +1,48 @@
+###########################################################################
+# TestCase Description = Reject memory global R-tree before runtime allocation.
+# Project ID = Native Global Index
+# Manuals: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+#          docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+# Spatial syntax (trunk fallback):
+# https://github.com/ALTIBASE/Documents/blob/master/Manuals/Altibase_trunk/eng/Spatial%20SQL%20Reference.md
+# Both implicit and explicit R-tree types must fail on empty and populated
+# partitioned tables. A local R-tree and a native global B-tree remain usable.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    NODISPLAY ON;
+    SKIP BEGIN;
+    DROP TABLE NG_M_RT;
+    SKIP END;
+    NODISPLAY OFF;
+    ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 1;
+
+SECTOR; UNSUPPORTED TYPE
+    CREATE TABLE NG_M_RT(P INTEGER, G GEOMETRY)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_MEM_DATA;
+    CREATE INDEX NG_M_RT_I ON NG_M_RT(G);
+    CREATE INDEX NG_M_RT_I ON NG_M_RT(G) INDEXTYPE IS RTREE;
+    INSERT INTO NG_M_RT VALUES(1, GEOMETRY'POINT(1 2)');
+    INSERT INTO NG_M_RT VALUES(11, GEOMETRY'POINT(3 4)');
+    CREATE INDEX NG_M_RT_I ON NG_M_RT(G);
+    CREATE INDEX NG_M_RT_I ON NG_M_RT(G) INDEXTYPE IS RTREE;
+
+SECTOR; LOCAL RTREE AND GLOBAL BTREE
+    CREATE INDEX NG_M_RT_I ON NG_M_RT(G) LOCAL;
+    SELECT /*+ INDEX(NG_M_RT,NG_M_RT_I) */ P FROM NG_M_RT
+    WHERE WITHIN(G, GEOMETRY'POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))') ORDER BY P;
+    INSERT INTO NG_M_RT VALUES(2, GEOMETRY'POINT(2 3)');
+    SELECT /*+ INDEX(NG_M_RT,NG_M_RT_I) */ P FROM NG_M_RT
+    WHERE WITHIN(G, GEOMETRY'POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))') ORDER BY P;
+    CREATE INDEX NG_M_RT_P ON NG_M_RT(P);
+    SELECT /*+ INDEX(NG_M_RT,NG_M_RT_P) */ P FROM NG_M_RT WHERE P>0 ORDER BY P;
+
+SECTOR; FINALIZATION
+    DROP TABLE NG_M_RT;
+    ALTER SYSTEM SET MEM_GLOBAL_INDEX_ENABLE = 0;
+}
