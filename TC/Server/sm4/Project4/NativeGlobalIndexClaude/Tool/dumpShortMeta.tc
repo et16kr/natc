@@ -11,6 +11,7 @@ INCLUDE stdFunc.i;
 DEF MAIN()
 {
 SECTOR; INITIALIZATION
+    NODISPLAY ON;
     IF ( FEXIST "ngiEmptyMeta.bin" )
     {
         RM "ngiEmptyMeta.bin";
@@ -19,6 +20,7 @@ SECTOR; INITIALIZATION
     {
         RM "ngiShortMeta.bin";
     }
+    NODISPLAY OFF;
 
 SECTOR; PREPARATION
     NODISPLAY ON;
