@@ -1,0 +1,139 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Purge physical leaves and preserve live TBK counts.
+$T0> # Project ID = Native Global Index
+$T0> # Manuals: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> #          docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> # Empty-build statistics must not hide leaves populated later. A DEAD TBK
+$T0> # has already left TBK_COUNT before partition purge physically removes it.
+$T0> # The internal CTS property creates TBK keys; no fault injection is used.
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> SKIP BEGIN;
+$T0> DROP TABLE NG_D_PURGE;
+$T0> SKIP END;
+$T0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+
+$T0> SECTOR 1; EMPTY BUILD AND DEAD TBK
+$T0> CREATE TABLE NG_D_PURGE(P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE INDEX NG_D_PURGE_I ON NG_D_PURGE(K) INITRANS 2 MAXTRANS 2;
+Create success.
+$T0> ALTER SYSTEM SET __DISABLE_TRANSACTION_BOUND_IN_CTS = 1;
+Alter success.
+$T0> INSERT INTO NG_D_PURGE VALUES(1,101);
+1 row inserted.
+$T0> INSERT INTO NG_D_PURGE VALUES(2,102);
+1 row inserted.
+$T0> INSERT INTO NG_D_PURGE VALUES(11,111);
+1 row inserted.
+$T0> ALTER SYSTEM SET __DISABLE_TRANSACTION_BOUND_IN_CTS = 0;
+Alter success.
+$T0> DELETE FROM NG_D_PURGE WHERE P=1;
+1 row deleted.
+
+$T0> # Let the oldest disk view advance before reusing the delete CTS.
+$T0> # The visible DEAD_TBK precondition below must be 1; elapsed time alone
+$T0> # is not accepted as evidence that the key reached DEAD.
+$T0> INSERT INTO NG_D_PURGE VALUES(12,112);
+1 row inserted.
+$T0> INSERT INTO NG_D_PURGE VALUES(13,113);
+1 row inserted.
+$T0> INSERT INTO NG_D_PURGE VALUES(14,114);
+1 row inserted.
+$T0> SELECT COUNT(*) AS DEAD_TBK FROM D$DISK_INDEX_BTREE_KEY(NG_D_PURGE_I)
+     WHERE IS_LEAF='T' AND TB_TYPE='K' AND STATE='D';
+DEAD_TBK             
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END AS HAS_LIVE_TBK
+      FROM D$DISK_INDEX_BTREE_KEY(NG_D_PURGE_I)
+     WHERE IS_LEAF='T' AND TB_TYPE='K' AND STATE<>'D';
+HAS_LIVE_TBK 
+---------------
+1           
+1 row selected.
+$T0> ALTER TABLE NG_D_PURGE DROP PARTITION P1;
+Alter success.
+$T0> SELECT COUNT(*) AS PHYSICAL_KEYS FROM D$DISK_INDEX_BTREE_KEY(NG_D_PURGE_I)
+     WHERE IS_LEAF='T';
+PHYSICAL_KEYS        
+-----------------------
+4                    
+1 row selected.
+$T0> SELECT COUNT(*) AS DEAD_KEYS FROM D$DISK_INDEX_BTREE_KEY(NG_D_PURGE_I)
+     WHERE IS_LEAF='T' AND STATE='D';
+DEAD_KEYS            
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT COUNT(*) AS BAD_TBK_COUNTS
+      FROM D$DISK_INDEX_BTREE_STRUCTURE(NG_D_PURGE_I) S
+     WHERE S.IS_LEAF='T' AND S.TBK_COUNT <>
+           (SELECT COUNT(*) FROM D$DISK_INDEX_BTREE_KEY(NG_D_PURGE_I) K
+             WHERE K.MY_PAGEID=S.MY_PAGEID AND K.IS_LEAF='T'
+               AND K.TB_TYPE='K' AND K.STATE<>'D');
+BAD_TBK_COUNTS       
+-----------------------
+0                    
+1 row selected.
+$T0> SELECT /*+ INDEX(NG_D_PURGE,NG_D_PURGE_I) */ P,K
+      FROM NG_D_PURGE WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+11          111         
+12          112         
+13          113         
+14          114         
+4 rows selected.
+$T0> DROP TABLE NG_D_PURGE;
+Drop success.
+
+$T0> SECTOR 2; NULL KEYS BEFORE STATISTICS MINIMUM
+$T0> CREATE TABLE NG_D_PURGE(P INTEGER, K INTEGER)
+    PARTITION BY RANGE(P)
+    (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+    TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> INSERT INTO NG_D_PURGE SELECT 1,NULL FROM DUAL CONNECT BY LEVEL<=3000;
+3000 rows inserted.
+$T0> INSERT INTO NG_D_PURGE VALUES(11,111);
+1 row inserted.
+$T0> CREATE INDEX NG_D_PURGE_I ON NG_D_PURGE(K);
+Create success.
+$T0> ALTER TABLE NG_D_PURGE DROP PARTITION P1;
+Alter success.
+$T0> SELECT COUNT(*) AS LIVE_PHYSICAL_KEYS FROM D$DISK_INDEX_BTREE_KEY(NG_D_PURGE_I)
+     WHERE IS_LEAF='T' AND STATE<>'D';
+LIVE_PHYSICAL_KEYS   
+-----------------------
+1                    
+1 row selected.
+$T0> SELECT /*+ INDEX(NG_D_PURGE,NG_D_PURGE_I) */ P,K
+      FROM NG_D_PURGE WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+11          111         
+1 row selected.
+
+$T0> SECTOR 3; FINALIZATION
+$T0> DROP TABLE NG_D_PURGE;
+Drop success.
+$T0> ALTER SYSTEM SET __DISABLE_TRANSACTION_BOUND_IN_CTS = 0;
+Alter success.
+$T0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+
