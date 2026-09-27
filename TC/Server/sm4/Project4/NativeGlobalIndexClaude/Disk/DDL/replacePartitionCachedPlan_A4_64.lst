@@ -1,0 +1,337 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Cached plans follow uncommitted partition ownership.
+$T0> # SQL/iSQL reference: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # Hint reference: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> # Repeat exactly the same SQL before/after DDL and savepoint rollback.
+$T0> # Distinct SQL labels would hide the stale-plan regression.
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> SKIP BEGIN;
+$T0> AUTOCOMMIT ON;
+$T0> DROP TABLE NG_D_PLAN_T;
+$T0> DROP TABLE NG_D_PLAN_S;
+$T0> SKIP END;
+
+$T0> SECTOR 1; PREPARATION
+$T0> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T0> ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+Alter success.
+$T0> ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+Alter success.
+
+$T0> SECTOR 2; CACHED PLANS WITH AND WITHOUT GLOBAL INDEXES
+$T0> GLOBAL INDEX = 0
+$T0> CREATE TABLE NG_D_PLAN_T(P INTEGER, K INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE TABLE NG_D_PLAN_S(P INTEGER, K INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> INSERT INTO NG_D_PLAN_T VALUES(1,101);
+1 row inserted.
+$T0> INSERT INTO NG_D_PLAN_T VALUES(11,111);
+1 row inserted.
+$T0> INSERT INTO NG_D_PLAN_S VALUES(1,901);
+1 row inserted.
+$T0> INSERT INTO NG_D_PLAN_S VALUES(11,911);
+1 row inserted.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+101         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SAVEPOINT S0;
+Savepoint success.
+$T0> ALTER TABLE NG_D_PLAN_T REPLACE NG_D_PLAN_S PARTITION P1;
+Alter success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+901         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> SAVEPOINT S1;
+Savepoint success.
+$T0> ALTER TABLE NG_D_PLAN_T REPLACE NG_D_PLAN_S PARTITION PD;
+Alter success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          911         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+901         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          911         
+2 rows selected.
+$T0> ROLLBACK TO SAVEPOINT S1;
+Rollback success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+901         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> ROLLBACK TO SAVEPOINT S0;
+Rollback success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+101         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> ROLLBACK;
+Rollback success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+101         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> COMMIT;
+Commit success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+$T0> DROP TABLE NG_D_PLAN_T;
+Drop success.
+$T0> DROP TABLE NG_D_PLAN_S;
+Drop success.
+$T0> GLOBAL INDEX = 1
+$T0> CREATE TABLE NG_D_PLAN_T(P INTEGER, K INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> CREATE TABLE NG_D_PLAN_S(P INTEGER, K INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T0> INSERT INTO NG_D_PLAN_T VALUES(1,101);
+1 row inserted.
+$T0> INSERT INTO NG_D_PLAN_T VALUES(11,111);
+1 row inserted.
+$T0> INSERT INTO NG_D_PLAN_S VALUES(1,901);
+1 row inserted.
+$T0> INSERT INTO NG_D_PLAN_S VALUES(11,911);
+1 row inserted.
+$T0> CREATE INDEX NG_D_PLAN_T_I ON NG_D_PLAN_T(K);
+Create success.
+$T0> CREATE INDEX NG_D_PLAN_S_I ON NG_D_PLAN_S(K);
+Create success.
+$T0> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+101         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SAVEPOINT S0;
+Savepoint success.
+$T0> ALTER TABLE NG_D_PLAN_T REPLACE NG_D_PLAN_S PARTITION P1;
+Alter success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+901         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> SAVEPOINT S1;
+Savepoint success.
+$T0> ALTER TABLE NG_D_PLAN_T REPLACE NG_D_PLAN_S PARTITION PD;
+Alter success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          911         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+901         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          911         
+2 rows selected.
+$T0> ROLLBACK TO SAVEPOINT S1;
+Rollback success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+901         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           901         
+11          111         
+2 rows selected.
+$T0> ROLLBACK TO SAVEPOINT S0;
+Rollback success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+101         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> ROLLBACK;
+Rollback success.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+K           
+--------------
+101         
+1 row selected.
+$T0> SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T0> COMMIT;
+Commit success.
+$T0> AUTOCOMMIT ON;
+Set autocommit on success.
+$T0> DROP TABLE NG_D_PLAN_T;
+Drop success.
+$T0> DROP TABLE NG_D_PLAN_S;
+Drop success.
+
+$T0> SECTOR 3; CLEANUP
+$T0> ALTER SESSION SET TRANSACTIONAL_DDL = 0;
+Alter success.
+$T0> ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 10;
+Alter success.
+$T0> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+

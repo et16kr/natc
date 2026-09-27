@@ -1,0 +1,77 @@
+###########################################################################
+# TestCase Description = Cached plans follow uncommitted partition ownership.
+# SQL/iSQL reference: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# Hint reference: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+# Repeat exactly the same SQL before/after DDL and savepoint rollback.
+# Distinct SQL labels would hide the stale-plan regression.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF checkRows()
+{
+    SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ P,K FROM NG_D_PLAN_T ORDER BY P;
+    SELECT /*+ FULL SCAN(NG_D_PLAN_T) */ K FROM NG_D_PLAN_T PARTITION(P1);
+    SELECT P,K FROM NG_D_PLAN_T WHERE K>=0 ORDER BY P;
+}
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NG_D_PLAN_T;
+    DROP TABLE NG_D_PLAN_S;
+    SKIP END;
+
+SECTOR; PREPARATION
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+    ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+    ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+
+SECTOR; CACHED PLANS WITH AND WITHOUT GLOBAL INDEXES
+    FOR $sGlobal IN 0 1
+    {
+        PRINT "GLOBAL INDEX = ${sGlobal}";
+        CREATE TABLE NG_D_PLAN_T(P INTEGER, K INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_DISK_DATA;
+        CREATE TABLE NG_D_PLAN_S(P INTEGER, K INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10), PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_DISK_DATA;
+        INSERT INTO NG_D_PLAN_T VALUES(1,101);
+        INSERT INTO NG_D_PLAN_T VALUES(11,111);
+        INSERT INTO NG_D_PLAN_S VALUES(1,901);
+        INSERT INTO NG_D_PLAN_S VALUES(11,911);
+        IF ( $sGlobal == 1 )
+        {
+            CREATE INDEX NG_D_PLAN_T_I ON NG_D_PLAN_T(K);
+            CREATE INDEX NG_D_PLAN_S_I ON NG_D_PLAN_S(K);
+        }
+        AUTOCOMMIT OFF;
+        CALL checkRows();
+        SAVEPOINT S0;
+        ALTER TABLE NG_D_PLAN_T REPLACE NG_D_PLAN_S PARTITION P1;
+        CALL checkRows();
+        SAVEPOINT S1;
+        ALTER TABLE NG_D_PLAN_T REPLACE NG_D_PLAN_S PARTITION PD;
+        CALL checkRows();
+        ROLLBACK TO SAVEPOINT S1;
+        CALL checkRows();
+        ROLLBACK TO SAVEPOINT S0;
+        CALL checkRows();
+        ROLLBACK;
+        CALL checkRows();
+        COMMIT;
+        AUTOCOMMIT ON;
+        DROP TABLE NG_D_PLAN_T;
+        DROP TABLE NG_D_PLAN_S;
+    }
+
+SECTOR; CLEANUP
+    ALTER SESSION SET TRANSACTIONAL_DDL = 0;
+    ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 10;
+    ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+}
