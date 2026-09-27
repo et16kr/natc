@@ -1,0 +1,82 @@
+###########################################################################
+# TestCase Description = REPLACE restores table and LOCAL index column IDs together.
+# SQL/iSQL: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# Hints: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+# Composite descending keys retain their physical column order across rollback.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF checkRows()
+{
+    SELECT /*+ INDEX(NG_M_COL_T,NG_M_COL_T_L) */ P,K,V FROM NG_M_COL_T WHERE K>=0 ORDER BY P;
+    SELECT /*+ INDEX(NG_M_COL_T,NG_M_COL_T_V) */ P,K,V FROM NG_M_COL_T WHERE V>=0 ORDER BY P;
+    SELECT /*+ FULL SCAN(NG_M_COL_T) */ P,K,V FROM NG_M_COL_T ORDER BY P;
+    SELECT /*+ INDEX(NG_M_COL_S,NG_M_COL_S_L) */ P,K,V FROM NG_M_COL_S WHERE K>=0 ORDER BY P;
+    SELECT /*+ INDEX(NG_M_COL_S,NG_M_COL_S_V) */ P,K,V FROM NG_M_COL_S WHERE V>=0 ORDER BY P;
+    SELECT /*+ FULL SCAN(NG_M_COL_S) */ P,K,V FROM NG_M_COL_S ORDER BY P;
+}
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    SKIP BEGIN;
+    AUTOCOMMIT ON;
+    DROP TABLE NG_M_COL_T;
+    DROP TABLE NG_M_COL_S;
+    SKIP END;
+
+SECTOR; PREPARATION
+    ALTER SESSION SET EXPLAIN PLAN = OFF;
+    ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+
+SECTOR; LOCAL COLUMN ID ROLLBACK
+    FOR $sGlobal IN 0
+    {
+        CREATE TABLE NG_M_COL_T(P INTEGER,K INTEGER,V INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_MEM_DATA;
+        INSERT INTO NG_M_COL_T VALUES(1,101,1101);
+        INSERT INTO NG_M_COL_T VALUES(2,102,1102);
+        INSERT INTO NG_M_COL_T VALUES(11,111,1111);
+        CREATE INDEX NG_M_COL_T_L ON NG_M_COL_T(K DESC,P) LOCAL;
+        CREATE INDEX NG_M_COL_T_V ON NG_M_COL_T(V) LOCAL;
+        CREATE TABLE NG_M_COL_S(P INTEGER,K INTEGER,V INTEGER)
+        PARTITION BY RANGE(P)
+        (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+        TABLESPACE SYS_TBS_MEM_DATA;
+        INSERT INTO NG_M_COL_S VALUES(1,901,1901);
+        INSERT INTO NG_M_COL_S VALUES(2,902,1902);
+        INSERT INTO NG_M_COL_S VALUES(11,911,1911);
+        CREATE INDEX NG_M_COL_S_L ON NG_M_COL_S(K DESC,P) LOCAL;
+        CREATE INDEX NG_M_COL_S_V ON NG_M_COL_S(V) LOCAL;
+        AUTOCOMMIT OFF;
+        CALL checkRows();
+        SAVEPOINT S0;
+        ALTER TABLE NG_M_COL_T REPLACE NG_M_COL_S PARTITION P1;
+        CALL checkRows();
+        SAVEPOINT S1;
+        UPDATE NG_M_COL_T SET K=K+100,V=V+1 WHERE P=1;
+        CALL checkRows();
+        ROLLBACK TO SAVEPOINT S1;
+        CALL checkRows();
+        ROLLBACK TO SAVEPOINT S0;
+        CALL checkRows();
+        UPDATE NG_M_COL_T SET K=K+100,V=V+1 WHERE P=1;
+        CALL checkRows();
+        ROLLBACK;
+        CALL checkRows();
+        ALTER TABLE NG_M_COL_T REPLACE NG_M_COL_S PARTITION P1;
+        ROLLBACK;
+        CALL checkRows();
+        ALTER TABLE NG_M_COL_T REPLACE NG_M_COL_S PARTITION P1;
+        COMMIT;
+        CALL checkRows();
+        AUTOCOMMIT ON;
+        DROP TABLE NG_M_COL_T;
+        DROP TABLE NG_M_COL_S;
+    }
+
+SECTOR; CLEANUP
+    ALTER SESSION SET TRANSACTIONAL_DDL = 0;
+}

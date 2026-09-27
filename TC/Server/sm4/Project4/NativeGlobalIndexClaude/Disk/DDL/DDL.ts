@@ -99,3 +99,4 @@ alterColumnGlobalKey.tc                 # 글로벌 키 컬럼의 컬럼 DDL —
 allIndexEnableDisk.tc                   # ALL INDEX ENABLE/DISABLE — 거부가 걷힌 뒤 (신규)
 foreignKeyGlobalParentDisk.tc           # FK 부모가 네이티브 글로벌 (신규)
 -------------------------------------------------------------------------------
+replacePartitionLocalColumns.tc         # atomic table/local-index column ID rollback
