@@ -1,0 +1,165 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = A peer transaction cannot consume REPLACE fixups.
+$T0> # Project ID = Native Global Index
+$T0> # SQL/iSQL: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+$T0> # Hints: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+$T0> # Requires MULTIPLEXING_THREAD_COUNT=1 and MULTIPLEXING_MAX_THREAD_COUNT=1
+$T0> # in the exclusive test server; the visible property check enforces this.
+$T0> # The two clients use the DEFAULT server and shared service sessions.
+$T0> # R1: A replaces a partition, B commits/rolls back, then A rolls back.
+$T0> ###########################################################################
+$T0> DECLARE SERVER DEFAULT DB1;
+$T0> DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+$T0> DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+
+$T0> SECTOR 0; INITIALIZATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> SECTOR 1; PREPARATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+
+$T0> SECTOR 2; TEST
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T0> THREAD T2 C2
+$T0> JOIN;
+
+$T0> SECTOR 3; FINALIZATION
+$T0> THREAD T1 C1
+$T0> JOIN;
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> SKIP BEGIN;
+$T1> DROP TABLE NGD_TX_T;
+$T1> DROP TABLE NGD_TX_S;
+$T1> DROP TABLE NGD_TX_B;
+$T1> SKIP END;
+$T1> ALTER SESSION SET EXPLAIN PLAN = OFF;
+Alter success.
+$T1> SELECT NAME,VALUE1 FROM V$PROPERTY
+            WHERE NAME IN ('MULTIPLEXING_THREAD_COUNT','MULTIPLEXING_MAX_THREAD_COUNT')
+            ORDER BY NAME;
+NAME                                                                                                                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+VALUE1                                                                                                                                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+MULTIPLEXING_MAX_THREAD_COUNT                                                                                                                                                                                                                                     
+1                                                                                                                                                                                                                                                                 
+MULTIPLEXING_THREAD_COUNT                                                                                                                                                                                                                                         
+1                                                                                                                                                                                                                                                                 
+2 rows selected.
+$T1> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+Alter success.
+$T1> ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+Alter success.
+$T1> CREATE TABLE NGD_TX_B(K INTEGER);
+Create success.
+$T1> CREATE TABLE NGD_TX_T(P INTEGER,K INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T1> CREATE TABLE NGD_TX_S(P INTEGER,K INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_DISK_DATA;
+Create success.
+$T1> INSERT INTO NGD_TX_T VALUES(1,101);
+1 row inserted.
+$T1> INSERT INTO NGD_TX_T VALUES(11,111);
+1 row inserted.
+$T1> INSERT INTO NGD_TX_S VALUES(1,901);
+1 row inserted.
+$T1> CREATE UNIQUE INDEX NGD_TX_G ON NGD_TX_T(K);
+Create success.
+$T1> ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+Alter success.
+$T1> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T1> ALTER TABLE NGD_TX_T REPLACE NGD_TX_S PARTITION P1;
+Alter success.
+$T1> ROLLBACK;
+Rollback success.
+$T1> SELECT /*+ INDEX(NGD_TX_T,NGD_TX_G) */ P,K FROM NGD_TX_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGD_TX_T) */ P,K FROM NGD_TX_T ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGD_TX_S) */ P,K FROM NGD_TX_S ORDER BY K;
+P           K           
+---------------------------
+1           901         
+1 row selected.
+$T1> UPDATE NGD_TX_T SET K=102 WHERE K=101;
+1 row updated.
+$T1> DELETE FROM NGD_TX_T WHERE K=111;
+1 row deleted.
+$T1> ROLLBACK;
+Rollback success.
+$T1> SELECT /*+ INDEX(NGD_TX_T,NGD_TX_G) */ P,K FROM NGD_TX_T WHERE K>=0 ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T1> SELECT /*+ FULL SCAN(NGD_TX_T) */ P,K FROM NGD_TX_T ORDER BY K;
+P           K           
+---------------------------
+1           101         
+11          111         
+2 rows selected.
+$T1> AUTOCOMMIT ON;
+Set autocommit on success.
+$T1> DROP TABLE NGD_TX_T;
+Drop success.
+$T1> DROP TABLE NGD_TX_S;
+Drop success.
+$T1> DROP TABLE NGD_TX_B;
+Drop success.
+$T1> ALTER SESSION SET TRANSACTIONAL_DDL = 0;
+Alter success.
+$T1> ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 10;
+Alter success.
+$T1> ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+Alter success.
+$T2> AUTOCOMMIT OFF;
+Set autocommit off success.
+$T2> INSERT INTO NGD_TX_B VALUES(1);
+1 row inserted.
+$T2> COMMIT;
+Commit success.
+$T2> INSERT INTO NGD_TX_B VALUES(2);
+1 row inserted.
+$T2> ROLLBACK;
+Rollback success.
+$T2> SELECT K FROM NGD_TX_B ORDER BY K;
+K           
+--------------
+1           
+1 row selected.
+$T2> ROLLBACK;
+Rollback success.
+$T2> AUTOCOMMIT ON;
+Set autocommit on success.
+

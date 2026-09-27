@@ -1,0 +1,105 @@
+###########################################################################
+# TestCase Description = A peer transaction cannot consume REPLACE fixups.
+# Project ID = Native Global Index
+# SQL/iSQL: docs/manuals/altibase/trunk/eng/iSQL User's Manual.md
+# Hints: docs/manuals/altibase/trunk/eng/Performance Tuning Guide.md
+# Requires MULTIPLEXING_THREAD_COUNT=1 and MULTIPLEXING_MAX_THREAD_COUNT=1
+# in the exclusive test server; the visible property check enforces this.
+# The two clients use the DEFAULT server and shared service sessions.
+# R1: A replaces a partition, B commits/rolls back, then A rolls back.
+###########################################################################
+INCLUDE stdFunc.i;
+DECLARE SERVER DEFAULT DB1;
+DECLARE CLIENT DEFAULT C1 ( SERVER = DB1 );
+DECLARE CLIENT DEFAULT C2 ( SERVER = DB1 );
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    THREAD T1 C1
+    {
+        AUTOCOMMIT ON;
+        SKIP BEGIN;
+        DROP TABLE NGD_TX_T;
+        DROP TABLE NGD_TX_S;
+        DROP TABLE NGD_TX_B;
+        SKIP END;
+    }
+    JOIN;
+
+SECTOR; PREPARATION
+    THREAD T1 C1
+    {
+        ALTER SESSION SET EXPLAIN PLAN = OFF;
+        SELECT NAME,VALUE1 FROM V$PROPERTY
+            WHERE NAME IN ('MULTIPLEXING_THREAD_COUNT','MULTIPLEXING_MAX_THREAD_COUNT')
+            ORDER BY NAME;
+        ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 1;
+        ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 1;
+        CREATE TABLE NGD_TX_B(K INTEGER);
+        CREATE TABLE NGD_TX_T(P INTEGER,K INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_DISK_DATA;
+        CREATE TABLE NGD_TX_S(P INTEGER,K INTEGER)
+            PARTITION BY RANGE(P)
+            (PARTITION P1 VALUES LESS THAN(10),PARTITION PD VALUES DEFAULT)
+            TABLESPACE SYS_TBS_DISK_DATA;
+        INSERT INTO NGD_TX_T VALUES(1,101);
+        INSERT INTO NGD_TX_T VALUES(11,111);
+        INSERT INTO NGD_TX_S VALUES(1,901);
+        CREATE UNIQUE INDEX NGD_TX_G ON NGD_TX_T(K);
+        ALTER SESSION SET TRANSACTIONAL_DDL = 1;
+        AUTOCOMMIT OFF;
+    }
+    JOIN;
+
+SECTOR; TEST
+    THREAD T1 C1
+    {
+        ALTER TABLE NGD_TX_T REPLACE NGD_TX_S PARTITION P1;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        AUTOCOMMIT OFF;
+        INSERT INTO NGD_TX_B VALUES(1);
+        COMMIT;
+        INSERT INTO NGD_TX_B VALUES(2);
+        ROLLBACK;
+    }
+    JOIN;
+    THREAD T1 C1
+    {
+        ROLLBACK;
+        SELECT /*+ INDEX(NGD_TX_T,NGD_TX_G) */ P,K FROM NGD_TX_T WHERE K>=0 ORDER BY K;
+        SELECT /*+ FULL SCAN(NGD_TX_T) */ P,K FROM NGD_TX_T ORDER BY K;
+        SELECT /*+ FULL SCAN(NGD_TX_S) */ P,K FROM NGD_TX_S ORDER BY K;
+        UPDATE NGD_TX_T SET K=102 WHERE K=101;
+        DELETE FROM NGD_TX_T WHERE K=111;
+        ROLLBACK;
+        SELECT /*+ INDEX(NGD_TX_T,NGD_TX_G) */ P,K FROM NGD_TX_T WHERE K>=0 ORDER BY K;
+        SELECT /*+ FULL SCAN(NGD_TX_T) */ P,K FROM NGD_TX_T ORDER BY K;
+    }
+    JOIN;
+    THREAD T2 C2
+    {
+        SELECT K FROM NGD_TX_B ORDER BY K;
+        ROLLBACK;
+        AUTOCOMMIT ON;
+    }
+    JOIN;
+
+SECTOR; FINALIZATION
+    THREAD T1 C1
+    {
+        AUTOCOMMIT ON;
+        DROP TABLE NGD_TX_T;
+        DROP TABLE NGD_TX_S;
+        DROP TABLE NGD_TX_B;
+        ALTER SESSION SET TRANSACTIONAL_DDL = 0;
+        ALTER SYSTEM SET GLOBAL_INDEX_EXCHANGE_REMAP = 10;
+        ALTER SYSTEM SET DISK_GLOBAL_INDEX_ENABLE = 0;
+    }
+    JOIN;
+}

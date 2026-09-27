@@ -1,5 +1,7 @@
 Native Global Index (disk) -- PROJ-1624 이식
 
+  2026-09-27 결함 회귀와 실행 전제: REGRESSIONS.md
+
   상태: 배치 1~5 완료 (185 케이스 걸림 / 5 보류). 잔여 배치 18 은
         altidev4/docs/analysis/claude-global-index/v4-natc-port-3.md 11 절.
 
