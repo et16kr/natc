@@ -13,3 +13,4 @@ tool_aexport_aexport_user.tc            # tool/aexport/aexport_user.tc
 tool_aexport_aexport_obj.tc             # tool/aexport/aexport_obj.tc
 tool_atomic_atomic_test.tc              # tool/atomic/atomic_test.tc
 -------------------------------------------------------------------------------
+dumpShortMeta.tc                        # R7: reject incomplete dump metadata reads

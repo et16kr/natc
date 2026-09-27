@@ -1,0 +1,73 @@
+###########################################################################
+# TestCase Description = Dump utilities reject incomplete index meta pages.
+# Project ID = Native Global Index
+# R7 external-tool contract: POSIX shell; dumpddf and dumpsbf are available
+# in ALTIBASE_HOME/bin. The case creates only its two relative input files.
+# Expected exit failure is captured; both the read error and absence of a
+# guessed index format are required. No database or server control is used.
+###########################################################################
+INCLUDE stdFunc.i;
+
+DEF MAIN()
+{
+SECTOR; INITIALIZATION
+    IF ( FEXIST "ngiEmptyMeta.bin" )
+    {
+        RM "ngiEmptyMeta.bin";
+    }
+    IF ( FEXIST "ngiShortMeta.bin" )
+    {
+        RM "ngiShortMeta.bin";
+    }
+
+SECTOR; PREPARATION
+    NODISPLAY ON;
+    OPEN EMPTY -m w "ngiEmptyMeta.bin";
+    CLOSE EMPTY;
+    OPEN SHORT -m w "ngiShortMeta.bin";
+    WRITE SHORT "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    CLOSE SHORT;
+    NODISPLAY OFF;
+
+SECTOR; TEST
+    FOR $sTool IN "dumpddf" "dumpsbf"
+    {
+        FOR $sFile IN "ngiEmptyMeta.bin" "ngiShortMeta.bin"
+        {
+            PRINT "${sTool}: ${sFile}";
+            NODISPLAY ON;
+            SHELL -o $sOutput "\"${ALTIBASE_HOME}/bin/${sTool}\" -f ${sFile} -g 0 -p 0 2>&1 || true";
+            GETROW -r "ERR-0104B" $sOutput $sReadError;
+            GETROW -r "Index key format" $sOutput $sFormat;
+            NODISPLAY OFF;
+            IF ( $sReadError == "" )
+            {
+                PRINT "FAIL: incomplete read was not rejected";
+                PRINT $sOutput;
+            }
+            ELSE
+            {
+                PRINT "Incomplete read rejected";
+            }
+            IF ( $sFormat == "" )
+            {
+                PRINT "Index format was not guessed";
+            }
+            ELSE
+            {
+                PRINT "FAIL: index format was guessed from incomplete data";
+                PRINT $sFormat;
+            }
+        }
+    }
+
+SECTOR; FINALIZATION
+    IF ( FEXIST "ngiEmptyMeta.bin" )
+    {
+        RM "ngiEmptyMeta.bin";
+    }
+    IF ( FEXIST "ngiShortMeta.bin" )
+    {
+        RM "ngiShortMeta.bin";
+    }
+}

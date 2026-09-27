@@ -1,0 +1,39 @@
+ 
++----------------------------------------------------------------------+
+SECTOR 0; BY ATC
++----------------------------------------------------------------------+
+ 
+$T0> THREAD T0 C0;
+
+
+$T0> ###########################################################################
+$T0> # TestCase Description = Dump utilities reject incomplete index meta pages.
+$T0> # Project ID = Native Global Index
+$T0> # R7 external-tool contract: POSIX shell; dumpddf and dumpsbf are available
+$T0> # in ALTIBASE_HOME/bin. The case creates only its two relative input files.
+$T0> # Expected exit failure is captured; both the read error and absence of a
+$T0> # guessed index format are required. No database or server control is used.
+$T0> ###########################################################################
+
+$T0> SECTOR 0; INITIALIZATION
+
+$T0> SECTOR 1; PREPARATION
+
+$T0> SECTOR 2; TEST
+$T0> dumpddf: ngiEmptyMeta.bin
+$T0> Incomplete read rejected
+$T0> Index format was not guessed
+$T0> dumpddf: ngiShortMeta.bin
+$T0> Incomplete read rejected
+$T0> Index format was not guessed
+$T0> dumpsbf: ngiEmptyMeta.bin
+$T0> Incomplete read rejected
+$T0> Index format was not guessed
+$T0> dumpsbf: ngiShortMeta.bin
+$T0> Incomplete read rejected
+$T0> Index format was not guessed
+
+$T0> SECTOR 3; FINALIZATION
+$T0> RM "ngiEmptyMeta.bin";
+$T0> RM "ngiShortMeta.bin";
+
